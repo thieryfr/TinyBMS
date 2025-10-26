@@ -2,9 +2,11 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 #include "logger.h"
+#include "event_bus.h"  // Phase 4: Event Bus integration
 
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
+extern EventBus& eventBus;  // Phase 4: Event Bus instance
 
 // ========================================================================
 // CONFIG LOADING
@@ -62,7 +64,10 @@ bool ConfigManager::begin(const char* filename) {
     logger.log(LOG_INFO, "Configuration loaded successfully");
 
     printConfig();
-    
+
+    // Phase 4: Publish config loaded event
+    eventBus.publishConfigChange("*", "", "", SOURCE_ID_CONFIG_MANAGER);
+
     xSemaphoreGive(configMutex);
     return true;
 }
@@ -105,6 +110,10 @@ bool ConfigManager::save() {
 
     file.close();
     logger.log(LOG_INFO, "Configuration saved successfully");
+
+    // Phase 4: Publish config changed event (config path "*" means all config)
+    eventBus.publishConfigChange("*", "", "", SOURCE_ID_CONFIG_MANAGER);
+
     xSemaphoreGive(configMutex);
     return true;
 }
