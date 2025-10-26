@@ -15,24 +15,26 @@
 #include "watchdog_manager.h"
 #include "json_builders.h"
 #include "tinybms_victron_bridge.h"
+#include "event_bus.h"  // Phase 6: Event Bus integration
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
 extern ConfigManager config;
 extern WatchdogManager Watchdog;
-extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
+extern EventBus& eventBus;  // Phase 6: Event Bus instance
 
 // ============================================================================
 // STATUS JSON
 // ============================================================================
 String getStatusJSON() {
     StaticJsonDocument<1536> doc;  // 1.5KB pour inclure watchdog
-    
+
     TinyBMS_LiveData data;
-    if (xQueuePeek(liveDataQueue, &data, 0) != pdTRUE) {
-        logger.log(LOG_DEBUG, "[JSON] liveDataQueue empty, using bridge.getLiveData()");
+    // Phase 6: Use Event Bus cache instead of legacy queue
+    if (!eventBus.getLatestLiveData(data)) {
+        logger.log(LOG_DEBUG, "[JSON] No cached data, using bridge.getLiveData()");
         data = bridge.getLiveData();
     }
 

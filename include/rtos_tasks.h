@@ -29,7 +29,6 @@ extern AsyncWebSocket ws;
 extern SemaphoreHandle_t uartMutex;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
-extern QueueHandle_t liveDataQueue;
 
 // ====================================================================================
 // TASK DECLARATIONS

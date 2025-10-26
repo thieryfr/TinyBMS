@@ -15,16 +15,17 @@
 #include "rtos_config.h"
 #include "logger.h"        // ✅ Logging support
 #include "config_manager.h"
+#include "event_bus.h"     // Phase 3: Event Bus integration
 
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
-extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
 extern ConfigManager config;
 extern WatchdogManager Watchdog;
 extern Logger logger;
 extern TinyBMS_Victron_Bridge bridge;
+extern EventBus& eventBus;  // Phase 3: Event Bus instance
 
 // ====================================================================================
 // WebSocket Event Handler
@@ -87,7 +88,8 @@ void websocketTask(void *pvParameters) {
         if (now - last_update_ms >= config.web_server.websocket_update_interval_ms) {
 
             TinyBMS_LiveData data;
-            if (xQueuePeek(liveDataQueue, &data, 0) == pdTRUE) {
+            // Phase 3: Use Event Bus cache instead of legacy queue
+            if (eventBus.getLatestLiveData(data)) {
 
                 String json;
                 if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {

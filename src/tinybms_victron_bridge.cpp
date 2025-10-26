@@ -16,7 +16,6 @@
 #define LOGGER_AVAILABLE
 
 extern SemaphoreHandle_t uartMutex;
-extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 extern ConfigManager config;
@@ -116,24 +115,52 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 data.balancing_bits = regs[7];
                 data.online_status = true;
 
-                // Legacy queue (Phase 1-2: kept for backward compatibility)
-                xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
 
-                // Phase 2: Publish to Event Bus (parallel with queue)
+                // Phase 6: Event Bus is the only data distribution mechanism
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
+
+                // Phase 5: Alarm detection and publishing
+                // Check overvoltage
+                if (data.voltage > 58.0f) {  // Example threshold for 48V system
+                    eventBus.publishAlarm(ALARM_OVERVOLTAGE, "Battery voltage too high",
+                                         ALARM_SEVERITY_ERROR, data.voltage, SOURCE_ID_UART);
+                }
+
+                // Check undervoltage
+                if (data.voltage < 44.0f && data.voltage > 0.1f) {  // Avoid false alarm on 0V
+                    eventBus.publishAlarm(ALARM_UNDERVOLTAGE, "Battery voltage too low",
+                                         ALARM_SEVERITY_WARNING, data.voltage, SOURCE_ID_UART);
+                }
+
+                // Check cell imbalance
+                if (data.cell_imbalance_mv > 200) {  // >200mV imbalance
+                    eventBus.publishAlarm(ALARM_CELL_IMBALANCE, "Cell imbalance detected",
+                                         ALARM_SEVERITY_WARNING, data.cell_imbalance_mv, SOURCE_ID_UART);
+                }
+
+                // Check temperature (temperature is in 0.1°C)
+                float temp_celsius = data.temperature / 10.0f;
+                if (temp_celsius > 45.0f) {
+                    eventBus.publishAlarm(ALARM_OVERTEMPERATURE, "Battery temperature too high",
+                                         ALARM_SEVERITY_ERROR, temp_celsius, SOURCE_ID_UART);
+                }
 
                 LOG_LIVEDATA(data, LOG_DEBUG);
             } else {
                 bridge->stats.uart_errors++;
                 data.online_status = false;
 
-                // Legacy queue (Phase 1-2: kept for backward compatibility)
-                xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
 
-                // Phase 2: Publish error state to Event Bus
+                // Phase 6: Publish error state via Event Bus
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
+
+                // Phase 5: Publish UART error alarm
+                if (bridge->stats.uart_errors > 5) {  // After 5 consecutive errors
+                    eventBus.publishAlarm(ALARM_UART_ERROR, "TinyBMS UART communication error",
+                                         ALARM_SEVERITY_ERROR, bridge->stats.uart_errors, SOURCE_ID_UART);
+                }
 
                 BRIDGE_LOG(LOG_WARN, "TinyBMS read failed — UART error count: " + String(bridge->stats.uart_errors));
             }
@@ -165,12 +192,13 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters) {
 
         if (now - bridge->last_pgn_update_ms_ >= PGN_UPDATE_INTERVAL_MS) {
             TinyBMS_LiveData data;
-            if (xQueuePeek(liveDataQueue, &data, 0) == pdTRUE) {
+            // Phase 3: Use Event Bus cache instead of legacy queue
+            if (eventBus.getLatestLiveData(data)) {
                 // TODO: Send CAN PGNs
                 bridge->stats.can_tx_count++;
                 BRIDGE_LOG(LOG_DEBUG, "PGN frame sent (CAN Tx Count = " + String(bridge->stats.can_tx_count) + ")");
             } else {
-                BRIDGE_LOG(LOG_WARN, "No live data in queue for CAN broadcast");
+                BRIDGE_LOG(LOG_WARN, "No live data in Event Bus cache for CAN broadcast");
             }
 
             bridge->last_pgn_update_ms_ = now;
@@ -200,7 +228,8 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters) {
 
         if (now - bridge->last_cvl_update_ms_ >= CVL_UPDATE_INTERVAL_MS) {
             TinyBMS_LiveData data;
-            if (xQueuePeek(liveDataQueue, &data, 0) == pdTRUE) {
+            // Phase 3: Use Event Bus cache instead of legacy queue
+            if (eventBus.getLatestLiveData(data)) {
                 bridge->stats.cvl_current_v = data.voltage;
                 bridge->stats.cvl_state = CVL_BULK_ABSORPTION;
                 BRIDGE_LOG(LOG_DEBUG, "CVL updated: " + String(data.voltage, 2) + " V");
