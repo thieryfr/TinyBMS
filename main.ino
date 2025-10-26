@@ -4,7 +4,6 @@
  */
 
 #include <Arduino.h>
-#include <Freertos.h>
 #include "rtos_tasks.h"
 #include "system_init.h"
 #include "shared_data.h"
@@ -12,7 +11,7 @@
 #include "tinybms_victron_bridge.h"
 #include "rtos_config.h"
 #include "config_manager.h"
-#include "logger.h"   // ✅ Ajout pour journalisation
+#include "logger.h"
 
 // Global resources
 SemaphoreHandle_t uartMutex;
@@ -20,10 +19,14 @@ SemaphoreHandle_t feedMutex;
 SemaphoreHandle_t configMutex;
 QueueHandle_t liveDataQueue;
 
+// Web Server objects
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
+
 ConfigManager config;
 WatchdogManager Watchdog;
 TinyBMS_Victron_Bridge bridge;
-Logger logger;   // ✅ Instance globale du logger
+Logger logger;
 
 // Task handles
 TaskHandle_t webServerTaskHandle = NULL;

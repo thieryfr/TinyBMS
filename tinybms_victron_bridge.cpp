@@ -5,17 +5,21 @@
  */
 
 #include <Arduino.h>
-#include <Freertos.h>
 #include "tinybms_victron_bridge.h"
 #include "rtos_tasks.h"
 #include "rtos_config.h"
 #include "shared_data.h"
 #include "watchdog_manager.h"
+#include "logger.h"
+
+#define LOGGER_AVAILABLE
 
 extern SemaphoreHandle_t uartMutex;
 extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
+extern ConfigManager config;
+extern Logger logger;
 
 // ====================================================================================
 // CONSTRUCTOR
@@ -37,11 +41,12 @@ bool TinyBMS_Victron_Bridge::begin() {
     BRIDGE_LOG(LOG_INFO, "Initializing TinyBMS-Victron Bridge...");
 
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        Serial1.begin(config_.baudrate, SERIAL_8N1, config_.rx_pin, config_.tx_pin);
+        tiny_uart_.begin(config.hardware.uart.baudrate, SERIAL_8N1,
+                        config.hardware.uart.rx_pin, config.hardware.uart.tx_pin);
         xSemaphoreGive(uartMutex);
         BRIDGE_LOG(LOG_INFO, "UART initialized successfully");
     } else {
-        BRIDGE_LOG(LOG_ERROR, "❌ Failed to acquire UART mutex for initialization");
+        BRIDGE_LOG(LOG_ERROR, "Failed to acquire UART mutex for initialization");
         return false;
     }
 
@@ -61,20 +66,23 @@ bool TinyBMS_Victron_Bridge::begin() {
 // ====================================================================================
 // READ TINYBMS REGISTERS
 // ====================================================================================
-bool TinyBMS_Victron_Bridge::readTinyRegisters(uint8_t start_reg, uint8_t count, uint16_t* regs) {
+bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        BRIDGE_LOG(LOG_ERROR, "❌ UART mutex unavailable for read");
+        BRIDGE_LOG(LOG_ERROR, "UART mutex unavailable for read");
         return false;
     }
 
-    // Simulated read for now
+    // Simulated read for now - TODO: Implement actual Modbus RTU read
     bool success = true;
-    // ... (Actual UART read code)
+    // Fill with dummy data for testing
+    for (uint16_t i = 0; i < count; i++) {
+        output[i] = 0;
+    }
 
     if (success)
-        BRIDGE_LOG(LOG_DEBUG, "Read " + String(count) + " regs from " + String(start_reg));
+        BRIDGE_LOG(LOG_DEBUG, "Read " + String(count) + " regs from " + String(start_addr));
     else
-        BRIDGE_LOG(LOG_WARN, "Failed to read TinyBMS registers from " + String(start_reg));
+        BRIDGE_LOG(LOG_WARN, "Failed to read TinyBMS registers from " + String(start_addr));
 
     xSemaphoreGive(uartMutex);
     return success;

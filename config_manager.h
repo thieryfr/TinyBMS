@@ -14,9 +14,14 @@
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
-#include <Freertos.h>
-#include "rtos_tasks.h"
-#include "logger.h" // Ajout pour LogLevel
+
+// Forward declaration to avoid circular dependency
+enum LogLevel {
+    LOG_ERROR = 0,
+    LOG_WARNING = 1,
+    LOG_INFO = 2,
+    LOG_DEBUG = 3
+};
 
 extern SemaphoreHandle_t configMutex;
 

@@ -8,6 +8,7 @@
  */
 
 #include "logger.h"
+#include "config_manager.h"
 
 extern SemaphoreHandle_t configMutex;
 extern ConfigManager config;

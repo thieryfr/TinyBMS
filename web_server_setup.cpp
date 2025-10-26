@@ -15,10 +15,9 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <SPIFFS.h>
-#include <Freertos.h>
 #include "rtos_tasks.h"
-#include "logger.h"          // ✅ Added for logging
-#include "config_manager.h"  // For access to config.web_server
+#include "logger.h"
+#include "config_manager.h"
 
 // External globals
 extern ConfigManager config;
