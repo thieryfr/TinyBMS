@@ -13,8 +13,11 @@
 #include <Arduino.h>
 #include <FS.h>
 #include <SPIFFS.h>
-#include "rtos_tasks.h"
-#include "config_manager.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+// Forward declaration to avoid circular dependency
+class ConfigManager;
 
 enum LogLevel {
     LOG_ERROR = 0,   // Erreurs critiques (ex. : échec UART)
@@ -47,6 +50,12 @@ public:
      * @param level Nouveau niveau (ERROR, WARNING, INFO, DEBUG)
      */
     void setLogLevel(LogLevel level);
+
+    /**
+     * @brief Récupère le niveau de journalisation actuel
+     * @return Niveau de log actuel
+     */
+    LogLevel getLevel() const { return current_level_; }
 
     /**
      * @brief Récupère les logs stockés dans /logs.txt

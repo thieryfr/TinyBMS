@@ -13,7 +13,8 @@
 #include <Arduino.h>
 #include <CAN.h>
 #include <ArduinoJson.h>
-#include <Freertos.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "shared_data.h"
 
 // ====================================================================================

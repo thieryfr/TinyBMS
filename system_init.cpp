@@ -6,12 +6,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
-#include <Freertos.h>
 #include "rtos_tasks.h"
 #include "rtos_config.h"
 #include "shared_data.h"
-#include "logger.h"  // ✅ Added
+#include "logger.h"
 #include "config_manager.h"
+#include "tinybms_victron_bridge.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -20,7 +20,6 @@ extern WatchdogManager Watchdog;
 // External globals (from main.ino)
 extern ConfigManager config;
 extern TinyBMS_Victron_Bridge bridge;
-extern TinyBMSConfigEditor configEditor;
 extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t feedMutex;
 extern QueueHandle_t liveDataQueue;
@@ -65,12 +64,12 @@ void initializeWiFi() {
         logger.log(LOG_INFO, "[WiFi] IP Address: " + WiFi.localIP().toString());
         logger.log(LOG_INFO, "[WiFi] Hostname: " + config.wifi.hostname);
         logger.log(LOG_INFO, "[WiFi] RSSI: " + String(WiFi.RSSI()) + " dBm");
-    } else if (config.wifi.ap_fallback_enabled) {
+    } else if (config.wifi.ap_fallback.enabled) {
         logger.log(LOG_WARN, "[WiFi] Connection failed - starting AP mode");
         WiFi.mode(WIFI_AP);
-        WiFi.softAP(config.wifi.ap_ssid.c_str(), config.wifi.ap_password.c_str());
+        WiFi.softAP(config.wifi.ap_fallback.ssid.c_str(), config.wifi.ap_fallback.password.c_str());
         logger.log(LOG_INFO, "[WiFi] AP Mode started ✓");
-        logger.log(LOG_INFO, "[WiFi] AP SSID: " + config.wifi.ap_ssid);
+        logger.log(LOG_INFO, "[WiFi] AP SSID: " + config.wifi.ap_fallback.ssid);
         logger.log(LOG_INFO, "[WiFi] AP IP: " + WiFi.softAPIP().toString());
     } else {
         logger.log(LOG_ERROR, "[WiFi] Connection failed and AP fallback disabled");
@@ -177,7 +176,7 @@ void initializeBridge() {
 }
 
 // ===================================================================================
-// Config Editor Initialization
+// Config Editor Initialization (placeholder for future implementation)
 // ===================================================================================
 void initializeConfigEditor() {
     logger.log(LOG_INFO, "========================================");
@@ -189,8 +188,8 @@ void initializeConfigEditor() {
         xSemaphoreGive(feedMutex);
     }
 
-    configEditor.begin();
-    logger.log(LOG_INFO, "[CONFIG_EDITOR] Initialized ✓");
+    // TODO: Implement config editor if needed
+    logger.log(LOG_INFO, "[CONFIG_EDITOR] Skipped (not implemented)");
 }
 
 // ===================================================================================

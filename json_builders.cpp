@@ -7,13 +7,14 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
-#include <Freertos.h>
 #include "rtos_tasks.h"
 #include "rtos_config.h"
 #include "shared_data.h"
-#include "logger.h"         // ✅ Added for logging
+#include "logger.h"
 #include "config_manager.h"
 #include "watchdog_manager.h"
+#include "json_builders.h"
+#include "tinybms_victron_bridge.h"
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
@@ -98,8 +99,8 @@ String getConfigJSON() {
     doc["undervoltage_cutoff_mv"] = cfg.undervoltage_cutoff_mv;
     doc["discharge_overcurrent_a"] = cfg.discharge_overcurrent_a;
     doc["charge_overcurrent_a"] = cfg.charge_overcurrent_a;
-    doc["overheat_temp_c"] = cfg.overheat_temp_c / 10.0;
-    doc["low_temp_charge_c"] = cfg.low_temp_charge_c / 10.0;
+    doc["overheat_cutoff_c"] = cfg.overheat_cutoff_c / 10.0;
+    doc["low_temp_charge_cutoff_c"] = cfg.low_temp_charge_cutoff_c / 10.0;
 
     String output;
     serializeJson(doc, output);
