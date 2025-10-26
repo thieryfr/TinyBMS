@@ -11,6 +11,7 @@
 #include "shared_data.h"
 #include "watchdog_manager.h"
 #include "logger.h"
+#include "event_bus.h"  // Phase 2: Event Bus integration
 
 #define LOGGER_AVAILABLE
 
@@ -20,6 +21,7 @@ extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 extern ConfigManager config;
 extern Logger logger;
+extern EventBus& eventBus;  // Phase 2: Event Bus instance
 
 // ====================================================================================
 // CONSTRUCTOR
@@ -114,15 +116,25 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 data.balancing_bits = regs[7];
                 data.online_status = true;
 
+                // Legacy queue (Phase 1-2: kept for backward compatibility)
                 xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
+
+                // Phase 2: Publish to Event Bus (parallel with queue)
+                eventBus.publishLiveData(data, SOURCE_ID_UART);
 
                 LOG_LIVEDATA(data, LOG_DEBUG);
             } else {
                 bridge->stats.uart_errors++;
                 data.online_status = false;
+
+                // Legacy queue (Phase 1-2: kept for backward compatibility)
                 xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
+
+                // Phase 2: Publish error state to Event Bus
+                eventBus.publishLiveData(data, SOURCE_ID_UART);
+
                 BRIDGE_LOG(LOG_WARN, "TinyBMS read failed — UART error count: " + String(bridge->stats.uart_errors));
             }
 

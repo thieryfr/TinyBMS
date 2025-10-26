@@ -12,6 +12,7 @@
 #include "rtos_config.h"
 #include "config_manager.h"
 #include "logger.h"
+#include "event_bus.h"
 
 // Global resources
 SemaphoreHandle_t uartMutex;
@@ -88,7 +89,14 @@ void setup() {
     }
     logger.log(LOG_INFO, "Mutexes created");
 
-    // Create queue
+    // Initialize Event Bus (Phase 1: parallel with existing queue)
+    if (!eventBus.begin(EVENT_BUS_QUEUE_SIZE)) {
+        logger.log(LOG_ERROR, "Event Bus initialization failed");
+    } else {
+        logger.log(LOG_INFO, "Event Bus initialized (Phase 1: parallel mode)");
+    }
+
+    // Create queue (kept for backward compatibility during Phase 1)
     liveDataQueue = xQueueCreate(1, sizeof(TinyBMS_LiveData));
     if (!liveDataQueue) {
         logger.log(LOG_ERROR, "Queue creation failed");
