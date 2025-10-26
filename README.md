@@ -65,30 +65,42 @@ pio run --target uploadfs
 
 ```
 TinyBMS/
-├── main.ino                      # Point d'entrée principal
-├── config.json                   # Configuration système
 ├── platformio.ini                # Configuration PlatformIO
+├── partitions.csv                # Table des partitions ESP32
 │
-├── Core/
-│   ├── tinybms_victron_bridge.cpp/h  # Pont UART-CAN principal
-│   ├── config_manager.cpp/h          # Gestion configuration JSON
-│   ├── logger.cpp/h                  # Système de logging
-│   └── watchdog_manager.cpp          # Watchdog matériel
+├── data/                         # Fichiers SPIFFS (uploadés sur ESP32)
+│   ├── config.json               # Configuration système
+│   ├── tinybms_victron_mapping.json  # Mapping TinyBMS ↔ Victron
+│   ├── index.html                # Interface web principale
+│   ├── index_bootstrap.html      # Interface web Bootstrap
+│   ├── *.js                      # Scripts JavaScript
+│   └── style.css                 # Styles CSS
 │
-├── FreeRTOS/
-│   ├── rtos_tasks.h              # Déclarations tâches
+├── include/                      # Fichiers d'en-tête (.h)
+│   ├── tinybms_victron_bridge.h  # Pont UART-CAN principal
+│   ├── config_manager.h          # Gestion configuration JSON
+│   ├── logger.h                  # Système de logging
+│   ├── rtos_tasks.h              # Déclarations tâches FreeRTOS
 │   ├── rtos_config.h             # Configuration FreeRTOS
-│   └── shared_data.h             # Structures partagées
+│   ├── shared_data.h             # Structures partagées
+│   ├── websocket_handlers.h      # Gestion WebSocket
+│   └── system_init.h             # Initialisation système
 │
-├── Web/
-│   ├── web_server_setup.cpp      # Initialisation serveur web
+├── src/                          # Code source (.cpp/.ino)
+│   ├── main.ino                  # Point d'entrée principal
+│   ├── tinybms_victron_bridge.cpp    # Implémentation pont
+│   ├── config_manager.cpp        # Gestion configuration
+│   ├── logger.cpp                # Système de logging
+│   ├── system_init.cpp           # Init WiFi/UART/CAN
+│   ├── web_server_setup.cpp      # Serveur web
 │   ├── web_routes_api.cpp        # Routes API REST
-│   ├── websocket_handlers.cpp/h  # Gestion WebSocket
-│   ├── json_builders.cpp/h       # Construction JSON
-│   └── [fichiers .html/.js/.css] # Interface web
+│   ├── web_routes_tinybms.cpp    # Routes API TinyBMS
+│   ├── websocket_handlers.cpp    # WebSocket
+│   ├── json_builders.cpp         # Construction JSON
+│   └── watchdog_manager.cpp      # Watchdog matériel
 │
-└── System/
-    └── system_init.cpp           # Initialisation WiFi/UART/CAN
+└── scripts/                      # Scripts utilitaires
+    └── deploy_web_interface.py   # Script d'upload SPIFFS
 ```
 
 ## 🌐 Interface Web
