@@ -973,14 +973,10 @@ Conclusion : Footprint mémoire acceptable
 
 ### Prochaines Étapes
 
-Souhaitez-vous que je :
-1. **Commence l'implémentation** de la Phase 1 (Event Bus de base) ?
-2. **Crée des tests unitaires** pour valider l'architecture ?
-3. **Propose des ajustements** à la conception basés sur vos contraintes spécifiques ?
-
+**Commence l'implémentation** de la Phase 1 (Event Bus de base) ?
 ---
 
 **Document créé le** : 2025-10-26
-**Auteur** : Claude Code
+**Auteur** : FT Code
 **Projet** : TinyBMS-Victron Bridge
 **Version** : 1.0
