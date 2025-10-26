@@ -123,6 +123,32 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 // Phase 2: Publish to Event Bus (parallel with queue)
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
 
+                // Phase 5: Alarm detection and publishing
+                // Check overvoltage
+                if (data.voltage > 58.0f) {  // Example threshold for 48V system
+                    eventBus.publishAlarm(ALARM_OVERVOLTAGE, "Battery voltage too high",
+                                         ALARM_SEVERITY_ERROR, data.voltage, SOURCE_ID_UART);
+                }
+
+                // Check undervoltage
+                if (data.voltage < 44.0f && data.voltage > 0.1f) {  // Avoid false alarm on 0V
+                    eventBus.publishAlarm(ALARM_UNDERVOLTAGE, "Battery voltage too low",
+                                         ALARM_SEVERITY_WARNING, data.voltage, SOURCE_ID_UART);
+                }
+
+                // Check cell imbalance
+                if (data.cell_imbalance_mv > 200) {  // >200mV imbalance
+                    eventBus.publishAlarm(ALARM_CELL_IMBALANCE, "Cell imbalance detected",
+                                         ALARM_SEVERITY_WARNING, data.cell_imbalance_mv, SOURCE_ID_UART);
+                }
+
+                // Check temperature (temperature is in 0.1°C)
+                float temp_celsius = data.temperature / 10.0f;
+                if (temp_celsius > 45.0f) {
+                    eventBus.publishAlarm(ALARM_OVERTEMPERATURE, "Battery temperature too high",
+                                         ALARM_SEVERITY_ERROR, temp_celsius, SOURCE_ID_UART);
+                }
+
                 LOG_LIVEDATA(data, LOG_DEBUG);
             } else {
                 bridge->stats.uart_errors++;
@@ -134,6 +160,12 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
 
                 // Phase 2: Publish error state to Event Bus
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
+
+                // Phase 5: Publish UART error alarm
+                if (bridge->stats.uart_errors > 5) {  // After 5 consecutive errors
+                    eventBus.publishAlarm(ALARM_UART_ERROR, "TinyBMS UART communication error",
+                                         ALARM_SEVERITY_ERROR, bridge->stats.uart_errors, SOURCE_ID_UART);
+                }
 
                 BRIDGE_LOG(LOG_WARN, "TinyBMS read failed — UART error count: " + String(bridge->stats.uart_errors));
             }
