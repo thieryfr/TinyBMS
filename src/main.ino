@@ -18,7 +18,6 @@
 SemaphoreHandle_t uartMutex;
 SemaphoreHandle_t feedMutex;
 SemaphoreHandle_t configMutex;
-QueueHandle_t liveDataQueue;
 
 // Web Server objects
 AsyncWebServer server(80);
@@ -89,20 +88,12 @@ void setup() {
     }
     logger.log(LOG_INFO, "Mutexes created");
 
-    // Initialize Event Bus (Phase 1: parallel with existing queue)
+    // Phase 6: Event Bus fully replaces legacy queue
     if (!eventBus.begin(EVENT_BUS_QUEUE_SIZE)) {
         logger.log(LOG_ERROR, "Event Bus initialization failed");
     } else {
-        logger.log(LOG_INFO, "Event Bus initialized (Phase 1: parallel mode)");
+        logger.log(LOG_INFO, "Event Bus initialized (all components migrated)");
     }
-
-    // Create queue (kept for backward compatibility during Phase 1)
-    liveDataQueue = xQueueCreate(1, sizeof(TinyBMS_LiveData));
-    if (!liveDataQueue) {
-        logger.log(LOG_ERROR, "Queue creation failed");
-        while (true);
-    }
-    logger.log(LOG_INFO, "LiveData queue created");
 
     // Initialize bridge
     if (!bridge.begin()) {

@@ -16,7 +16,6 @@
 #define LOGGER_AVAILABLE
 
 extern SemaphoreHandle_t uartMutex;
-extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 extern ConfigManager config;
@@ -116,11 +115,9 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 data.balancing_bits = regs[7];
                 data.online_status = true;
 
-                // Legacy queue (Phase 1-2: kept for backward compatibility)
-                xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
 
-                // Phase 2: Publish to Event Bus (parallel with queue)
+                // Phase 6: Event Bus is the only data distribution mechanism
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
 
                 // Phase 5: Alarm detection and publishing
@@ -154,11 +151,9 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 bridge->stats.uart_errors++;
                 data.online_status = false;
 
-                // Legacy queue (Phase 1-2: kept for backward compatibility)
-                xQueueOverwrite(liveDataQueue, &data);
                 bridge->live_data_ = data;
 
-                // Phase 2: Publish error state to Event Bus
+                // Phase 6: Publish error state via Event Bus
                 eventBus.publishLiveData(data, SOURCE_ID_UART);
 
                 // Phase 5: Publish UART error alarm

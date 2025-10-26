@@ -19,7 +19,6 @@
 
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
-extern QueueHandle_t liveDataQueue;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
 extern ConfigManager config;

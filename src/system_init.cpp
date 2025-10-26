@@ -22,7 +22,6 @@ extern ConfigManager config;
 extern TinyBMS_Victron_Bridge bridge;
 extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t feedMutex;
-extern QueueHandle_t liveDataQueue;
 extern Logger logger;
 
 // External functions
@@ -218,13 +217,6 @@ void initializeSystem() {
 
     initializeSPIFFS();
     initializeWiFi();
-
-    liveDataQueue = xQueueCreate(LIVE_DATA_QUEUE_SIZE, sizeof(TinyBMS_LiveData));
-    if (liveDataQueue == NULL) {
-        logger.log(LOG_ERROR, "[INIT] Failed to create liveDataQueue");
-    } else {
-        logger.log(LOG_INFO, "[INIT] liveDataQueue created ✓");
-    }
 
     initializeBridge();
     initializeConfigEditor();
