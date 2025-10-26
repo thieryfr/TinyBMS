@@ -165,12 +165,13 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters) {
 
         if (now - bridge->last_pgn_update_ms_ >= PGN_UPDATE_INTERVAL_MS) {
             TinyBMS_LiveData data;
-            if (xQueuePeek(liveDataQueue, &data, 0) == pdTRUE) {
+            // Phase 3: Use Event Bus cache instead of legacy queue
+            if (eventBus.getLatestLiveData(data)) {
                 // TODO: Send CAN PGNs
                 bridge->stats.can_tx_count++;
                 BRIDGE_LOG(LOG_DEBUG, "PGN frame sent (CAN Tx Count = " + String(bridge->stats.can_tx_count) + ")");
             } else {
-                BRIDGE_LOG(LOG_WARN, "No live data in queue for CAN broadcast");
+                BRIDGE_LOG(LOG_WARN, "No live data in Event Bus cache for CAN broadcast");
             }
 
             bridge->last_pgn_update_ms_ = now;
@@ -200,7 +201,8 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters) {
 
         if (now - bridge->last_cvl_update_ms_ >= CVL_UPDATE_INTERVAL_MS) {
             TinyBMS_LiveData data;
-            if (xQueuePeek(liveDataQueue, &data, 0) == pdTRUE) {
+            // Phase 3: Use Event Bus cache instead of legacy queue
+            if (eventBus.getLatestLiveData(data)) {
                 bridge->stats.cvl_current_v = data.voltage;
                 bridge->stats.cvl_state = CVL_BULK_ABSORPTION;
                 BRIDGE_LOG(LOG_DEBUG, "CVL updated: " + String(data.voltage, 2) + " V");
