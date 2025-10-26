@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyBMS → Victron Bridge</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.min.css">
+    
+    <!-- Chart.js pour graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --success-color: #198754;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --dark-bg: #212529;
+            --light-bg: #f8f9fa;
+        }
+        
+        body {
+            background-color: var(--light-bg);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--primary-color), #0a58ca);
+            color: white;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        
+        .gauge-container {
+            position: relative;
+            width: 100%;
+            padding-top: 60%;
+        }
+        
+        .gauge-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-unit {
+            font-size: 1rem;
+            color: #6c757d;
+            font-weight: 400;
+        }
+        
+        .badge-status {
+            font-size: 0.875rem;
+            padding: 0.5rem 1rem;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+            font-weight: 500;
+            padding: 1rem 1.5rem;
+            transition: all 0.3s;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: var(--primary-color);
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color);
+            background-color: white;
+            border-bottom: 3px solid var(--primary-color);
+        }
+        
+        .progress-bar-animated {
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+        
+        .btn-group-toggle .btn {
+            transition: all 0.3s;
+        }
+        
+        .btn-group-toggle .btn.active {
+            transform: scale(1.05);
+        }
+        
+        .form-range::-webkit-slider-thumb {
+            background: var(--primary-color);
+        }
+        
+        .form-range::-webkit-slider-thumb:hover {
+            background: #0a58ca;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 8px;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .connection-status.connected {
+            background-color: var(--success-color);
+        }
+        
+        .connection-status.disconnected {
+            background-color: var(--danger-color);
+        }
+        
+        .cell-voltage-bar {
+            height: 120px;
+            background: linear-gradient(to top, #28a745 0%, #ffc107 50%, #dc3545 100%);
+            border-radius: 4px;
+            position: relative;
+        }
+        
+        .cell-voltage-indicator {
+            position: absolute;
+            width: 100%;
+            height: 3px;
+            background: #000;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        
+        .mini-card {
+            padding: 1rem;
+            border-radius: 8px;
+            background: white;
+            margin-bottom: 0.5rem;
+        }
+        
+        .toast-container {
+            z-index: 9999;
+        }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #1a1a1a;
+                color: #ffffff;
+            }
+            
+            .card {
+                background-color: #2d2d2d;
+                color: #ffffff;
+            }
+            
+            .mini-card {
+                background-color: #2d2d2d;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-lightning-charge-fill"></i>
+                <strong>TinyBMS → Victron</strong>
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <span class="navbar-text me-3">
+                            <span class="connection-status connected" id="wsStatus"></span>
+                            <span id="wsStatusText">Connecté</span>
+                        </span>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tinybms_config.html">
+                            <i class="bi bi-gear-fill"></i> Configuration
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
+        
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" 
+                        data-bs-target="#dashboard" type="button" role="tab">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="cells-tab" data-bs-toggle="tab" 
+                        data-bs-target="#cells" type="button" role="tab">
+                    <i class="bi bi-battery-charging"></i> Cellules
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" 
+                        data-bs-target="#history" type="button" role="tab">
+                    <i class="bi bi-graph-up"></i> Historique
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" 
+                        data-bs-target="#settings" type="button" role="tab">
+                    <i class="bi bi-sliders"></i> Réglages
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="system-tab" data-bs-toggle="tab" 
+                        data-bs-target="#system" type="button" role="tab">
+                    <i class="bi bi-cpu"></i> Système
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabsContent">
+            
+            <!-- =============================================== -->
+            <!-- TAB 1: DASHBOARD -->
+            <!-- =============================================== -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                
+                <!-- Alert Messages -->
+                <div id="alertContainer"></div>
+                
+                <!-- Row 1: Statistics Cards -->
+                <div class="row g-3 mb-4">
+                    <!-- SOC Card -->
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="stat-label mb-2">État de Charge (SOC)</div>
+                                <div class="stat-value text-primary" id="socValue">--</div>
+                                <div class="stat-unit">%</div>
+                                <div class="progress mt-3" style="height: 8px;">
+                                    <div class="progress-bar bg-primary" id="socProgress" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Voltage Card -->
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="stat-label mb-2">Tension Batterie</div>
+                                <div class="stat-value text-success" id="voltageValue">--</div>
+                                <div class="stat-unit">V</div>
+                                <small class="text-muted d-block mt-2">
+                                    <i class="bi bi-arrow-up-short text-success"></i>
+                                    <span id="cellMaxVoltage">-- mV</span> Max
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Current Card -->
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="stat-label mb-2">Courant</div>
+                                <div class="stat-value" id="currentValue">--</div>
+                                <div class="stat-unit">A</div>
+                                <span class="badge bg-info mt-2" id="currentDirection">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Temperature Card -->
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <div class="stat-label mb-2">Température</div>
+                                <div class="stat-value text-warning" id="tempValue">--</div>
+                                <div class="stat-unit">°C</div>
+                                <small class="text-muted d-block mt-2">
+                                    <i class="bi bi-thermometer-half"></i>
+                                    Interne
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 2: Gauges & Info -->
+                <div class="row g-3 mb-4">
+                    <!-- Gauge SOC -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-speedometer"></i> Jauge SOC
+                            </div>
+                            <div class="card-body">
+                                <div class="gauge-container">
+                                    <canvas id="socGauge" class="gauge-canvas"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Gauge Power -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-lightning"></i> Puissance
+                            </div>
+                            <div class="card-body">
+                                <div class="gauge-container">
+                                    <canvas id="powerGauge" class="gauge-canvas"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Status -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-info-circle"></i> État Système
+                            </div>
+                            <div class="card-body">
+                                <div class="mini-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-battery-full text-success"></i> TinyBMS</span>
+                                        <span class="badge bg-success" id="tinyBmsStatus">OK</span>
+                                    </div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-router text-primary"></i> Victron CAN</span>
+                                        <span class="badge bg-success" id="victronStatus">Connecté</span>
+                                    </div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-cpu text-info"></i> Algorithme CVL</span>
+                                        <span class="badge bg-info" id="cvlState">BULK</span>
+                                    </div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-arrow-left-right text-secondary"></i> Équilibrage</span>
+                                        <span class="badge bg-secondary" id="balancingStatus">Inactif</span>
+                                    </div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-heartbeat text-danger"></i> SOH</span>
+                                        <span class="badge bg-success" id="sohValue">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Row 3: Charts -->
+                <div class="row g-3">
+                    <!-- Voltage/Current History -->
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-graph-up"></i> Historique Tension/Courant</span>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="historyRange" id="range1h" checked>
+                                    <label class="btn btn-outline-light" for="range1h">1h</label>
+                                    
+                                    <input type="radio" class="btn-check" name="historyRange" id="range6h">
+                                    <label class="btn btn-outline-light" for="range6h">6h</label>
+                                    
+                                    <input type="radio" class="btn-check" name="historyRange" id="range24h">
+                                    <label class="btn btn-outline-light" for="range24h">24h</label>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="historyChart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Statistics Table -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-bar-chart"></i> Statistiques
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td><i class="bi bi-check-circle text-success"></i> Messages CAN TX</td>
+                                            <td class="text-end"><strong id="canTxCount">--</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-arrow-down-circle text-primary"></i> Messages CAN RX</td>
+                                            <td class="text-end"><strong id="canRxCount">--</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-exclamation-triangle text-warning"></i> Erreurs UART</td>
+                                            <td class="text-end"><strong id="uartErrors">--</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-lightning-charge"></i> CVL Actuel</td>
+                                            <td class="text-end"><strong id="cvlVoltage">--</strong> V</td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-clock"></i> Uptime</td>
+                                            <td class="text-end"><strong id="uptime">--</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="bi bi-memory"></i> RAM Libre</td>
+                                            <td class="text-end"><strong id="freeHeap">--</strong> KB</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- =============================================== -->
+            <!-- TAB 2: CELLULES -->
+            <!-- =============================================== -->
+            <div class="tab-pane fade" id="cells" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-battery-charging"></i> Tensions Cellules (16S)
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3" id="cellsContainer">
+                            <!-- Will be populated dynamically -->
+                        </div>
+                        
+                        <div class="mt-4">
+                            <h6>Statistiques Cellules</h6>
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <div class="alert alert-success">
+                                        <strong>Max:</strong> <span id="cellMax">-- mV</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="alert alert-info">
+                                        <strong>Min:</strong> <span id="cellMin">-- mV</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="alert alert-warning">
+                                        <strong>Moyenne:</strong> <span id="cellAvg">-- mV</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="alert alert-danger">
+                                        <strong>Déséquilibre:</strong> <span id="cellImbalance">-- mV</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- =============================================== -->
+            <!-- TAB 3: HISTORIQUE -->
+            <!-- =============================================== -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-clock-history"></i> Graphiques Historiques
+                            </div>
+                            <div class="card-body">
+                                <canvas id="longHistoryChart" height="60"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- =============================================== -->
+            <!-- TAB 4: RÉGLAGES -->
+            <!-- =============================================== -->
+            <div class="tab-pane fade" id="settings" role="tabpanel">
+                <div class="row g-3">
+                    
+                    <!-- CVL Algorithm Settings -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-sliders"></i> Algorithme CVL
+                            </div>
+                            <div class="card-body">
+                                <!-- Enable CVL -->
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="cvlEnabled" checked>
+                                    <label class="form-check-label" for="cvlEnabled">
+                                        <strong>Activer CVL Dynamique</strong>
+                                    </label>
+                                </div>
+                                
+                                <!-- BULK Threshold -->
+                                <div class="mb-3">
+                                    <label for="bulkThreshold" class="form-label">
+                                        Seuil BULK <span class="text-muted">(SOC %)</span>
+                                        <span class="badge bg-primary" id="bulkThresholdValue">90.0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="bulkThreshold" 
+                                           min="80" max="95" step="0.5" value="90">
+                                </div>
+                                
+                                <!-- FLOAT Threshold -->
+                                <div class="mb-3">
+                                    <label for="floatThreshold" class="form-label">
+                                        Seuil FLOAT <span class="text-muted">(SOC %)</span>
+                                        <span class="badge bg-success" id="floatThresholdValue">100.0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="floatThreshold" 
+                                           min="95" max="100" step="0.5" value="100">
+                                </div>
+                                
+                                <!-- FLOAT Exit -->
+                                <div class="mb-3">
+                                    <label for="floatExit" class="form-label">
+                                        Sortie FLOAT <span class="text-muted">(SOC %)</span>
+                                        <span class="badge bg-warning" id="floatExitValue">88.0</span>
+                                    </label>
+                                    <input type="range" class="form-range" id="floatExit" 
+                                           min="80" max="95" step="0.5" value="88">
+                                </div>
+                                
+                                <button class="btn btn-primary w-100" id="saveCvlSettings">
+                                    <i class="bi bi-save"></i> Sauvegarder CVL
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Display Settings -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-display"></i> Affichage
+                            </div>
+                            <div class="card-body">
+                                <!-- Auto Refresh -->
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                                    <label class="form-check-label" for="autoRefresh">
+                                        <strong>Rafraîchissement Automatique</strong>
+                                    </label>
+                                </div>
+                                
+                                <!-- Refresh Rate -->
+                                <div class="mb-3">
+                                    <label for="refreshRate" class="form-label">
+                                        Fréquence Rafraîchissement
+                                        <span class="badge bg-info" id="refreshRateValue">1000</span> ms
+                                    </label>
+                                    <input type="range" class="form-range" id="refreshRate" 
+                                           min="500" max="5000" step="500" value="1000">
+                                </div>
+                                
+                                <!-- Theme -->
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Thème</strong></label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="theme" id="themeLight" checked>
+                                        <label class="btn btn-outline-primary" for="themeLight">
+                                            <i class="bi bi-sun"></i> Clair
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="theme" id="themeDark">
+                                        <label class="btn btn-outline-primary" for="themeDark">
+                                            <i class="bi bi-moon"></i> Sombre
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="theme" id="themeAuto">
+                                        <label class="btn btn-outline-primary" for="themeAuto">
+                                            <i class="bi bi-circle-half"></i> Auto
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Units -->
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Unités</strong></label>
+                                    <select class="form-select" id="unitSystem">
+                                        <option value="metric" selected>Métrique (V, A, °C)</option>
+                                        <option value="imperial">Impérial (V, A, °F)</option>
+                                    </select>
+                                </div>
+                                
+                                <button class="btn btn-success w-100" id="saveDisplaySettings">
+                                    <i class="bi bi-save"></i> Sauvegarder Affichage
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Notifications -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-bell"></i> Notifications
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="notifyLowSoc" checked>
+                                    <label class="form-check-label" for="notifyLowSoc">
+                                        SOC bas (&lt;20%)
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="notifyHighTemp" checked>
+                                    <label class="form-check-label" for="notifyHighTemp">
+                                        Température élevée (&gt;50°C)
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="notifyImbalance" checked>
+                                    <label class="form-check-label" for="notifyImbalance">
+                                        Déséquilibre cellules (&gt;100mV)
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="notifyDisconnect">
+                                    <label class="form-check-label" for="notifyDisconnect">
+                                        Perte connexion
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-lightning-charge"></i> Actions Rapides
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary" id="btnRefreshData">
+                                        <i class="bi bi-arrow-clockwise"></i> Rafraîchir Données
+                                    </button>
+                                    <button class="btn btn-outline-info" id="btnReadTinyBMS">
+                                        <i class="bi bi-download"></i> Lire Config TinyBMS
+                                    </button>
+                                    <button class="btn btn-outline-success" id="btnExportData">
+                                        <i class="bi bi-file-earmark-spreadsheet"></i> Exporter CSV
+                                    </button>
+                                    <button class="btn btn-outline-danger" id="btnResetStats">
+                                        <i class="bi bi-trash"></i> Réinitialiser Stats
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+            <!-- =============================================== -->
+            <!-- TAB 5: SYSTÈME -->
+            <!-- =============================================== -->
+            <div class="tab-pane fade" id="system" role="tabpanel">
+                <div class="row g-3">
+                    
+                    <!-- System Info -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-info-circle"></i> Informations Système
+                            </div>
+                            <div class="card-body">
+                                <table class="table">
+                                    <tbody>
+                                        <tr>
+                                            <td><strong>Version Firmware:</strong></td>
+                                            <td id="firmwareVersion">v3.0</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Adresse IP:</strong></td>
+                                            <td id="ipAddress">--</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>WiFi SSID:</strong></td>
+                                            <td id="wifiSsid">--</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Signal WiFi:</strong></td>
+                                            <td id="wifiRssi">-- dBm</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Uptime:</strong></td>
+                                            <td id="systemUptime">--</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>RAM Libre:</strong></td>
+                                            <td id="systemFreeHeap">--</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>SPIFFS:</strong></td>
+                                            <td id="spiffsUsage">--</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Actions -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-tools"></i> Actions Système
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-3">
+                                    <button class="btn btn-info btn-lg">
+                                        <i class="bi bi-arrow-clockwise"></i> Redémarrer ESP32
+                                    </button>
+                                    <button class="btn btn-warning btn-lg">
+                                        <i class="bi bi-wifi"></i> Reconfigurer WiFi
+                                    </button>
+                                    <button class="btn btn-secondary btn-lg">
+                                        <i class="bi bi-file-earmark-arrow-down"></i> Télécharger Logs
+                                    </button>
+                                    <button class="btn btn-danger btn-lg">
+                                        <i class="bi bi-exclamation-triangle"></i> Reset Factory
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toastNotification" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-bell me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastMessage">
+                Message here
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Application JavaScript -->
+    <script src="/app.js"></script>
+</body>
+</html>

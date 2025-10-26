@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyBMS Configuration</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .config-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .config-section {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .config-section h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+        
+        .config-item {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 80px;
+            gap: 15px;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .config-item:last-child {
+            border-bottom: none;
+        }
+        
+        .config-item:hover {
+            background: rgba(0,0,0,0.02);
+        }
+        
+        .config-label {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .config-label-main {
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 4px;
+        }
+        
+        .config-label-desc {
+            font-size: 0.85em;
+            color: var(--text-light);
+        }
+        
+        .config-label-comment {
+            font-size: 0.75em;
+            color: var(--warning-color);
+            margin-top: 4px;
+        }
+        
+        .config-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .config-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .config-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        .config-range {
+            font-size: 0.85em;
+            color: var(--text-light);
+        }
+        
+        .config-current {
+            font-weight: 600;
+            color: var(--success-color);
+        }
+        
+        .config-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn-read, .btn-write {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.3s;
+        }
+        
+        .btn-read {
+            background: var(--info-color);
+            color: white;
+        }
+        
+        .btn-read:hover {
+            background: #2980b9;
+        }
+        
+        .btn-write {
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .btn-write:hover {
+            background: #27ae60;
+        }
+        
+        .bulk-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        .bulk-actions button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .btn-read-all {
+            background: var(--info-color);
+            color: white;
+        }
+        
+        .btn-write-all {
+            background: var(--warning-color);
+            color: white;
+        }
+        
+        .btn-reset {
+            background: var(--secondary-color);
+            color: white;
+        }
+        
+        .status-message {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-message.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .warning-banner {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .warning-banner strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .config-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .config-actions {
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔧 TinyBMS Configuration</h1>
+        <nav>
+            <a href="/">Dashboard</a>
+            <a href="/config.html" class="active">TinyBMS Config</a>
+        </nav>
+    </div>
+
+    <div class="config-container">
+        <!-- Warning Banner -->
+        <div class="warning-banner">
+            <strong>⚠️ Important Warnings:</strong>
+            <ul style="margin: 10px 0 0 20px;">
+                <li>Modifying safety parameters (registers 315-320) can damage your battery</li>
+                <li>Always verify values before writing to TinyBMS</li>
+                <li>Register 342 (Broadcast) and 343 (Protocol) must be configured for the bridge to work</li>
+                <li>Changes take effect immediately after writing</li>
+            </ul>
+        </div>
+
+        <!-- Status Message -->
+        <div id="statusMessage" class="status-message"></div>
+
+        <!-- Bulk Actions -->
+        <div class="bulk-actions">
+            <button class="btn-read-all" onclick="readAllRegisters()">
+                📖 Read All from TinyBMS
+            </button>
+            <button class="btn-write-all" onclick="writeAllRegisters()">
+                ✍️ Write All to TinyBMS
+            </button>
+            <button class="btn-reset" onclick="resetToDefaults()">
+                🔄 Reset to Defaults
+            </button>
+        </div>
+
+        <!-- Battery Parameters -->
+        <div class="config-section">
+            <h3>🔋 Battery Parameters</h3>
+            <div id="batteryParams"></div>
+        </div>
+
+        <!-- Charger Parameters -->
+        <div class="config-section">
+            <h3>⚡ Charger Parameters</h3>
+            <div id="chargerParams"></div>
+        </div>
+
+        <!-- Safety Parameters -->
+        <div class="config-section">
+            <h3>🛡️ Safety Parameters</h3>
+            <div id="safetyParams"></div>
+        </div>
+
+        <!-- Advanced Parameters -->
+        <div class="config-section">
+            <h3>⚙️ Advanced Parameters</h3>
+            <div id="advancedParams"></div>
+        </div>
+
+        <!-- System Configuration -->
+        <div class="config-section">
+            <h3>🖥️ System Configuration</h3>
+            <div id="systemParams"></div>
+        </div>
+    </div>
+
+    <script>
+        let configRegisters = [];
+        
+        // Load configuration on page load
+        window.addEventListener('load', async () => {
+            await loadConfiguration();
+        });
+        
+        // Load configuration from ESP32
+        async function loadConfiguration() {
+            showStatus('Loading configuration...', 'info');
+            
+            try {
+                const response = await fetch('/api/tinybms/config');
+                const data = await response.json();
+                
+                configRegisters = data.registers;
+                renderConfiguration();
+                
+                showStatus('Configuration loaded successfully', 'success');
+                setTimeout(() => hideStatus(), 3000);
+            } catch (error) {
+                showStatus('Error loading configuration: ' + error.message, 'error');
+            }
+        }
+        
+        // Render configuration UI
+        function renderConfiguration() {
+            const sections = {
+                batteryParams: [300, 301, 303, 304, 305, 306, 307, 308],
+                chargerParams: [310, 311],
+                safetyParams: [315, 316, 317, 318, 319, 320],
+                advancedParams: [321, 322, 323, 328, 332],
+                systemParams: [330, 333, 335, 338, 339, 340, 342, 343]
+            };
+            
+            for (const [sectionId, addresses] of Object.entries(sections)) {
+                const container = document.getElementById(sectionId);
+                container.innerHTML = '';
+                
+                addresses.forEach(addr => {
+                    const reg = configRegisters.find(r => r.address === addr);
+                    if (reg) {
+                        container.appendChild(createConfigItem(reg));
+                    }
+                });
+            }
+        }
+        
+        // Create config item HTML
+        function createConfigItem(reg) {
+            const div = document.createElement('div');
+            div.className = 'config-item';
+            div.id = `reg-${reg.address}`;
+            
+            // Label column
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'config-label';
+            labelDiv.innerHTML = `
+                <span class="config-label-main">${reg.description}</span>
+                <span class="config-label-desc">Register ${reg.address} ${reg.unit ? '(' + reg.unit + ')' : ''}</span>
+                ${reg.comment ? '<span class="config-label-comment">' + reg.comment + '</span>' : ''}
+            `;
+            
+            // Input column
+            const inputDiv = document.createElement('div');
+            inputDiv.className = 'config-input-wrapper';
+            
+            if (reg.is_enum) {
+                // Dropdown for enum values
+                const select = document.createElement('select');
+                select.className = 'config-input';
+                select.id = `input-${reg.address}`;
+                
+                reg.enum_values.forEach((enumVal, idx) => {
+                    const option = document.createElement('option');
+                    option.value = idx;
+                    option.textContent = enumVal;
+                    if (idx === reg.value) option.selected = true;
+                    select.appendChild(option);
+                });
+                
+                inputDiv.appendChild(select);
+            } else {
+                // Number input for numeric values
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.className = 'config-input';
+                input.id = `input-${reg.address}`;
+                input.value = reg.value;
+                input.min = reg.min;
+                input.max = reg.max;
+                
+                inputDiv.appendChild(input);
+            }
+            
+            // Range column
+            const rangeDiv = document.createElement('div');
+            rangeDiv.className = 'config-range';
+            if (!reg.is_enum) {
+                rangeDiv.textContent = `[${reg.min} - ${reg.max}]`;
+            }
+            
+            // Current value column
+            const currentDiv = document.createElement('div');
+            currentDiv.className = 'config-current';
+            currentDiv.id = `current-${reg.address}`;
+            currentDiv.textContent = reg.value;
+            
+            // Actions column
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'config-actions';
+            actionsDiv.innerHTML = `
+                <button class="btn-read" onclick="readRegister(${reg.address})">📖</button>
+                <button class="btn-write" onclick="writeRegister(${reg.address})">✍️</button>
+            `;
+            
+            div.appendChild(labelDiv);
+            div.appendChild(inputDiv);
+            div.appendChild(rangeDiv);
+            div.appendChild(actionsDiv);
+            
+            return div;
+        }
+        
+        // Read single register from TinyBMS
+        async function readRegister(address) {
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.innerHTML = '<div class="loading"></div>';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(`/api/tinybms/config/read?address=${address}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update UI
+                    document.getElementById(`input-${address}`).value = data.value;
+                    document.getElementById(`current-${address}`).textContent = data.value;
+                    
+                    // Update local data
+                    const reg = configRegisters.find(r => r.address === address);
+                    if (reg) reg.value = data.value;
+                    
+                    showStatus(`Register ${address} read: ${data.value}`, 'success');
+                    setTimeout(() => hideStatus(), 2000);
+                } else {
+                    showStatus(`Error reading register ${address}: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error reading register ${address}: ${error.message}`, 'error');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        // Write single register to TinyBMS
+        async function writeRegister(address) {
+            const input = document.getElementById(`input-${address}`);
+            const value = parseInt(input.value);
+            
+            const reg = configRegisters.find(r => r.address === address);
+            
+            // Validate
+            if (!reg.is_enum && (value < reg.min || value > reg.max)) {
+                showStatus(`Value ${value} out of range [${reg.min}-${reg.max}]`, 'error');
+                return;
+            }
+            
+            // Confirm for safety registers
+            if ([315, 316, 317, 318, 319, 320].includes(address)) {
+                if (!confirm(`⚠️ You are modifying a SAFETY parameter!\n\nRegister: ${reg.description}\nNew value: ${value}\n\nThis can damage your battery. Are you sure?`)) {
+                    return;
+                }
+            }
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.innerHTML = '<div class="loading"></div>';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/tinybms/config/write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address, value })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update current value display
+                    document.getElementById(`current-${address}`).textContent = value;
+                    
+                    // Update local data
+                    reg.value = value;
+                    
+                    showStatus(`Register ${address} written: ${value}`, 'success');
+                    setTimeout(() => hideStatus(), 2000);
+                } else {
+                    showStatus(`Error writing register ${address}: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error writing register ${address}: ${error.message}`, 'error');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+        
+        // Read all registers
+        async function readAllRegisters() {
+            if (!confirm('Read all configuration registers from TinyBMS?\n\nThis will take about 30 seconds.')) {
+                return;
+            }
+            
+            showStatus('Reading all registers... Please wait.', 'info');
+            
+            try {
+                const response = await fetch('/api/tinybms/config/read-all');
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update all values
+                    data.registers.forEach(reg => {
+                        const input = document.getElementById(`input-${reg.address}`);
+                        const current = document.getElementById(`current-${reg.address}`);
+                        
+                        if (input) input.value = reg.value;
+                        if (current) current.textContent = reg.value;
+                        
+                        const localReg = configRegisters.find(r => r.address === reg.address);
+                        if (localReg) localReg.value = reg.value;
+                    });
+                    
+                    showStatus(`Read ${data.count} registers successfully`, 'success');
+                } else {
+                    showStatus(`Error reading registers: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error reading registers: ${error.message}`, 'error');
+            }
+        }
+        
+        // Write all registers (confirmation required)
+        async function writeAllRegisters() {
+            if (!confirm('⚠️ WARNING: Write ALL modified values to TinyBMS?\n\nThis will overwrite current TinyBMS configuration.\n\nAre you absolutely sure?')) {
+                return;
+            }
+            
+            showStatus('Writing all registers... Please wait.', 'info');
+            
+            const modifiedRegisters = [];
+            
+            configRegisters.forEach(reg => {
+                const input = document.getElementById(`input-${reg.address}`);
+                const newValue = parseInt(input.value);
+                
+                if (newValue !== reg.value) {
+                    modifiedRegisters.push({ address: reg.address, value: newValue });
+                }
+            });
+            
+            if (modifiedRegisters.length === 0) {
+                showStatus('No changes to write', 'info');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/tinybms/config/write-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ registers: modifiedRegisters })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update current values
+                    modifiedRegisters.forEach(reg => {
+                        document.getElementById(`current-${reg.address}`).textContent = reg.value;
+                        const localReg = configRegisters.find(r => r.address === reg.address);
+                        if (localReg) localReg.value = reg.value;
+                    });
+                    
+                    showStatus(`Wrote ${modifiedRegisters.length} registers successfully`, 'success');
+                } else {
+                    showStatus(`Error writing registers: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`Error writing registers: ${error.message}`, 'error');
+            }
+        }
+        
+        // Reset to defaults
+        function resetToDefaults() {
+            if (!confirm('Reset all values to defaults?\n\nThis will NOT write to TinyBMS until you click "Write All".')) {
+                return;
+            }
+            
+            // Reset inputs to default values from config
+            configRegisters.forEach(reg => {
+                const input = document.getElementById(`input-${reg.address}`);
+                if (input) {
+                    // Reset to value from server (which has defaults)
+                    input.value = reg.value;
+                }
+            });
+            
+            showStatus('Values reset to defaults (not written to TinyBMS yet)', 'info');
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+            statusEl.style.display = 'block';
+        }
+        
+        // Hide status message
+        function hideStatus() {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

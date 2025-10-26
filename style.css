@@ -1,0 +1,626 @@
+/* ============================================
+   TinyBMS-Victron Bridge - Global Styles
+   ============================================ */
+
+:root {
+    /* Light Theme Colors */
+    --primary: #0d6efd;
+    --success: #198754;
+    --warning: #ffc107;
+    --danger: #dc3545;
+    --info: #0dcaf0;
+    --dark: #212529;
+    --light: #f8f9fa;
+    
+    /* Custom Colors */
+    --bg-body: #f8f9fa;
+    --bg-card: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    
+    /* Gauge Colors */
+    --gauge-soc: #28a745;
+    --gauge-voltage: #0d6efd;
+    --gauge-temp: #fd7e14;
+    --gauge-current: #6f42c1;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --bg-body: #1a1a1a;
+    --bg-card: #2d2d2d;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border-color: #404040;
+}
+
+/* ============================================
+   Global Styles
+   ============================================ */
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    padding-top: 70px;
+    padding-bottom: 60px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.main-content {
+    min-height: calc(100vh - 130px);
+    padding: 20px;
+}
+
+/* ============================================
+   Navbar
+   ============================================ */
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.navbar-brand {
+    font-size: 1.25rem;
+}
+
+/* ============================================
+   Status LED
+   ============================================ */
+
+.status-led-container {
+    display: flex;
+    align-items: center;
+}
+
+.status-led {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    animation: pulse 2s infinite;
+}
+
+.status-connecting {
+    background-color: #ffc107;
+}
+
+.status-online {
+    background-color: #28a745;
+}
+
+.status-error {
+    background-color: #dc3545;
+}
+
+.status-offline {
+    background-color: #6c757d;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* ============================================
+   Cards
+   ============================================ */
+
+.card {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.gauge-card {
+    height: 100%;
+    min-height: 280px;
+}
+
+.gauge-container {
+    position: relative;
+    width: 100%;
+    max-width: 200px;
+    margin: 0 auto;
+    aspect-ratio: 1;
+}
+
+/* ============================================
+   Cell Grid
+   ============================================ */
+
+.cells-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.cell-item {
+    background: var(--bg-body);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.cell-item:hover {
+    border-color: var(--primary);
+    transform: scale(1.05);
+}
+
+.cell-item.cell-balancing {
+    border-color: var(--info);
+    background-color: rgba(13, 202, 240, 0.1);
+}
+
+.cell-item.cell-min {
+    border-color: var(--danger);
+}
+
+.cell-item.cell-max {
+    border-color: var(--success);
+}
+
+.cell-number {
+    font-weight: bold;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.cell-voltage {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--text-primary);
+    margin: 5px 0;
+}
+
+.cell-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.cell-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success) 0%, var(--warning) 50%, var(--danger) 100%);
+    transition: width 0.5s ease;
+}
+
+.cell-balancing-indicator {
+    margin-top: 8px;
+    font-size: 1.2rem;
+}
+
+.cell-balancing-indicator i {
+    color: var(--info);
+}
+
+/* ============================================
+   Status Cards
+   ============================================ */
+
+.status-card {
+    height: 100%;
+}
+
+.status-indicator {
+    margin: 10px 0;
+}
+
+.cell-stat {
+    text-align: center;
+    padding: 10px;
+    background: var(--bg-body);
+    border-radius: 8px;
+}
+
+/* ============================================
+   Logs Container
+   ============================================ */
+
+.logs-container {
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    background: var(--bg-body);
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.log-entry {
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    border-left: 3px solid;
+    background: var(--bg-card);
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.log-entry.log-success {
+    border-left-color: var(--success);
+}
+
+.log-entry.log-warning {
+    border-left-color: var(--warning);
+}
+
+.log-entry.log-error {
+    border-left-color: var(--danger);
+}
+
+.log-entry.log-info {
+    border-left-color: var(--info);
+}
+
+.log-timestamp {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* ============================================
+   Charts
+   ============================================ */
+
+#historyChart {
+    max-height: 300px;
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+
+.footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 15px 0;
+    box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+}
+
+/* ============================================
+   Tabs
+   ============================================ */
+
+.nav-tabs {
+    border-bottom: 2px solid var(--border-color);
+}
+
+.nav-tabs .nav-link {
+    color: var(--text-secondary);
+    border: none;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.nav-tabs .nav-link:hover {
+    border-bottom-color: var(--primary);
+    color: var(--primary);
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    background-color: transparent;
+    font-weight: bold;
+}
+
+/* ============================================
+   Toast Notifications
+   ============================================ */
+
+.toast {
+    min-width: 300px;
+}
+
+.toast-success {
+    background-color: var(--success);
+    color: white;
+}
+
+.toast-warning {
+    background-color: var(--warning);
+    color: white;
+}
+
+.toast-error {
+    background-color: var(--danger);
+    color: white;
+}
+
+.toast-info {
+    background-color: var(--info);
+    color: white;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 768px) {
+    .main-content {
+        padding: 10px;
+    }
+    
+    .cells-grid {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+    }
+    
+    .gauge-card {
+        min-height: 240px;
+    }
+    
+    .gauge-container {
+        max-width: 150px;
+    }
+    
+    .nav-tabs .nav-link {
+        font-size: 0.9rem;
+        padding: 8px 10px;
+    }
+    
+    .footer {
+        font-size: 0.85rem;
+    }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Smooth scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-body);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* ============================================
+   Loading Spinner
+   ============================================ */
+
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(0,0,0,0.1);
+    border-radius: 50%;
+    border-top-color: var(--primary);
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+
+.text-monospace {
+    font-family: 'Courier New', monospace;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.user-select-none {
+    user-select: none;
+}
+
+/* ============================================
+   Monitoring Styles
+   ============================================ */
+
+.monitor-table-container {
+    max-height: 400px;
+    overflow-y: auto;
+    position: relative;
+}
+
+.monitor-table {
+    font-size: 0.875rem;
+    margin-bottom: 0;
+}
+
+.monitor-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.monitor-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.monitor-table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.monitor-table td {
+    vertical-align: middle;
+    padding: 8px;
+}
+
+.message-id {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+.message-data {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+.direction-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+}
+
+.top-ids-list {
+    font-size: 0.9rem;
+}
+
+.top-id-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    margin-bottom: 5px;
+    background: var(--bg-body);
+    border-radius: 4px;
+}
+
+.top-id-bar {
+    height: 20px;
+    background: linear-gradient(90deg, var(--primary), var(--info));
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* Message Details Modal */
+.message-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.message-detail-label {
+    font-weight: bold;
+    color: var(--text-secondary);
+}
+
+.message-detail-value {
+    font-family: 'Courier New', monospace;
+    color: var(--text-primary);
+}
+
+/* Pause button state */
+.btn-paused {
+    background-color: var(--warning);
+    border-color: var(--warning);
+    color: white;
+}
+
+/* ============================================
+   Config TinyBMS Styles
+   ============================================ */
+
+.register-group {
+    padding: 10px 0;
+    transition: background-color 0.2s ease;
+}
+
+.register-group:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+    border-radius: 8px;
+}
+
+.register-group .form-range {
+    height: 8px;
+}
+
+.register-group .form-range::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+}
+
+.register-group .form-range::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+}
+
+.register-group .badge {
+    min-width: 80px;
+    text-align: center;
+}
+
+.config-section-header {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.config-section-header:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Register status colors */
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.badge.bg-info {
+    background-color: #0dcaf0 !important;
+    color: #000;
+}
+
+/* Form switches */
+.form-check-input:checked {
+    background-color: var(--success);
+    border-color: var(--success);
+}
+
+/* Button groups */
+.btn-group .btn-check:checked + .btn {
+    background-color: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+

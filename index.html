@@ -1,0 +1,1990 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyBMS-Victron Bridge</title>
+    
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome 6.5 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Custom CSS -->
+    <link href="style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <!-- Logo & Title -->
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <i class="fas fa-battery-three-quarters me-2"></i>
+                <span class="fw-bold">TinyBMS-Victron Bridge</span>
+            </a>
+            
+            <!-- Status LED -->
+            <div class="status-led-container mx-3">
+                <span id="statusLed" class="status-led status-connecting" title="Connecting..."></span>
+                <small id="statusText" class="text-light ms-2">Connecting...</small>
+            </div>
+            
+            <!-- Right Side Icons -->
+            <div class="d-flex align-items-center ms-auto">
+                <!-- Notifications -->
+                <div class="dropdown me-3">
+                    <button class="btn btn-outline-light position-relative" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-bell"></i>
+                        <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display:none;">
+                            0
+                        </span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="notificationList">
+                        <li><h6 class="dropdown-header">Notifications</h6></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-item text-muted">No notifications</li>
+                    </ul>
+                </div>
+                
+                <!-- Theme Toggle -->
+                <button id="themeToggle" class="btn btn-outline-light me-3" title="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                
+                <!-- Settings -->
+                <button class="btn btn-outline-light" onclick="showTab('settings')">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <div class="container-fluid main-content">
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs nav-fill mb-3" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button">
+                    <i class="fas fa-chart-line"></i> Dashboard
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="monitoring-tab" data-bs-toggle="tab" data-bs-target="#monitoring" type="button">
+                    <i class="fas fa-broadcast-tower"></i> Monitoring
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button">
+                    <i class="fas fa-wrench"></i> Config TinyBMS
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="statistics-tab" data-bs-toggle="tab" data-bs-target="#statistics" type="button">
+                    <i class="fas fa-chart-bar"></i> Statistics
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="about-tab" data-bs-toggle="tab" data-bs-target="#about" type="button">
+                    <i class="fas fa-info-circle"></i> About
+                </button>
+            </li>
+        </ul>
+        
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            
+            <!-- ============================================ -->
+            <!-- DASHBOARD TAB -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
+                
+                <!-- Header with Auto-refresh -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-chart-line text-primary"></i> Dashboard</h3>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label" for="autoRefresh">Auto-refresh</label>
+                    </div>
+                </div>
+                
+                <!-- Main Gauges Row -->
+                <div class="row g-3 mb-4">
+                    <!-- SOC Gauge -->
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card gauge-card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title"><i class="fas fa-battery-three-quarters text-success"></i> State of Charge</h6>
+                                <div class="gauge-container">
+                                    <canvas id="socGauge"></canvas>
+                                </div>
+                                <h3 class="mt-2 mb-0" id="socValue">--</h3>
+                                <small class="text-muted">Target: 100%</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Voltage Gauge -->
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card gauge-card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title"><i class="fas fa-bolt text-warning"></i> Battery Voltage</h6>
+                                <div class="gauge-container">
+                                    <canvas id="voltageGauge"></canvas>
+                                </div>
+                                <h3 class="mt-2 mb-0" id="voltageValue">--</h3>
+                                <small class="text-muted">Range: 44-58V</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Temperature Gauge -->
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card gauge-card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title"><i class="fas fa-thermometer-half text-danger"></i> Temperature</h6>
+                                <div class="gauge-container">
+                                    <canvas id="tempGauge"></canvas>
+                                </div>
+                                <h3 class="mt-2 mb-0" id="tempValue">--</h3>
+                                <small class="text-muted">Limit: 60°C</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Current Gauge -->
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card gauge-card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title"><i class="fas fa-bolt text-info"></i> Battery Current</h6>
+                                <div class="gauge-container">
+                                    <canvas id="currentGauge"></canvas>
+                                </div>
+                                <h3 class="mt-2 mb-0" id="currentValue">--</h3>
+                                <small class="text-muted">Max: ±90A</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Cell Information Row -->
+                <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0"><i class="fas fa-microchip"></i> Cell Voltages (16S Configuration)</h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Cell Stats -->
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <div class="cell-stat">
+                                            <small class="text-muted">Min Cell</small>
+                                            <h5 id="minCellValue">-- mV</h5>
+                                            <small id="minCellNumber" class="text-muted">Cell --</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="cell-stat">
+                                            <small class="text-muted">Max Cell</small>
+                                            <h5 id="maxCellValue">-- mV</h5>
+                                            <small id="maxCellNumber" class="text-muted">Cell --</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="cell-stat">
+                                            <small class="text-muted">Imbalance</small>
+                                            <h5 id="imbalanceValue">-- mV</h5>
+                                            <small id="imbalanceStatus" class="badge bg-success">OK</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 16 Cells Grid -->
+                                <div class="cells-grid" id="cellsGrid">
+                                    <!-- Will be populated by JS -->
+                                </div>
+                                
+                                <!-- Balancing Status -->
+                                <div class="mt-3">
+                                    <small class="text-muted">Balancing Status:</small>
+                                    <span id="balancingStatus" class="ms-2"><i class="fas fa-circle text-secondary"></i> Inactive</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- System Status Row -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card status-card">
+                            <div class="card-body">
+                                <h6><i class="fas fa-microchip"></i> TinyBMS</h6>
+                                <div class="status-indicator">
+                                    <span id="tinyBmsStatus" class="badge bg-secondary">Disconnected</span>
+                                </div>
+                                <small class="text-muted">Last update: <span id="tinyBmsLastUpdate">--</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card status-card">
+                            <div class="card-body">
+                                <h6><i class="fas fa-broadcast-tower"></i> Victron CAN</h6>
+                                <div class="status-indicator">
+                                    <span id="victronStatus" class="badge bg-secondary">Disconnected</span>
+                                </div>
+                                <small class="text-muted">Keepalive: <span id="victronKeepalive">--</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card status-card">
+                            <div class="card-body">
+                                <h6><i class="fas fa-chart-line"></i> CVL Algorithm</h6>
+                                <div class="status-indicator">
+                                    <span id="cvlState" class="badge bg-info">--</span>
+                                </div>
+                                <small class="text-muted">Target: <span id="cvlTarget">--</span></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chart Row -->
+                <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-chart-area"></i> History (30 min)</h5>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="chartData" id="chartVoltage" autocomplete="off" checked>
+                                    <label class="btn btn-outline-primary" for="chartVoltage">Voltage</label>
+                                    
+                                    <input type="radio" class="btn-check" name="chartData" id="chartCurrent" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="chartCurrent">Current</label>
+                                    
+                                    <input type="radio" class="btn-check" name="chartData" id="chartSOC" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="chartSOC">SOC</label>
+                                    
+                                    <input type="radio" class="btn-check" name="chartData" id="chartTemp" autocomplete="off">
+                                    <label class="btn btn-outline-primary" for="chartTemp">Temperature</label>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="historyChart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Alerts & Logs Row -->
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-bell"></i> Alerts & Logs</h5>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">
+                                    <i class="fas fa-trash"></i> Clear
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="logsContainer" class="logs-container">
+                                    <div class="text-muted text-center py-3">No logs yet...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- MONITORING TAB -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade" id="monitoring" role="tabpanel">
+                
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-broadcast-tower text-primary"></i> Monitoring</h3>
+                    <div class="d-flex gap-2">
+                        <small class="text-muted">Last update: <span id="monitorLastUpdate">--</span></small>
+                        <button id="monitorPauseBtn" class="btn btn-sm btn-outline-warning" onclick="toggleMonitorPause()">
+                            <i class="fas fa-pause"></i> Pause
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- CAN Messages Section -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-broadcast-tower"></i> CAN Messages (Live Feed)</h5>
+                                <span class="badge bg-light text-dark">Rate: <span id="canRate">0</span> msg/s</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- Filters -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-3">
+                                        <select class="form-select form-select-sm" id="canFilterType">
+                                            <option value="all">All Messages</option>
+                                            <option value="tx">TX Only</option>
+                                            <option value="rx">RX Only</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" id="canFilterId" placeholder="Filter by ID (hex)">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <input type="text" class="form-control form-control-sm" id="canFilterData" placeholder="Filter by data (hex)">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="clearCanFilters()">
+                                            <i class="fas fa-times"></i> Clear Filters
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- CAN Messages Table -->
+                                <div class="table-responsive monitor-table-container">
+                                    <table class="table table-sm table-hover monitor-table">
+                                        <thead class="table-dark sticky-top">
+                                            <tr>
+                                                <th style="width: 15%">Timestamp</th>
+                                                <th style="width: 12%">ID</th>
+                                                <th style="width: 8%">DLC</th>
+                                                <th style="width: 45%">Data</th>
+                                                <th style="width: 10%">Dir</th>
+                                                <th style="width: 10%">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="canMessagesTable">
+                                            <tr>
+                                                <td colspan="6" class="text-center text-muted">
+                                                    <i class="fas fa-spinner fa-spin"></i> Waiting for messages...
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Footer Actions -->
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div>
+                                        <small class="text-muted">Showing <span id="canMessageCount">0</span> / 50 messages</small>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="exportCanMessages()">
+                                            <i class="fas fa-download"></i> Export CSV
+                                        </button>
+                                        <button class="btn btn-outline-danger" onclick="clearCanMessages()">
+                                            <i class="fas fa-trash"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- UART Messages Section -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-terminal"></i> UART Messages (TinyBMS)</h5>
+                                <span class="badge bg-light text-dark">Rate: <span id="uartRate">0</span> msg/s</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- UART Messages Table -->
+                                <div class="table-responsive monitor-table-container">
+                                    <table class="table table-sm table-hover monitor-table">
+                                        <thead class="table-dark sticky-top">
+                                            <tr>
+                                                <th style="width: 15%">Timestamp</th>
+                                                <th style="width: 10%">Direction</th>
+                                                <th style="width: 20%">Command</th>
+                                                <th style="width: 45%">Data</th>
+                                                <th style="width: 10%">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="uartMessagesTable">
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted">
+                                                    <i class="fas fa-spinner fa-spin"></i> Waiting for messages...
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Footer Actions -->
+                                <div class="d-flex justify-content-between align-items-center mt-3">
+                                    <div>
+                                        <small class="text-muted">Showing <span id="uartMessageCount">0</span> / 30 messages</small>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="exportUartMessages()">
+                                            <i class="fas fa-download"></i> Export CSV
+                                        </button>
+                                        <button class="btn btn-outline-danger" onclick="clearUartMessages()">
+                                            <i class="fas fa-trash"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistics Row -->
+                <div class="row g-3 mb-4">
+                    <!-- CAN Stats -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-bar"></i> CAN Statistics</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-6 mb-3">
+                                        <small class="text-muted">TX Messages</small>
+                                        <h4 id="canTxCount" class="mb-0 text-primary">0</h4>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <small class="text-muted">RX Messages</small>
+                                        <h4 id="canRxCount" class="mb-0 text-success">0</h4>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Errors</small>
+                                        <h4 id="canErrorCount" class="mb-0 text-danger">0</h4>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Avg Rate</small>
+                                        <h4 id="canAvgRate" class="mb-0">0 msg/s</h4>
+                                    </div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <h6 class="mb-2">Top Message IDs:</h6>
+                                <div id="canTopIds" class="top-ids-list">
+                                    <small class="text-muted">No data yet...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- UART Stats -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-bar"></i> UART Statistics</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-6 mb-3">
+                                        <small class="text-muted">TX Messages</small>
+                                        <h4 id="uartTxCount" class="mb-0 text-primary">0</h4>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <small class="text-muted">RX Messages</small>
+                                        <h4 id="uartRxCount" class="mb-0 text-success">0</h4>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Errors</small>
+                                        <h4 id="uartErrorCount" class="mb-0 text-danger">0</h4>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Avg Rate</small>
+                                        <h4 id="uartAvgRate" class="mb-0">0 msg/s</h4>
+                                    </div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <h6 class="mb-2">Top Commands:</h6>
+                                <div id="uartTopCommands" class="top-ids-list">
+                                    <small class="text-muted">No data yet...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Traffic Chart -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-chart-area"></i> Traffic Rate (Real-time)</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="trafficChart" height="60"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- CONFIG TAB -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade" id="config" role="tabpanel">
+                
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-wrench text-primary"></i> TinyBMS Configuration</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="readAllRegisters()">
+                            <i class="fas fa-sync"></i> Read All
+                        </button>
+                        <button class="btn btn-success" onclick="writeAllRegisters()">
+                            <i class="fas fa-save"></i> Write All
+                        </button>
+                        <button class="btn btn-warning" onclick="resetToDefaults()">
+                            <i class="fas fa-undo"></i> Reset to BMS
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search & Filter -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="configSearch" placeholder="Search registers...">
+                    </div>
+                    <div class="col-md-6">
+                        <select class="form-select" id="configFilter" onchange="filterRegisters()">
+                            <option value="all">Show: All Registers</option>
+                            <option value="modified">Show: Modified Only</option>
+                            <option value="errors">Show: Errors Only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Battery Pack Group -->
+                <div class="card mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-battery-full"></i> Battery Pack Configuration (300-308)
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- Register 300: Fully Charged Voltage -->
+                        <div class="register-group" data-register="300">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [300] Fully Charged Voltage
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Cell voltage when fully charged (mV)"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Range: 3200-3900 mV</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="range" class="form-range" id="reg300_slider" 
+                                           min="3200" max="3900" value="3650" step="10"
+                                           oninput="updateRegisterValue(300, this.value)">
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span>3200 mV</span>
+                                        <span id="reg300_display" class="fw-bold">3650 mV</span>
+                                        <span>3900 mV</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" id="reg300_input" 
+                                               value="3650" min="3200" max="3900"
+                                               onchange="updateRegisterSlider(300, this.value)">
+                                        <span class="input-group-text">mV</span>
+                                    </div>
+                                    <div class="mt-1">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="readRegister(300)">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" onclick="writeRegister(300)">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <span id="reg300_status" class="badge bg-secondary ms-2">Synced</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Register 302: Fully Discharged Voltage -->
+                        <div class="register-group" data-register="302">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [302] Fully Discharged Voltage
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Cell voltage when fully discharged (mV)"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Range: 2500-3500 mV</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="range" class="form-range" id="reg302_slider" 
+                                           min="2500" max="3500" value="3250" step="10"
+                                           oninput="updateRegisterValue(302, this.value)">
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span>2500 mV</span>
+                                        <span id="reg302_display" class="fw-bold">3250 mV</span>
+                                        <span>3500 mV</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" id="reg302_input" 
+                                               value="3250" min="2500" max="3500"
+                                               onchange="updateRegisterSlider(302, this.value)">
+                                        <span class="input-group-text">mV</span>
+                                    </div>
+                                    <div class="mt-1">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="readRegister(302)">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" onclick="writeRegister(302)">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <span id="reg302_status" class="badge bg-secondary ms-2">Synced</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Register 304: Charge Finished Current -->
+                        <div class="register-group" data-register="304">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [304] Charge Finished Current
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Current threshold to consider charging finished (mA)"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Range: 100-5000 mA</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="range" class="form-range" id="reg304_slider" 
+                                           min="100" max="5000" value="1000" step="100"
+                                           oninput="updateRegisterValue(304, this.value)">
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span>100 mA</span>
+                                        <span id="reg304_display" class="fw-bold">1000 mA</span>
+                                        <span>5000 mA</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" id="reg304_input" 
+                                               value="1000" min="100" max="5000"
+                                               onchange="updateRegisterSlider(304, this.value)">
+                                        <span class="input-group-text">mA</span>
+                                    </div>
+                                    <div class="mt-1">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="readRegister(304)">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" onclick="writeRegister(304)">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <span id="reg304_status" class="badge bg-secondary ms-2">Synced</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Register 306: Battery Capacity -->
+                        <div class="register-group" data-register="306">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [306] Battery Capacity
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Total battery capacity (0.01Ah units)"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Range: 5000-50000 (50-500Ah)</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="range" class="form-range" id="reg306_slider" 
+                                           min="5000" max="50000" value="31400" step="100"
+                                           oninput="updateRegisterValue(306, this.value)">
+                                    <div class="d-flex justify-content-between small text-muted">
+                                        <span>50 Ah</span>
+                                        <span id="reg306_display" class="fw-bold">314.00 Ah</span>
+                                        <span>500 Ah</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" id="reg306_input" 
+                                               value="31400" min="5000" max="50000"
+                                               onchange="updateRegisterSlider(306, this.value)">
+                                        <span class="input-group-text">×0.01Ah</span>
+                                    </div>
+                                    <div class="mt-1">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="readRegister(306)">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" onclick="writeRegister(306)">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <span id="reg306_status" class="badge bg-secondary ms-2">Synced</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Register 307: Cell Count -->
+                        <div class="register-group" data-register="307">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [307] Cell Count
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Number of cells in series"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Common configurations</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="cellCount" id="cells8" value="8" onchange="updateRegisterValue(307, 8)">
+                                        <label class="btn btn-outline-primary" for="cells8">8S</label>
+                                        
+                                        <input type="radio" class="btn-check" name="cellCount" id="cells12" value="12" onchange="updateRegisterValue(307, 12)">
+                                        <label class="btn btn-outline-primary" for="cells12">12S</label>
+                                        
+                                        <input type="radio" class="btn-check" name="cellCount" id="cells16" value="16" checked onchange="updateRegisterValue(307, 16)">
+                                        <label class="btn btn-outline-primary" for="cells16">16S</label>
+                                        
+                                        <input type="radio" class="btn-check" name="cellCount" id="cells20" value="20" onchange="updateRegisterValue(307, 20)">
+                                        <label class="btn btn-outline-primary" for="cells20">20S</label>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">8S=24V, 12S=36V, 16S=48V, 20S=60V (LiFePO4)</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="number" class="form-control form-control-sm" id="reg307_input" value="16" min="4" max="32">
+                                    <div class="mt-1">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="readRegister(307)">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-success" onclick="writeRegister(307)">
+                                            <i class="fas fa-upload"></i>
+                                        </button>
+                                        <span id="reg307_status" class="badge bg-secondary ms-2">Synced</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Protection Group -->
+                <div class="card mb-3">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-shield-alt"></i> Protection Configuration (315-320)
+                        </h5>
+                    </div>
+                    <div class="card-body" id="protectionRegisters">
+                        <!-- Will be populated by JS -->
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-spinner fa-spin"></i> Loading protection registers...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Communication Group -->
+                <div class="card mb-3">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-wifi"></i> Communication Configuration (342-343)
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        
+                        <!-- Register 342: Broadcast Enable -->
+                        <div class="register-group" data-register="342">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [342] Broadcast Enable
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="Enable UART broadcast communication"></i>
+                                    </label>
+                                    <small class="text-muted d-block">Required for bridge operation</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="reg342_switch" 
+                                               checked onchange="updateRegisterValue(342, this.checked ? 1 : 0)">
+                                        <label class="form-check-label" for="reg342_switch">
+                                            <span id="reg342_label">Enabled</span>
+                                        </label>
+                                    </div>
+                                    <div class="alert alert-warning mt-2 mb-0 py-2">
+                                        <small><i class="fas fa-exclamation-triangle"></i> Must be ENABLED for bridge to work!</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="readRegister(342)">
+                                        <i class="fas fa-download"></i> Read
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="writeRegister(342)">
+                                        <i class="fas fa-upload"></i> Write
+                                    </button>
+                                    <span id="reg342_status" class="badge bg-secondary ms-2 d-block mt-2">Synced</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Register 343: Protocol Selection -->
+                        <div class="register-group" data-register="343">
+                            <div class="row align-items-center mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold">
+                                        [343] Protocol Selection
+                                        <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" title="UART communication protocol"></i>
+                                    </label>
+                                    <small class="text-muted d-block">MODBUS ASCII recommended</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="protocol" id="protocolA" value="0" onchange="updateRegisterValue(343, 0)">
+                                        <label class="btn btn-outline-info" for="protocolA">Protocol A</label>
+                                        
+                                        <input type="radio" class="btn-check" name="protocol" id="protocolC" value="2" checked onchange="updateRegisterValue(343, 2)">
+                                        <label class="btn btn-outline-info" for="protocolC">Protocol C</label>
+                                        
+                                        <input type="radio" class="btn-check" name="protocol" id="protocolCustom" value="3" onchange="updateRegisterValue(343, 3)">
+                                        <label class="btn btn-outline-info" for="protocolCustom">Custom</label>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Protocol C = MODBUS ASCII (recommended)</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="readRegister(343)">
+                                        <i class="fas fa-download"></i> Read
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="writeRegister(343)">
+                                        <i class="fas fa-upload"></i> Write
+                                    </button>
+                                    <span id="reg343_status" class="badge bg-secondary ms-2 d-block mt-2">Synced</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Actions Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-tasks"></i> Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <button class="btn btn-primary w-100" onclick="readAllRegisters()">
+                                    <i class="fas fa-sync"></i> Reload from BMS
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-success w-100" onclick="writeAllRegisters()">
+                                    <i class="fas fa-save"></i> Save All Changes
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-info w-100" onclick="exportConfig()">
+                                    <i class="fas fa-download"></i> Export Config
+                                </button>
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-warning w-100" onclick="resetToDefaults()">
+                                    <i class="fas fa-undo"></i> Reset to BMS
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Import Configuration</h6>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" id="configFileInput" accept=".json">
+                                    <button class="btn btn-outline-secondary" onclick="importConfig()">
+                                        <i class="fas fa-upload"></i> Import
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Danger Zone</h6>
+                                <button class="btn btn-danger w-100" onclick="factoryResetBMS()">
+                                    <i class="fas fa-exclamation-triangle"></i> Factory Reset BMS
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- SETTINGS TAB -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade" id="settings" role="tabpanel">
+                
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-cog text-primary"></i> System Settings</h3>
+                    <button class="btn btn-primary" onclick="saveAllSettings()">
+                        <i class="fas fa-save"></i> Save All Settings
+                    </button>
+                </div>
+                
+                <!-- Sub-tabs -->
+                <ul class="nav nav-pills mb-3" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="pill" href="#settingsWifi">
+                            <i class="fas fa-wifi"></i> WiFi
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsHardware">
+                            <i class="fas fa-microchip"></i> Hardware
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsCVL">
+                            <i class="fas fa-chart-line"></i> CVL Algorithm
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsVictron">
+                            <i class="fas fa-battery-full"></i> Victron
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsLogging">
+                            <i class="fas fa-file-alt"></i> Logging
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsSystem">
+                            <i class="fas fa-server"></i> System
+                        </a>
+                    </li>
+                </ul>
+                
+                <!-- Sub-tabs Content -->
+                <div class="tab-content">
+                    
+                    <!-- WiFi Settings -->
+                    <div class="tab-pane fade show active" id="settingsWifi">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-wifi"></i> WiFi Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <!-- Network Mode -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Network Mode</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="wifiMode" id="wifiStation" value="station" checked>
+                                        <label class="btn btn-outline-primary" for="wifiStation">
+                                            <i class="fas fa-wifi"></i> Station (Connect to WiFi)
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="wifiMode" id="wifiAP" value="ap">
+                                        <label class="btn btn-outline-primary" for="wifiAP">
+                                            <i class="fas fa-broadcast-tower"></i> Access Point (Create WiFi)
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="wifiMode" id="wifiBoth" value="both">
+                                        <label class="btn btn-outline-primary" for="wifiBoth">
+                                            <i class="fas fa-sync-alt"></i> Both (Fallback)
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Station Settings -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3"><i class="fas fa-wifi"></i> Station Settings</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">SSID</label>
+                                            <input type="text" class="form-control" id="wifiSSID" placeholder="Your Network Name" maxlength="32">
+                                            <small class="text-muted">1-32 characters</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Password</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="wifiPassword" placeholder="••••••••" minlength="8">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('wifiPassword')">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted">Min 8 characters</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Hostname</label>
+                                            <input type="text" class="form-control" id="wifiHostname" value="tinybms-victron" maxlength="32">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">IP Configuration</label>
+                                            <select class="form-select" id="wifiIpMode">
+                                                <option value="dhcp" selected>DHCP (Automatic)</option>
+                                                <option value="static">Static IP</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12" id="staticIpSection" style="display: none;">
+                                            <div class="row g-2">
+                                                <div class="col-md-4">
+                                                    <label class="form-label">IP Address</label>
+                                                    <input type="text" class="form-control" id="staticIP" placeholder="192.168.1.100">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Gateway</label>
+                                                    <input type="text" class="form-control" id="staticGateway" placeholder="192.168.1.1">
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Subnet Mask</label>
+                                                    <input type="text" class="form-control" id="staticSubnet" value="255.255.255.0">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Access Point Settings -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3"><i class="fas fa-broadcast-tower"></i> Access Point Settings</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">AP SSID</label>
+                                            <input type="text" class="form-control" id="apSSID" value="TinyBMS-AP" maxlength="32">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">AP Password</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="apPassword" value="tinybms123" minlength="8">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('apPassword')">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">AP Channel</label>
+                                            <select class="form-select" id="apChannel">
+                                                <option value="1">Channel 1</option>
+                                                <option value="6" selected>Channel 6</option>
+                                                <option value="11">Channel 11</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">AP Options</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="apFallback" checked>
+                                                <label class="form-check-label" for="apFallback">
+                                                    Enable AP fallback if WiFi fails
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-primary" onclick="testWifiConnection()">
+                                        <i class="fas fa-plug"></i> Test Connection
+                                    </button>
+                                    <button class="btn btn-success" onclick="saveWifiSettings()">
+                                        <i class="fas fa-save"></i> Apply & Reboot
+                                    </button>
+                                </div>
+                                
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Hardware Settings -->
+                    <div class="tab-pane fade" id="settingsHardware">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-microchip"></i> Hardware Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <!-- UART Settings -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3"><i class="fas fa-terminal"></i> UART Configuration (TinyBMS)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">RX Pin (GPIO)</label>
+                                            <select class="form-select" id="uartRxPin">
+                                                <option value="16" selected>GPIO 16</option>
+                                                <option value="17">GPIO 17</option>
+                                                <option value="18">GPIO 18</option>
+                                                <option value="19">GPIO 19</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">TX Pin (GPIO)</label>
+                                            <select class="form-select" id="uartTxPin">
+                                                <option value="17" selected>GPIO 17</option>
+                                                <option value="16">GPIO 16</option>
+                                                <option value="18">GPIO 18</option>
+                                                <option value="19">GPIO 19</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Baudrate</label>
+                                            <select class="form-select" id="uartBaudrate">
+                                                <option value="9600">9600 bps</option>
+                                                <option value="19200">19200 bps</option>
+                                                <option value="38400">38400 bps</option>
+                                                <option value="57600">57600 bps</option>
+                                                <option value="115200" selected>115200 bps</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="testUART()">
+                                            <i class="fas fa-vial"></i> Test UART
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- CAN Settings -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3"><i class="fas fa-broadcast-tower"></i> CAN Configuration (Victron)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-3">
+                                            <label class="form-label">TX Pin (GPIO)</label>
+                                            <select class="form-select" id="canTxPin">
+                                                <option value="5" selected>GPIO 5</option>
+                                                <option value="4">GPIO 4</option>
+                                                <option value="12">GPIO 12</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">RX Pin (GPIO)</label>
+                                            <select class="form-select" id="canRxPin">
+                                                <option value="4" selected>GPIO 4</option>
+                                                <option value="5">GPIO 5</option>
+                                                <option value="13">GPIO 13</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Bitrate</label>
+                                            <select class="form-select" id="canBitrate">
+                                                <option value="250000">250 kbps</option>
+                                                <option value="500000" selected>500 kbps</option>
+                                                <option value="1000000">1 Mbps</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Options</label>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="canTermination" checked>
+                                                <label class="form-check-label" for="canTermination">
+                                                    120Ω Termination
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="testCAN()">
+                                            <i class="fas fa-vial"></i> Test CAN
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn btn-success" onclick="saveHardwareSettings()">
+                                    <i class="fas fa-save"></i> Apply & Reboot
+                                </button>
+                                
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- CVL Algorithm Settings -->
+                    <div class="tab-pane fade" id="settingsCVL">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-line"></i> CVL Algorithm Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <div class="form-check form-switch mb-4">
+                                    <input class="form-check-input" type="checkbox" id="cvlEnable" checked>
+                                    <label class="form-check-label fw-bold" for="cvlEnable">
+                                        Enable Dynamic CVL Algorithm
+                                    </label>
+                                </div>
+                                
+                                <!-- State Thresholds -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">State Thresholds (SOC %)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Bulk → Transition</label>
+                                            <input type="number" class="form-control" id="cvlBulkTransition" value="90" min="80" max="95">
+                                            <small class="text-muted">When to start transition</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Transition → Float</label>
+                                            <input type="number" class="form-control" id="cvlTransitionFloat" value="95" min="90" max="98">
+                                            <small class="text-muted">When to enter float</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Float Exit</label>
+                                            <input type="number" class="form-control" id="cvlFloatExit" value="85" min="70" max="90">
+                                            <small class="text-muted">When to exit float</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Voltage Offsets -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">Voltage Offsets (V)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Float Approach Offset</label>
+                                            <input type="number" class="form-control" id="cvlFloatApproachOffset" value="-0.05" step="0.01" min="-0.5" max="0">
+                                            <small class="text-muted">CVL reduction in approach</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Float Offset</label>
+                                            <input type="number" class="form-control" id="cvlFloatOffset" value="-0.10" step="0.01" min="-0.5" max="0">
+                                            <small class="text-muted">CVL reduction in float</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Imbalance Hold Offset</label>
+                                            <input type="number" class="form-control" id="cvlImbalanceOffset" value="-0.15" step="0.01" min="-0.5" max="0">
+                                            <small class="text-muted">CVL reduction when imbalanced</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Cell Imbalance -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">Cell Imbalance Thresholds (mV)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Trigger Threshold</label>
+                                            <input type="number" class="form-control" id="cvlImbalanceTrigger" value="100" min="50" max="200">
+                                            <small class="text-muted">Enter imbalance hold state</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Release Threshold</label>
+                                            <input type="number" class="form-control" id="cvlImbalanceRelease" value="50" min="20" max="100">
+                                            <small class="text-muted">Exit imbalance hold state</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-primary" onclick="testCVLAlgorithm()">
+                                        <i class="fas fa-vial"></i> Test Algorithm
+                                    </button>
+                                    <button class="btn btn-success" onclick="saveCVLSettings()">
+                                        <i class="fas fa-save"></i> Apply Settings
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="resetCVLDefaults()">
+                                        <i class="fas fa-undo"></i> Reset Defaults
+                                    </button>
+                                </div>
+                                
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Victron Settings -->
+                    <div class="tab-pane fade" id="settingsVictron">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-battery-full"></i> Victron Integration</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <!-- Battery Info -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">Battery Information</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Manufacturer Name</label>
+                                            <input type="text" class="form-control" id="victronManufacturer" value="ENEPAQ" maxlength="32">
+                                            <small class="text-muted">Displayed in VictronConnect</small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Battery Name</label>
+                                            <input type="text" class="form-control" id="victronBatteryName" value="LiFePO4 48V 300Ah" maxlength="32">
+                                            <small class="text-muted">Battery model designation</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Update Intervals -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">Update Intervals (ms)</h6>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label">PGN Messages</label>
+                                            <input type="number" class="form-control" id="victronPgnInterval" value="1000" min="100" max="5000" step="100">
+                                            <small class="text-muted">Standard: 1000ms (1s)</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">CVL Update</label>
+                                            <input type="number" class="form-control" id="victronCvlInterval" value="20000" min="5000" max="60000" step="1000">
+                                            <small class="text-muted">Standard: 20000ms (20s)</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Keepalive</label>
+                                            <input type="number" class="form-control" id="victronKeepaliveInterval" value="5000" min="1000" max="10000" step="1000">
+                                            <small class="text-muted">Standard: 5000ms (5s)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn btn-success" onclick="saveVictronSettings()">
+                                    <i class="fas fa-save"></i> Apply Settings
+                                </button>
+                                
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Logging Settings -->
+                    <div class="tab-pane fade" id="settingsLogging">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-file-alt"></i> Logging Configuration</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <!-- Log Level -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Log Level</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="logLevel" id="logError" value="error">
+                                        <label class="btn btn-outline-danger" for="logError">ERROR</label>
+                                        
+                                        <input type="radio" class="btn-check" name="logLevel" id="logWarning" value="warning">
+                                        <label class="btn btn-outline-warning" for="logWarning">WARNING</label>
+                                        
+                                        <input type="radio" class="btn-check" name="logLevel" id="logInfo" value="info" checked>
+                                        <label class="btn btn-outline-info" for="logInfo">INFO</label>
+                                        
+                                        <input type="radio" class="btn-check" name="logLevel" id="logDebug" value="debug">
+                                        <label class="btn btn-outline-secondary" for="logDebug">DEBUG</label>
+                                    </div>
+                                </div>
+                                
+                                <!-- Log Destinations -->
+                                <div class="border rounded p-3 mb-3 bg-light">
+                                    <h6 class="mb-3">Log Destinations</h6>
+                                    
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="logSerial" checked>
+                                        <label class="form-check-label" for="logSerial">
+                                            <strong>Serial Console</strong> (USB debugging)
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="logWeb" checked>
+                                        <label class="form-check-label" for="logWeb">
+                                            <strong>Web Interface</strong> (Dashboard logs)
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="logSD">
+                                        <label class="form-check-label" for="logSD">
+                                            <strong>SD Card</strong> (Not installed)
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="logSyslog">
+                                        <label class="form-check-label" for="logSyslog">
+                                            <strong>Syslog Server</strong> (Remote logging)
+                                        </label>
+                                    </div>
+                                    
+                                    <div class="mt-3" id="syslogSettings" style="display: none;">
+                                        <label class="form-label">Syslog Server Address</label>
+                                        <input type="text" class="form-control" id="syslogServer" placeholder="192.168.1.50:514">
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-danger" onclick="clearAllLogs()">
+                                        <i class="fas fa-trash"></i> Clear Logs
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="downloadLogs()">
+                                        <i class="fas fa-download"></i> Download Logs
+                                    </button>
+                                    <button class="btn btn-success" onclick="saveLoggingSettings()">
+                                        <i class="fas fa-save"></i> Apply Settings
+                                    </button>
+                                </div>
+                                
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Settings -->
+                    <div class="tab-pane fade" id="settingsSystem">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-server"></i> Web Server</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Port</label>
+                                        <input type="number" class="form-control" id="webPort" value="80" min="1" max="65535">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">WebSocket Max Clients</label>
+                                        <input type="number" class="form-control" id="wsMaxClients" value="4" min="1" max="10">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Update Interval (ms)</label>
+                                        <input type="number" class="form-control" id="wsUpdateInterval" value="1000" min="100" max="5000" step="100">
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="webCORS" checked>
+                                        <label class="form-check-label" for="webCORS">
+                                            Enable CORS (Cross-Origin Resource Sharing)
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-cog"></i> Configuration Management</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <p class="mb-3">Current Configuration: <strong>config.json</strong> 
+                                    <span class="badge bg-success">Loaded ✓</span>
+                                </p>
+                                
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <button class="btn btn-outline-primary w-100" onclick="exportSystemConfig()">
+                                            <i class="fas fa-download"></i> Export All Settings
+                                        </button>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <button class="btn btn-outline-secondary w-100" onclick="document.getElementById('systemConfigInput').click()">
+                                            <i class="fas fa-upload"></i> Import Settings
+                                        </button>
+                                        <input type="file" id="systemConfigInput" accept=".json" style="display: none" onchange="importSystemConfig()">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <button class="btn btn-outline-info w-100" onclick="reloadConfig()">
+                                            <i class="fas fa-sync"></i> Reload from SPIFFS
+                                        </button>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <button class="btn btn-success w-100" onclick="saveAllSettings()">
+                                            <i class="fas fa-save"></i> Save All Changes
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+                        
+                        <div class="card border-danger">
+                            <div class="card-header bg-danger text-white">
+                                <h5><i class="fas fa-exclamation-triangle"></i> System Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <button class="btn btn-warning w-100" onclick="restartESP32()">
+                                            <i class="fas fa-redo"></i> Restart ESP32
+                                        </button>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button class="btn btn-outline-danger w-100" onclick="resetToDefaults()">
+                                            <i class="fas fa-undo"></i> Reset All to Defaults
+                                        </button>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button class="btn btn-danger w-100" onclick="factoryReset()">
+                                            <i class="fas fa-exclamation-circle"></i> Factory Reset
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                </div>
+                
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- STATISTICS TAB -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade" id="statistics" role="tabpanel">
+                
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-chart-bar text-primary"></i> Statistics & Analytics</h3>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshStatistics()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="exportStatisticsReport()">
+                            <i class="fas fa-file-export"></i> Export Report
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Period Selection -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold">Time Period</label>
+                                <select class="form-select" id="statsPeriod" onchange="updateStatisticsPeriod()">
+                                    <option value="1h">Last Hour</option>
+                                    <option value="6h">Last 6 Hours</option>
+                                    <option value="24h" selected>Last 24 Hours</option>
+                                    <option value="7d">Last 7 Days</option>
+                                    <option value="30d">Last 30 Days</option>
+                                    <option value="custom">Custom Range</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3" id="customDateStart" style="display: none;">
+                                <label class="form-label">Start Date</label>
+                                <input type="datetime-local" class="form-control" id="statsStartDate">
+                            </div>
+                            <div class="col-md-3" id="customDateEnd" style="display: none;">
+                                <label class="form-label">End Date</label>
+                                <input type="datetime-local" class="form-control" id="statsEndDate">
+                            </div>
+                            <div class="col-md-3">
+                                <button class="btn btn-primary w-100" onclick="applyCustomPeriod()">
+                                    <i class="fas fa-check"></i> Apply
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- KPI Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">Average SOC</small>
+                                        <h3 class="mb-0" id="kpiAvgSoc">--</h3>
+                                    </div>
+                                    <div class="fs-1 text-primary">
+                                        <i class="fas fa-battery-three-quarters"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge bg-success" id="kpiSocTrend">
+                                        <i class="fas fa-arrow-up"></i> +2.5%
+                                    </span>
+                                    <small class="text-muted ms-2">vs previous period</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card border-success">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">Energy Charged</small>
+                                        <h3 class="mb-0" id="kpiEnergyCharged">--</h3>
+                                    </div>
+                                    <div class="fs-1 text-success">
+                                        <i class="fas fa-bolt"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge bg-info" id="kpiChargedTrend">
+                                        <i class="fas fa-arrow-up"></i> 125 kWh
+                                    </span>
+                                    <small class="text-muted ms-2">this period</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">Avg. Temperature</small>
+                                        <h3 class="mb-0" id="kpiAvgTemp">--</h3>
+                                    </div>
+                                    <div class="fs-1 text-warning">
+                                        <i class="fas fa-thermometer-half"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge bg-success" id="kpiTempTrend">
+                                        <i class="fas fa-arrow-down"></i> -1.2°C
+                                    </span>
+                                    <small class="text-muted ms-2">optimal range</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="card border-danger">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">Total Cycles</small>
+                                        <h3 class="mb-0" id="kpiCycles">--</h3>
+                                    </div>
+                                    <div class="fs-1 text-danger">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <span class="badge bg-primary" id="kpiCyclesTrend">
+                                        +3 cycles
+                                    </span>
+                                    <small class="text-muted ms-2">this period</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Charts Row 1 -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-line"></i> SOC & Voltage History</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="socVoltageChart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-pie"></i> Energy Distribution</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="energyPieChart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Charts Row 2 -->
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-area"></i> Current & Power</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="currentPowerChart" height="100"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-bar"></i> Temperature Distribution</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="temperatureHistogram" height="100"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistics Tables -->
+                <div class="row g-3 mb-3">
+                    
+                    <!-- Peak Values Table -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="fas fa-trophy"></i> Peak Values</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-hover mb-0">
+                                    <tbody id="peakValuesTable">
+                                        <tr>
+                                            <td><i class="fas fa-arrow-up text-success"></i> Max SOC</td>
+                                            <td class="text-end"><strong>98.5%</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-arrow-down text-danger"></i> Min SOC</td>
+                                            <td class="text-end"><strong>15.2%</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-bolt text-warning"></i> Max Voltage</td>
+                                            <td class="text-end"><strong>58.4V</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-bolt text-info"></i> Min Voltage</td>
+                                            <td class="text-end"><strong>48.2V</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-fire text-danger"></i> Max Temp</td>
+                                            <td class="text-end"><strong>32.1°C</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-snowflake text-primary"></i> Min Temp</td>
+                                            <td class="text-end"><strong>18.5°C</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Energy Statistics Table -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="fas fa-bolt"></i> Energy Statistics</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-hover mb-0">
+                                    <tbody id="energyStatsTable">
+                                        <tr>
+                                            <td><i class="fas fa-arrow-up text-success"></i> Total Charged</td>
+                                            <td class="text-end"><strong>1245 kWh</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-arrow-down text-primary"></i> Total Discharged</td>
+                                            <td class="text-end"><strong>1156 kWh</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-percent text-info"></i> Efficiency</td>
+                                            <td class="text-end"><strong>92.8%</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-clock text-warning"></i> Charge Time</td>
+                                            <td class="text-end"><strong>156 hrs</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-clock text-danger"></i> Discharge Time</td>
+                                            <td class="text-end"><strong>178 hrs</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-plug text-secondary"></i> Idle Time</td>
+                                            <td class="text-end"><strong>242 hrs</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Cell Statistics Table -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0"><i class="fas fa-battery-half"></i> Cell Statistics</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <table class="table table-sm table-hover mb-0">
+                                    <tbody id="cellStatsTable">
+                                        <tr>
+                                            <td><i class="fas fa-balance-scale text-success"></i> Avg Balance</td>
+                                            <td class="text-end"><strong>25 mV</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-exclamation-triangle text-warning"></i> Max Imbalance</td>
+                                            <td class="text-end"><strong>145 mV</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-arrow-up text-primary"></i> Highest Cell</td>
+                                            <td class="text-end"><strong>Cell 8</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-arrow-down text-info"></i> Lowest Cell</td>
+                                            <td class="text-end"><strong>Cell 3</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-fire text-danger"></i> Hottest Cell</td>
+                                            <td class="text-end"><strong>Cell 12</strong></td>
+                                        </tr>
+                                        <tr>
+                                            <td><i class="fas fa-snowflake text-primary"></i> Coldest Cell</td>
+                                            <td class="text-end"><strong>Cell 1</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+                
+                <!-- Daily Summary Chart -->
+                <div class="row g-3 mb-3">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-calendar-alt"></i> Daily Energy Summary</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="dailySummaryChart" height="60"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Events Log -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-list"></i> System Events Log</h6>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary" onclick="filterEvents('all')">All</button>
+                                    <button class="btn btn-outline-success" onclick="filterEvents('info')">Info</button>
+                                    <button class="btn btn-outline-warning" onclick="filterEvents('warning')">Warning</button>
+                                    <button class="btn btn-outline-danger" onclick="filterEvents('error')">Error</button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th style="width: 15%">Timestamp</th>
+                                                <th style="width: 10%">Type</th>
+                                                <th style="width: 60%">Event</th>
+                                                <th style="width: 15%">Value</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="eventsLogTable">
+                                            <tr>
+                                                <td colspan="4" class="text-center text-muted py-3">
+                                                    Loading events...
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+            
+            <!-- ============================================ -->
+            <!-- ABOUT TAB (Placeholder) -->
+            <!-- ============================================ -->
+            <div class="tab-pane fade" id="about" role="tabpanel">
+                <h3><i class="fas fa-info-circle text-primary"></i> About</h3>
+                <div class="card">
+                    <div class="card-body">
+                        <h4>TinyBMS-Victron Bridge v3.0</h4>
+                        <p class="text-muted">Architecture Modulaire</p>
+                        <hr>
+                        <p><strong>Build:</strong> 2025-10-23</p>
+                        <p><strong>Platform:</strong> ESP32-CAN-X2</p>
+                        <p><strong>Features:</strong> Dashboard ✅ | Monitoring 🔜 | Config 🔜</p>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer bg-dark text-light">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-md-6">
+                    <small>TinyBMS-Victron Bridge v3.0 | Uptime: <span id="uptime">--</span></small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small>
+                        Free Heap: <span id="freeHeap">--</span> | 
+                        RSSI: <span id="rssi">--</span> dBm
+                    </small>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="websocket-handler.js"></script>
+    <script src="dashboard.js"></script>
+    <script src="monitoring.js"></script>
+    <script src="config-tinybms.js"></script>
+    <script src="settings.js"></script>
+    <script src="statistics.js"></script>
+    <script src="app.js"></script>
+    
+</body>
+</html>

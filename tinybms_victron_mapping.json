@@ -1,0 +1,120 @@
+{
+“version”: “1.0.0”,
+“description”: “TinyBMS to Victron CAN-BMS Mapping”,
+
+“pgn_0x351”: {
+“can_id”: “0x351”,
+“name”: “CVL/CCL/DCL”,
+“frequency_hz”: 1,
+“critical”: true,
+“fields”: [
+{
+“bytes”: [0, 1],
+“name”: “CVL”,
+“unit”: “0.1V”,
+“source”: “dynamic_cvl_algorithm”
+},
+{
+“bytes”: [2, 3],
+“name”: “CCL”,
+“unit”: “0.1A”,
+“source”: “tiny_reg_103”
+},
+{
+“bytes”: [4, 5],
+“name”: “DCL”,
+“unit”: “0.1A”,
+“source”: “tiny_reg_102”
+}
+]
+},
+
+“pgn_0x355”: {
+“can_id”: “0x355”,
+“name”: “SOC/SOH”,
+“frequency_hz”: 1,
+“fields”: [
+{
+“bytes”: [0, 1],
+“name”: “SOC”,
+“unit”: “1%”,
+“source”: “tiny_reg_46”,
+“scale”: 0.002
+},
+{
+“bytes”: [2, 3],
+“name”: “SOH”,
+“unit”: “1%”,
+“source”: “tiny_reg_45”,
+“scale”: 0.002
+}
+]
+},
+
+“pgn_0x356”: {
+“can_id”: “0x356”,
+“name”: “Voltage/Current/Temperature”,
+“frequency_hz”: 1,
+“fields”: [
+{
+“bytes”: [0, 1],
+“name”: “Voltage”,
+“unit”: “0.01V”,
+“source”: “tiny_reg_36”
+},
+{
+“bytes”: [2, 3],
+“name”: “Current”,
+“unit”: “0.1A”,
+“source”: “tiny_reg_38”
+},
+{
+“bytes”: [4, 5],
+“name”: “Temperature”,
+“unit”: “0.1C”,
+“source”: “tiny_reg_48”
+}
+]
+},
+
+“cvl_algorithm”: {
+“description”: “Dynamic CVL to prevent CCL=0 in DC-coupled systems”,
+“states”: [
+{
+“name”: “BULK”,
+“condition”: “soc < 90%”,
+“cvl_formula”: “overvoltage_cutoff * cells / 10”
+},
+{
+“name”: “TRANSITION”,
+“condition”: “90% <= soc < 95%”,
+“cvl_formula”: “fully_charged * cells / 10”
+},
+{
+“name”: “FLOAT_APPROACH”,
+“condition”: “95% <= soc < 100%”,
+“cvl_formula”: “(fully_charged - 50mV) * cells / 10”
+},
+{
+“name”: “FLOAT”,
+“condition”: “soc >= 100%”,
+“cvl_formula”: “(fully_charged - 100mV) * cells / 10”,
+“ccl_min”: “0.5A”
+}
+],
+“hysteresis”: {
+“description”: “Exit FLOAT only when SOC < 88%”,
+“threshold_percent”: 2
+}
+},
+
+“tiny_registers”: {
+“36”: {“name”: “Voltage”, “type”: “FLOAT”, “unit”: “V”},
+“38”: {“name”: “Current”, “type”: “FLOAT”, “unit”: “A”},
+“46”: {“name”: “SOC”, “type”: “UINT32”, “scale”: 0.000001, “unit”: “%”},
+“102”: {“name”: “Max Discharge”, “type”: “UINT16”, “scale”: 0.1, “unit”: “A”},
+“103”: {“name”: “Max Charge”, “type”: “UINT16”, “scale”: 0.1, “unit”: “A”},
+“300”: {“name”: “Fully Charged”, “type”: “UINT16”, “unit”: “mV”},
+“315”: {“name”: “Overvoltage Cutoff”, “type”: “UINT16”, “unit”: “mV”}
+}
+}
