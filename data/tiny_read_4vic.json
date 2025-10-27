@@ -1,0 +1,102 @@
+VICTRON_REQUESTS = {
+    "high_frequency": {
+        "cycle_100ms": [
+            {
+                "name": "dynamic_limits",
+                "can_id": "0x351",
+                "compute": True,
+                "inputs": ["reg300", "reg41", "reg48", "reg315"],
+                "formula": "CVL = max(reg315, reg300 - fV(reg41) - fT(reg48))",
+                "storage": "cache_volatile",
+                "priority": 1
+            }
+        ],
+        "cycle_500ms": [
+            {
+                "name": "core_measurements", 
+                "can_id": "0x356",
+                "direct": True,
+                "inputs": ["reg36", "reg38", "reg48"],
+                "transform": [
+                    {"reg36": "×100→0.01V"},
+                    {"reg38": "×10→0.1A"}, 
+                    {"reg48": "×1→0.1°C"}
+                ],
+                "storage": "cache_persistent",
+                "priority": 1
+            },
+            {
+                "name": "soc_data",
+                "can_id": "0x355", 
+                "direct": True,
+                "inputs": ["reg46", "reg45"],
+                "transform": [
+                    {"reg46": "×0.002→%"},
+                    {"reg45": "×0.002→%"}
+                ],
+                "storage": "cache_persistent",
+                "priority": 2
+            }
+        ]
+    },
+    
+    "medium_frequency": {
+        "cycle_1s": [
+            {
+                "name": "alarms_status",
+                "can_id": "0x35A",
+                "compute": True,
+                "inputs": ["reg36", "reg38", "reg48", "reg42", "reg315", "reg316", "reg317", "reg318", "reg319", "reg320"],
+                "bits_calculations": {
+                    "BatteryHighVoltageAlarm": "reg36 > reg315",
+                    "BatteryLowVoltageAlarm": "reg36 < reg316", 
+                    "BatteryHighCurrentAlarm": "abs(reg38) > reg317",
+                    # ... tous les calculs d'alarmes
+                },
+                "storage": "cache_volatile + flash_log",
+                "priority": 2
+            }
+        ]
+    },
+    
+    "low_frequency": {
+        "cycle_10s": [
+            {
+                "name": "identification",
+                "can_id": "0x35E",
+                "constant": "TinyBMS",
+                "storage": "eeprom",
+                "priority": 5
+            },
+            {
+                "name": "firmware_version", 
+                "can_id": "0x35F",
+                "compute": True,
+                "inputs": ["reg501", "reg502"],
+                "formula": "(reg501_major << 8) | reg502_minor",
+                "storage": "eeprom", 
+                "priority": 5
+            }
+        ],
+        "cycle_30s": [
+            {
+                "name": "energy_counters",
+                "can_id": "0x378", 
+                "compute": True,
+                "inputs": ["reg36", "reg38", "timestamp"],
+                "formula": "E_in += max(reg38,0)*reg36*Δt/3600, E_out += max(-reg38,0)*reg36*Δt/3600",
+                "storage": "flash_persistent + sdcard",
+                "priority": 4
+            },
+            {
+                "name": "capacity_data",
+                "can_id": "0x371+0x379",
+                "compute": True, 
+                "inputs": ["reg306", "reg323"],
+                "formula": "installed_capacity = reg306 * reg323 / 100",
+                "storage": "cache_persistent",
+                "priority": 4
+            }
+        ]
+    }
+}
