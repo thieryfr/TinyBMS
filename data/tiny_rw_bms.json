@@ -1,24 +1,274 @@
-CONFIG_REQUESTS = {
-    "boot_sequence": [
-        {
-            "name": "full_config_dump",
-            "method": "large_block_read",
-            "addresses": list(range(300, 344)),
-            "validation": "checksum_verify",
-            "storage": "eeprom_config + ram_mirror",
-            "retention": "permanent"
-        }
-    ],
-    
-    "runtime_verification": [
-        {
-            "name": "critical_config_check", 
-            "method": "spot_check",
-            "addresses": [300, 301, 315, 316, 317, 318, 319, 320],
-            "frequency": "every_10_minutes",
-            "validation": "range_check + consistency_check",
-            "storage": "ram_mirror",
-            "retention": "session_only"
-        }
-    ]
+{
+  "tiny_rw_registers": {
+    "300": {
+      "r_w": "R/W",
+      "description": "Fully Charged Voltage [1200 to 4500]",
+      "tiny_type": "UINT_16",
+      "value": 3650,
+      "range": "[1200 to 4500]",
+      "comment": "Configuration register"
+    },
+    "301": {
+      "r_w": "R/W",
+      "description": "Fully Discharged Voltage [1000 to 3500]",
+      "tiny_type": "UINT_16",
+      "value": 3250,
+      "range": "[1000 to 3500]",
+      "comment": "Configuration register"
+    },
+    "303": {
+      "r_w": "R/W",
+      "description": "Early Balancing Threshold [1000 to 4500]",
+      "tiny_type": "UINT_16",
+      "value": 3400,
+      "range": "[1000 to 4500]",
+      "comment": "Configuration register"
+    },
+    "304": {
+      "r_w": "R/W",
+      "description": "Charge Finished Current [100 to 5000]",
+      "tiny_type": "UINT_16",
+      "value": 1000,
+      "range": "[100 to 5000]",
+      "comment": "Configuration register"
+    },
+    "305": {
+      "r_w": "R/W",
+      "description": "Peak Discharge Current Cutoff",
+      "tiny_type": "UINT_16",
+      "value": 70,
+      "comment": "Configuration register"
+    },
+    "306": {
+      "r_w": "R/W",
+      "description": "Battery Capacity [10 to 65500]",
+      "tiny_type": "UINT_16",
+      "value": 314,
+      "range": "[10 to 65500]",
+      "comment": "Configuration register"
+    },
+    "307": {
+      "r_w": "R/W",
+      "description": "Number Of Series Cells [4 to 16]",
+      "tiny_type": "UINT_16",
+      "value": 16,
+      "range": "[4 to 16]",
+      "comment": "Configuration register"
+    },
+    "308": {
+      "r_w": "R/W",
+      "description": "Allowed Disbalance [15 to 100]",
+      "tiny_type": "UINT_16",
+      "value": 15,
+      "range": "[15 to 100]",
+      "comment": "Configuration register"
+    },
+    "310": {
+      "r_w": "R/W",
+      "description": "Charger Startup Delay [5 to 60]",
+      "tiny_type": "UINT_16",
+      "value": 20,
+      "range": "[5 to 60]",
+      "comment": "Configuration register"
+    },
+    "311": {
+      "r_w": "R/W",
+      "description": "Charger Disable Delay [0 to 60]",
+      "tiny_type": "UINT_16",
+      "value": 5,
+      "range": "[0 to 60]",
+      "comment": "Configuration register"
+    },
+    "315": {
+      "r_w": "R/W",
+      "description": "Over-Voltage Cutoff [1200 to 4500]",
+      "tiny_type": "UINT_16",
+      "value": 3800,
+      "range": "[1200 to 4500]",
+      "comment": "Configuration register"
+    },
+    "316": {
+      "r_w": "R/W",
+      "description": "Under-Voltage Cutoff [800 to 3500]",
+      "tiny_type": "UINT_16",
+      "value": 2800,
+      "range": "[800 to 3500]",
+      "comment": "Configuration register"
+    },
+    "317": {
+      "r_w": "R/W",
+      "description": "Discharge Over-Current Cutoff [1 to 750]",
+      "tiny_type": "UINT_16",
+      "value": 65,
+      "range": "[1 to 750]",
+      "comment": "Configuration register"
+    },
+    "318": {
+      "r_w": "R/W",
+      "description": "Charge Over-Current Cutoff [1 to 750]",
+      "tiny_type": "UINT_16",
+      "value": 90,
+      "range": "[1 to 750]",
+      "comment": "Configuration register"
+    },
+    "319": {
+      "r_w": "R/W",
+      "description": "Over-Heat Cutoff [+20 to +90]",
+      "tiny_type": "UINT_16",
+      "value": 60,
+      "range": "[+20 to +90]",
+      "comment": "Configuration register"
+    },
+    "320": {
+      "r_w": "R/W",
+      "description": "Low Temperature Charger Cutoff [-40 to +10]",
+      "tiny_type": "UINT_16",
+      "value": 0,
+      "range": "[-40 to +10]",
+      "comment": "Configuration register"
+    },
+    "321": {
+      "r_w": "R/W",
+      "description": "Charge Restart Level [60-95]",
+      "tiny_type": "UINT_16",
+      "value": 80,
+      "range": "[60-95]",
+      "comment": "Configuration register"
+    },
+    "322": {
+      "r_w": "R/W",
+      "description": "Battery Maximum Cycles Count [10-65000]",
+      "tiny_type": "UINT_16",
+      "value": 5000,
+      "range": "[10-65000]",
+      "comment": "Configuration register"
+    },
+    "323": {
+      "r_w": "R/W",
+      "description": "State Of Health [0 to 50000]",
+      "tiny_type": "UINT_16",
+      "value": 100,
+      "range": "[0 to 50000]",
+      "comment": "[0xFFFF – when data internally accepted]"
+    },
+    "328": {
+      "r_w": "R/W",
+      "description": "State Of Charge [0 to 50000]",
+      "tiny_type": "UINT_16",
+      "value": 40,
+      "range": "[0 to 50000]",
+      "comment": "Configuration register"
+    },
+    "329": {
+      "r_w": "R/W",
+      "description": "Invert External Current Sensor Direction [1st bit] (0-1)",
+      "tiny_type": "To be defined",
+      "value": "Disable Load",
+      "comment": "Configuration register"
+    },
+    "330": {
+      "r_w": "R/W",
+      "description": "Charger Type [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x01",
+      "options": "0x00-Variable (Reserved), 0x01-CC",
+      "comment": "Configuration register"
+    },
+    "331": {
+      "r_w": "R/W",
+      "description": "Load Switch Type [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "To be defined",
+      "options": "0x00-FET, 0x01-AIDO1, 0x02-AIDO2, 0x03-DIDO1, 0x04-DIDO2, 0x05-AIHO1 Active Low, 0x06-AIHO1 Active High, 0x07-AIHO2 Active Low, 0x08-AIHO2 Active High",
+      "comment": "Configuration register"
+    },
+    "332": {
+      "r_w": "R/W",
+      "description": "Automatic Recovery [8 bits LSB] [1 to 30]",
+      "tiny_type": "8 bits LSB",
+      "value": 5,
+      "range": "[1 to 30]",
+      "comment": "Configuration register"
+    },
+    "333": {
+      "r_w": "R/W",
+      "description": "Charger Switch Type [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x01",
+      "options": "0x01-Charge FET, 0x02-AIDO1, 0x03-AIDO2, 0x04-DIDO1, 0x05-DIDO2, 0x06-AIHO1 Active Low, 0x07-AIHO1 Active High, 0x08-AIHO2 Active Low, 0x09-AIHO2 Active High",
+      "comment": "Configuration register"
+    },
+    "334": {
+      "r_w": "R/W",
+      "description": "Ignition [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "To be defined",
+      "options": "0x00-Disabled, 0x01-AID01, 0x02-AIDO2, 0x03-DIDO1, 0x04-DIDO2, 0x05-AIHO1, 0x06-AIHO2",
+      "comment": "Configuration register"
+    },
+    "335": {
+      "r_w": "R/W",
+      "description": "Charger Detection [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x01-Internal",
+      "options": "0x01-Internal, 0x02-AIDO1, 0x03-AIDO2, 0x04-DIDO1, 0x05-DIDO2, 0x06-AIHO1, 0x07-AIHO2",
+      "comment": "Configuration register"
+    },
+    "337": {
+      "r_w": "R/W",
+      "description": "Precharge Pin [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "To be defined",
+      "options": "0x00-Disabled, 0x02-Discharge FET, 0x03-AIDO1, 0x04-AIDO2, 0x05-DIDO1, 0x06-DIDO2, 0x07-AIHO1 Active low, 0x08-AIHO1 Active high, 0x09-AIHO2 Active low, 0x10-AIHO2 Active high",
+      "comment": "Configuration register"
+    },
+    "338": {
+      "r_w": "R/W",
+      "description": "Precharge Duration [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x07",
+      "options": "0x00-0.1 sec., 0x01-0.2 sec., 0x02-0.5 sec., 0x03-1 sec., 0x04-2 sec., 0x05-3 sec., 0x06-4 sec., 0x07-5 sec.",
+      "comment": "Configuration register"
+    },
+    "339": {
+      "r_w": "R/W",
+      "description": "Temperature Sensor Type [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x00",
+      "options": "0x00-Dual 10K NTC, 0x01-Multipoint Active Sensor",
+      "comment": "Configuration register"
+    },
+    "340": {
+      "r_w": "R/W",
+      "description": "BMS Operation Mode [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x00",
+      "options": "0x00-Dual Port Operation, 0x01-Single Port Operation",
+      "comment": "Configuration register"
+    },
+    "341": {
+      "r_w": "R/W",
+      "description": "Single Port Switch Type [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "",
+      "options": "0x00-FET, 0x01-AIDO1, 0x02-AIDO2, 0x03-DIDO1, 0x04-DIDO2, 0x05-AIHO1 Active Low, 0x06-AIHO1 Active High, 0x07-AIHO2 Active Low, 0x08-AIHO2 Active High",
+      "comment": "Configuration register"
+    },
+    "342": {
+      "r_w": "R/W",
+      "description": "Broadcast Time [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x00",
+      "options": "0x00-Disabled, 0x01-0.1 sec., 0x02-0.2 sec., 0x03-0.5 sec., 0x04-1 sec., 0x05-2 sec., 0x06-5 sec., 0x07-10 sec.",
+      "comment": "Configuration register"
+    },
+    "343": {
+      "r_w": "R/W",
+      "description": "Protocol [8 bits LSB]",
+      "tiny_type": "8 bits LSB",
+      "value": "0x01",
+      "options": "ASCII",
+      "comment": "Configuration register"
+    }
+  }
 }
