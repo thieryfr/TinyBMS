@@ -1,83 +1,118 @@
-DASHBOARD_REQUESTS = {
-    "real_time": {
-        "cycle_200ms": [
-            {
-                "name": "essential_metrics",
-                "method": "block_read",
-                "addresses": [36, 38, 46, 48, 50],
-                "pre_calc": {
-                    "power": "reg36 * reg38",
-                    "soc_percent": "reg46 * 0.002",
-                    "temp_c": "reg48 * 0.1"
-                },
-                "storage": "ram_cache + websocket",
-                "retention": "30_minutes_ram"
-            }
-        ]
+{
+  "tiny_read_registers": {
+    "32": {
+      "tiny_name": "Tiny BMS lifetime counter",
+      "tiny_type": "—",
+      "tiny_scale_unit": "—",
+      "comment": "Read via UART/CAN (Reg:32)"
     },
-    
-    "detailed_data": {
-        "cycle_1s": [
-            {
-                "name": "cell_voltages", 
-                "method": "block_read",
-                "addresses": list(range(16)),  # 0-15
-                "pre_calc": {
-                    "cell_v_min": "min(reg0..reg15) * 0.1",
-                    "cell_v_max": "max(reg0..reg15) * 0.1", 
-                    "cell_v_avg": "mean(reg0..reg15) * 0.1",
-                    "cell_imbalance": "max(reg0..reg15) - min(reg0..reg15)"
-                },
-                "storage": "ram_cache + circular_buffer_1h",
-                "retention": "1_hour_ram + 24h_sd"
-            },
-            {
-                "name": "balancing_status",
-                "method": "block_read", 
-                "addresses": [51, 52, 53],
-                "pre_calc": {
-                    "cells_need_balance": "count_bits_set(reg51)",
-                    "cells_balancing": "count_bits_set(reg52)",
-                    "active_cells": "reg53"
-                },
-                "storage": "ram_cache",
-                "retention": "10_minutes_ram"
-            }
-        ]
+    "36": {
+      "tiny_name": "Battery Pack Voltage",
+      "tiny_type": "FLOAT",
+      "tiny_scale_unit": "1 V",
+      "comment": "Read via UART/CAN (Reg:36)"
     },
-    
-    "statistics": {
-        "cycle_5s": [
-            {
-                "name": "performance_stats",
-                "method": "block_read",
-                "addresses": [100, 102, 103, 32, 113],
-                "pre_calc": {
-                    "total_km": "reg100 * 0.01",
-                    "max_discharge_a": "reg102 * 0.1", 
-                    "max_charge_a": "reg103 * 0.1",
-                    "uptime_hours": "reg32 / 3600",
-                    "temp_range": f"{reg113_low}°C to {reg113_high}°C"
-                },
-                "storage": "flash_stats + database",
-                "retention": "permanent"
-            }
-        ],
-        "cycle_60s": [
-            {
-                "name": "historical_trends",
-                "method": "aggregate_block", 
-                "addresses": [36, 38, 46, 48, 40, 41],
-                "pre_calc": {
-                    "voltage_5min_avg": "moving_average(reg36, 300s)",
-                    "current_5min_avg": "moving_average(reg38, 300s)",
-                    "soc_trend": "linear_regression(reg46, 600s)",
-                    "temp_trend": "linear_regression(reg48, 600s)",
-                    "cell_spread_avg": "moving_average(reg41-reg40, 300s)"
-                },
-                "storage": "circular_buffer_24h + database",
-                "retention": "24h_ram + permanent_db"
-            }
-        ]
+    "38": {
+      "tiny_name": "Battery Pack Current",
+      "tiny_type": "FLOAT",
+      "tiny_scale_unit": "0.1 A",
+      "comment": "Read via UART/CAN (Reg:38)"
+    },
+    "40": {
+      "tiny_name": "Min Cell Voltage",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:40)"
+    },
+    "41": {
+      "tiny_name": "Max Cell Voltage",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:41)"
+    },
+    "42": {
+      "tiny_name": "External Temperature #1",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:42)"
+    },
+    "43": {
+      "tiny_name": "External Temperature #2",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:43)"
+    },
+    "45": {
+      "tiny_name": "State Of Health",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "0.002 %",
+      "comment": "Read via UART/CAN (Reg:45)"
+    },
+    "46": {
+      "tiny_name": "State Of Charge",
+      "tiny_type": "UINT32",
+      "tiny_scale_unit": "0.002 %",
+      "comment": "Read via UART/CAN (Reg:46)"
+    },
+    "48": {
+      "tiny_name": "Internal Temperature",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:48)"
+    },
+    "50": {
+      "tiny_name": "System Status (online/offline)",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:50)"
+    },
+    "51": {
+      "tiny_name": "Need Balancing",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:51)"
+    },
+    "52": {
+      "tiny_name": "Cell Imbalance Alarm",
+      "tiny_type": "UINT8",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:52)"
+    },
+    "305": {
+      "tiny_name": "CAN Keep-Alive (Inverter→BMS)",
+      "tiny_type": "—",
+      "tiny_scale_unit": "—",
+      "comment": "Read via CAN (Reg:305)"
+    },
+    "306": {
+      "tiny_name": "Battery Capacity",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "0.01 Ah",
+      "comment": "Read via UART/CAN (Reg:306)"
+    },
+    "307": {
+      "tiny_name": "Identification handshake (Inv→BMS)",
+      "tiny_type": "—",
+      "tiny_scale_unit": "—",
+      "comment": "Read via CAN (Reg:307)"
+    },
+    "500": {
+      "tiny_name": "Manufacturer Name",
+      "tiny_type": "STRING(8)",
+      "tiny_scale_unit": "ASCII",
+      "comment": "Read via UART/CAN (Reg:500)"
+    },
+    "501.502": {
+      "tiny_name": "Firmware Version",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Read via UART/CAN (Reg:501.502)"
+    },
+    "502": {
+      "tiny_name": "Battery Family",
+      "tiny_type": "STRING(8)",
+      "tiny_scale_unit": "ASCII",
+      "comment": "Read via UART/CAN (Reg:502)"
     }
+  }
 }
