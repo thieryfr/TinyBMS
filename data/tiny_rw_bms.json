@@ -1,0 +1,24 @@
+CONFIG_REQUESTS = {
+    "boot_sequence": [
+        {
+            "name": "full_config_dump",
+            "method": "large_block_read",
+            "addresses": list(range(300, 344)),
+            "validation": "checksum_verify",
+            "storage": "eeprom_config + ram_mirror",
+            "retention": "permanent"
+        }
+    ],
+    
+    "runtime_verification": [
+        {
+            "name": "critical_config_check", 
+            "method": "spot_check",
+            "addresses": [300, 301, 315, 316, 317, 318, 319, 320],
+            "frequency": "every_10_minutes",
+            "validation": "range_check + consistency_check",
+            "storage": "ram_mirror",
+            "retention": "session_only"
+        }
+    ]
+}
