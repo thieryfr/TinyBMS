@@ -29,3 +29,5 @@ Fournir un bus de messages centralisé (publish/subscribe) pour découpler les t
 - Utiliser `EVENT_BUS_MAX_SUBSCRIBERS_PER_TYPE` pour éviter les saturations.
 - Activer `EVENT_BUS_LOG_PUBLICATIONS` et `EVENT_BUS_STATS_ENABLED` uniquement pour le debug (impact performance).
 - Toujours vérifier `eventBus.isInitialized()` avant publication pendant la phase de boot.
+- Les nouveaux modules d'I/O (MQTT, Modbus RTU, etc.) doivent impérativement publier et consommer via ce bus interne afin de
+  préserver l'architecture découplée existante et éviter les accès directs concurrents aux registres TinyBMS.
