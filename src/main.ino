@@ -101,5 +101,5 @@ void setup() {
 }
 
 void loop() {
-    vTaskDelay(portMAX_DELAY); // ✅ FreeRTOS runs everything
+    vTaskDelay(portMAX_DELAY); // FreeRTOS runs everything
 }
