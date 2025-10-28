@@ -34,7 +34,9 @@ struct TinyRegisterReadBlock {
 constexpr TinyRegisterReadBlock kTinyReadBlocks[] = {
     {32, 21},   // Lifetime counter + primary live data window
     {102, 2},   // Charge/discharge limits
+    {113, 2},   // Pack temperature min/max
     {305, 3},   // Victron keep-alive and handshake window
+    {315, 5},   // Protection thresholds (voltage/current/temp)
     {500, 6}    // Manufacturer / firmware / family strings
 };
 
@@ -205,27 +207,73 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     d.online_status = 0x91;
                 }
 
+                const bool has_pack_temp = (d.findSnapshot(113) != nullptr) || (d.findSnapshot(114) != nullptr);
+                const bool has_overvoltage_reg = (d.findSnapshot(315) != nullptr);
+                const bool has_undervoltage_reg = (d.findSnapshot(316) != nullptr);
+                const bool has_discharge_overcurrent_reg = (d.findSnapshot(317) != nullptr);
+                const bool has_charge_overcurrent_reg = (d.findSnapshot(318) != nullptr);
+                const bool has_overheat_reg = (d.findSnapshot(319) != nullptr);
+
+                if (has_overvoltage_reg) {
+                    bridge->config_.overvoltage_cutoff_mv = d.cell_overvoltage_mv;
+                }
+                if (has_undervoltage_reg) {
+                    bridge->config_.undervoltage_cutoff_mv = d.cell_undervoltage_mv;
+                }
+                if (has_discharge_overcurrent_reg) {
+                    bridge->config_.discharge_overcurrent_a = d.discharge_overcurrent_a;
+                }
+                if (has_charge_overcurrent_reg) {
+                    bridge->config_.charge_overcurrent_a = d.charge_overcurrent_a;
+                }
+                if (has_overheat_reg) {
+                    bridge->config_.overheat_cutoff_c = static_cast<float>(d.overheat_cutoff_c);
+                }
+
                 bridge->live_data_ = d;
                 eventBus.publishLiveData(d, SOURCE_ID_UART);
 
                 const auto& th = config.victron.thresholds;
-                const float V = d.voltage;
-                const float T = d.temperature / 10.0f;
+                const float pack_voltage_v = d.voltage;
+                const float internal_temp_c = d.temperature / 10.0f;
+                const float pack_temp_max_c = has_pack_temp ? static_cast<float>(d.pack_temp_max) / 10.0f : internal_temp_c;
+                const float pack_temp_min_c = has_pack_temp ? static_cast<float>(d.pack_temp_min) / 10.0f : internal_temp_c;
+                const float overheat_cutoff_c = (has_overheat_reg && d.overheat_cutoff_c > 0)
+                    ? static_cast<float>(d.overheat_cutoff_c)
+                    : th.overtemp_c;
 
-                if (V > th.overvoltage_v) {
-                    eventBus.publishAlarm(ALARM_OVERVOLTAGE, "Voltage high", ALARM_SEVERITY_ERROR, V, SOURCE_ID_UART);
+                float overvoltage_value = pack_voltage_v;
+                bool overvoltage_alarm = false;
+                if (has_overvoltage_reg && d.cell_overvoltage_mv > 0 && d.max_cell_mv > 0) {
+                    overvoltage_value = static_cast<float>(d.max_cell_mv) / 1000.0f;
+                    overvoltage_alarm = d.max_cell_mv >= d.cell_overvoltage_mv;
+                } else {
+                    overvoltage_alarm = pack_voltage_v > th.overvoltage_v;
                 }
-                if (V > 0.1f && V < th.undervoltage_v) {
-                    eventBus.publishAlarm(ALARM_UNDERVOLTAGE, "Voltage low", ALARM_SEVERITY_WARNING, V, SOURCE_ID_UART);
+                if (overvoltage_alarm) {
+                    eventBus.publishAlarm(ALARM_OVERVOLTAGE, "Voltage high", ALARM_SEVERITY_ERROR, overvoltage_value, SOURCE_ID_UART);
                 }
+
+                float undervoltage_value = pack_voltage_v;
+                bool undervoltage_alarm = false;
+                if (has_undervoltage_reg && d.cell_undervoltage_mv > 0 && d.min_cell_mv > 0) {
+                    undervoltage_value = static_cast<float>(d.min_cell_mv) / 1000.0f;
+                    undervoltage_alarm = d.min_cell_mv <= d.cell_undervoltage_mv;
+                } else {
+                    undervoltage_alarm = (pack_voltage_v > 0.1f && pack_voltage_v < th.undervoltage_v);
+                }
+                if (undervoltage_alarm) {
+                    eventBus.publishAlarm(ALARM_UNDERVOLTAGE, "Voltage low", ALARM_SEVERITY_WARNING, undervoltage_value, SOURCE_ID_UART);
+                }
+
                 if (d.cell_imbalance_mv > th.imbalance_alarm_mv) {
                     eventBus.publishAlarm(ALARM_CELL_IMBALANCE, "Imbalance above alarm threshold", ALARM_SEVERITY_WARNING, d.cell_imbalance_mv, SOURCE_ID_UART);
                 }
-                if (T > th.overtemp_c) {
-                    eventBus.publishAlarm(ALARM_OVERTEMPERATURE, "Temp high", ALARM_SEVERITY_ERROR, T, SOURCE_ID_UART);
+                if (pack_temp_max_c > overheat_cutoff_c) {
+                    eventBus.publishAlarm(ALARM_OVERTEMPERATURE, "Temp high", ALARM_SEVERITY_ERROR, pack_temp_max_c, SOURCE_ID_UART);
                 }
-                if (T < th.low_temp_charge_c && d.current > 3.0f) {
-                    eventBus.publishAlarm(ALARM_LOW_T_CHARGE, "Charging at low T", ALARM_SEVERITY_WARNING, T, SOURCE_ID_UART);
+                if (pack_temp_min_c < th.low_temp_charge_c && d.current > 3.0f) {
+                    eventBus.publishAlarm(ALARM_LOW_T_CHARGE, "Charging at low T", ALARM_SEVERITY_WARNING, pack_temp_min_c, SOURCE_ID_UART);
                 }
             } else {
                 eventBus.publishAlarm(ALARM_UART_ERROR, "TinyBMS UART error", ALARM_SEVERITY_WARNING, bridge->stats.uart_errors, SOURCE_ID_UART);

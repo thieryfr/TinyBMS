@@ -502,19 +502,45 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
         xSemaphoreGive(configMutex);
     }
 
-    const float V = ld.voltage;
-    const float T = ld.temperature / 10.0f;
+    const float pack_voltage_v = ld.voltage;
+    const float internal_temp_c = ld.temperature / 10.0f;
+    const bool has_pack_temp = (ld.findSnapshot(113) != nullptr) || (ld.findSnapshot(114) != nullptr);
+    const float pack_temp_max_c = has_pack_temp ? static_cast<float>(ld.pack_temp_max) / 10.0f : internal_temp_c;
+    const float pack_temp_min_c = has_pack_temp ? static_cast<float>(ld.pack_temp_min) / 10.0f : internal_temp_c;
+    const bool has_overvoltage_reg = (ld.findSnapshot(315) != nullptr);
+    const bool has_undervoltage_reg = (ld.findSnapshot(316) != nullptr);
+    const bool has_overheat_reg = (ld.findSnapshot(319) != nullptr);
+    const float overheat_cutoff_c = (has_overheat_reg && ld.overheat_cutoff_c > 0)
+        ? static_cast<float>(ld.overheat_cutoff_c)
+        : th.overtemp_c;
     const uint16_t imbalance = ld.cell_imbalance_mv;
+
+    bool undervoltage_alarm = false;
+    if (has_undervoltage_reg && ld.cell_undervoltage_mv > 0 && ld.min_cell_mv > 0) {
+        undervoltage_alarm = ld.min_cell_mv <= ld.cell_undervoltage_mv;
+    } else {
+        undervoltage_alarm = (pack_voltage_v > 0.1f && pack_voltage_v < th.undervoltage_v);
+    }
+
+    bool overvoltage_alarm = false;
+    if (has_overvoltage_reg && ld.cell_overvoltage_mv > 0 && ld.max_cell_mv > 0) {
+        overvoltage_alarm = ld.max_cell_mv >= ld.cell_overvoltage_mv;
+    } else {
+        overvoltage_alarm = (pack_voltage_v > th.overvoltage_v);
+    }
+
+    bool overtemp_alarm = (pack_temp_max_c > overheat_cutoff_c);
+    bool low_temp_charge_alarm = (pack_temp_min_c < th.low_temp_charge_c && ld.current > 3.0f);
 
     uint8_t b0 = 0;
     auto set = [](bool condAlarm, bool condWarn)->uint8_t{
         return condAlarm ? 2 : (condWarn ? 1 : 0);
     };
 
-    b0 = encode2bit(b0, 0, set(V < th.undervoltage_v && V > 0.1f, false));
-    b0 = encode2bit(b0, 1, set(V > th.overvoltage_v, false));
-    b0 = encode2bit(b0, 2, set(T > th.overtemp_c, false));
-    b0 = encode2bit(b0, 3, set(T < th.low_temp_charge_c && ld.current > 3.0f, false));
+    b0 = encode2bit(b0, 0, set(undervoltage_alarm, false));
+    b0 = encode2bit(b0, 1, set(overvoltage_alarm, false));
+    b0 = encode2bit(b0, 2, set(overtemp_alarm, false));
+    b0 = encode2bit(b0, 3, set(low_temp_charge_alarm, false));
     d[0] = b0;
 
     uint8_t b1 = 0;
@@ -532,7 +558,8 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
     d[1] = b1;
 
     d[7] = 0;
-    d[7] = encode2bit(d[7], 0, (commErr || (V<th.undervoltage_v) || (V>th.overvoltage_v) || (T>th.overtemp_c)) ? 2 : 1);
+    bool global_alarm = commErr || undervoltage_alarm || overvoltage_alarm || overtemp_alarm;
+    d[7] = encode2bit(d[7], 0, global_alarm ? 2 : 1);
 }
 
 void TinyBMS_Victron_Bridge::buildPGN_0x35E(uint8_t* d){

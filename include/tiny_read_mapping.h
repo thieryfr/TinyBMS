@@ -37,7 +37,14 @@ enum class TinyLiveDataField : uint8_t {
     MaxDischargeCurrent,
     OnlineStatus,
     NeedBalancing,
-    CellImbalanceMv
+    CellImbalanceMv,
+    PackMinTemperature,
+    PackMaxTemperature,
+    CellOvervoltageMv,
+    CellUndervoltageMv,
+    DischargeOvercurrentA,
+    ChargeOvercurrentA,
+    OverheatCutoffC
 };
 
 struct TinyRegisterMetadata {
