@@ -12,6 +12,7 @@
 #include "rtos_config.h"
 #include "logger.h"         // ✅ Logging
 #include "config_manager.h" // For config.logging.log_level awareness
+#include "web_routes.h"
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
@@ -26,7 +27,7 @@ extern String getConfigJSON();
 /**
  * @brief Register TinyBMS API routes
  */
-void registerTinyBMSRoutes(AsyncWebServer& server) {
+void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
 
     logger.log(LOG_INFO, "[API] Registering TinyBMS config routes");
 

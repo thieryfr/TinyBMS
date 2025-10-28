@@ -15,6 +15,7 @@
 #include "logger.h"          // ✅ Added for logging
 #include "config_manager.h"  // Needed for config references
 #include "watchdog_manager.h"
+#include "web_routes.h"
 
 // External globals
 extern ConfigManager config;
@@ -30,7 +31,7 @@ extern String getSystemConfigJSON();
 /**
  * @brief Register API routes
  */
-void registerApiRoutes(AsyncWebServer& server) {
+void setupAPIRoutes(AsyncWebServer& server) {
 
     logger.log(LOG_INFO, "[API] Registering system API routes");
 

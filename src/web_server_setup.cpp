@@ -18,6 +18,7 @@
 #include "rtos_tasks.h"
 #include "logger.h"
 #include "config_manager.h"
+#include "web_routes.h"
 
 // External globals
 extern ConfigManager config;
@@ -26,10 +27,8 @@ extern AsyncWebSocket ws;
 extern Logger logger;
 
 // External functions (defined in other modules)
-extern void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
+extern void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                              AwsEventType type, void *arg, uint8_t *data, size_t len);
-extern void setupAPIRoutes(AsyncWebServer& server);
-extern void setupTinyBMSConfigRoutes(AsyncWebServer& server);
 
 /**
  * @brief Setup and start web server
