@@ -32,7 +32,7 @@ namespace {
 
 std::vector<TinyRegisterMetadata> g_metadata;
 std::vector<TinyRegisterRuntimeBinding> g_bindings = {
-    {32, 1, 32, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::None, "Lifetime Counter", "-", nullptr},
+    {32, 2, 32, TinyRegisterValueType::Uint32, false, 1.0f, TinyLiveDataField::None, "Lifetime Counter", "s", nullptr},
     {36, 1, 36, TinyRegisterValueType::Float, false, 0.01f, TinyLiveDataField::Voltage, "Battery Pack Voltage", "V", nullptr},
     {38, 1, 38, TinyRegisterValueType::Float, true, 0.1f, TinyLiveDataField::Current, "Battery Pack Current", "A", nullptr},
     {40, 1, 40, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::MinCellMv, "Min Cell Voltage", "mV", nullptr},
