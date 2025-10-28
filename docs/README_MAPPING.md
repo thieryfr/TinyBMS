@@ -18,3 +18,4 @@
 | `src/websocket_handlers.cpp` | Gestion des clients WS, diffusion périodique des snapshots Event Bus et sérialisation allégée. |
 | `src/tinybms_config_editor.cpp` | Fournit un catalogue de registres TinyBMS, lecture/écriture via UART et intégration web. |
 | `include/can_driver.h` / `src/can_driver.cpp` | Abstraction driver CAN (simulation) pour décorréler la logique bridge du matériel. |
+| `docs/victron_register_mapping.md` | Tableau de correspondance TinyBMS↔PGN Victron avec formules d'encodage et dépendances clés. |
