@@ -113,15 +113,34 @@ void ConfigManager::loadWiFiConfig(const JsonDocument& doc) {
     JsonObjectConst wifiObj = doc["wifi"].as<JsonObjectConst>();
     if (wifiObj.isNull()) return;
 
-    wifi.ssid = wifiObj["ssid"] | wifi.ssid;
-    wifi.password = wifiObj["password"] | wifi.password;
-    wifi.hostname = wifiObj["hostname"] | wifi.hostname;
+    wifi.mode = wifiObj["mode"] | wifi.mode;
+    wifi.sta_ssid = wifiObj["sta_ssid"] | wifiObj["ssid"] | wifi.sta_ssid;
+    wifi.sta_password = wifiObj["sta_password"] | wifiObj["password"] | wifi.sta_password;
+    wifi.sta_hostname = wifiObj["sta_hostname"] | wifiObj["hostname"] | wifi.sta_hostname;
+    wifi.sta_ip_mode = wifiObj["sta_ip_mode"] | wifi.sta_ip_mode;
+    wifi.sta_static_ip = wifiObj["sta_static_ip"] | wifi.sta_static_ip;
+    wifi.sta_gateway = wifiObj["sta_gateway"] | wifi.sta_gateway;
+    wifi.sta_subnet = wifiObj["sta_subnet"] | wifi.sta_subnet;
 
     JsonObjectConst apObj = wifiObj["ap_fallback"].as<JsonObjectConst>();
     if (!apObj.isNull()) {
         wifi.ap_fallback.enabled = apObj["enabled"] | wifi.ap_fallback.enabled;
         wifi.ap_fallback.ssid = apObj["ssid"] | wifi.ap_fallback.ssid;
         wifi.ap_fallback.password = apObj["password"] | wifi.ap_fallback.password;
+        wifi.ap_fallback.channel = apObj["channel"] | wifi.ap_fallback.channel;
+    }
+
+    if (wifiObj.containsKey("ap_ssid")) {
+        wifi.ap_fallback.ssid = wifiObj["ap_ssid"].as<String>();
+    }
+    if (wifiObj.containsKey("ap_password")) {
+        wifi.ap_fallback.password = wifiObj["ap_password"].as<String>();
+    }
+    if (wifiObj.containsKey("ap_channel")) {
+        wifi.ap_fallback.channel = wifiObj["ap_channel"].as<int>();
+    }
+    if (wifiObj.containsKey("ap_fallback") && wifiObj["ap_fallback"].is<bool>()) {
+        wifi.ap_fallback.enabled = wifiObj["ap_fallback"].as<bool>();
     }
 }
 
@@ -143,6 +162,7 @@ void ConfigManager::loadHardwareConfig(const JsonDocument& doc) {
         hardware.can.rx_pin = canObj["rx_pin"] | hardware.can.rx_pin;
         hardware.can.bitrate = canObj["bitrate"] | hardware.can.bitrate;
         hardware.can.mode = canObj["mode"] | hardware.can.mode;
+        hardware.can.termination = canObj["termination"] | hardware.can.termination;
     }
 }
 
@@ -207,6 +227,7 @@ void ConfigManager::loadWebServerConfig(const JsonDocument& doc) {
     web_server.enable_auth = webObj["enable_auth"] | web_server.enable_auth;
     web_server.username = webObj["username"] | web_server.username;
     web_server.password = webObj["password"] | web_server.password;
+    web_server.max_ws_clients = webObj["max_ws_clients"] | web_server.max_ws_clients;
 }
 
 void ConfigManager::loadLoggingConfig(const JsonDocument& doc) {
@@ -217,6 +238,11 @@ void ConfigManager::loadLoggingConfig(const JsonDocument& doc) {
     logging.log_uart_traffic = logObj["log_uart_traffic"] | logging.log_uart_traffic;
     logging.log_can_traffic = logObj["log_can_traffic"] | logging.log_can_traffic;
     logging.log_cvl_changes = logObj["log_cvl_changes"] | logging.log_cvl_changes;
+    logging.output_serial = logObj["output_serial"] | logging.output_serial;
+    logging.output_web = logObj["output_web"] | logging.output_web;
+    logging.output_sd = logObj["output_sd"] | logging.output_sd;
+    logging.output_syslog = logObj["output_syslog"] | logging.output_syslog;
+    logging.syslog_server = logObj["syslog_server"] | logging.syslog_server;
 
     if (logObj.containsKey("log_level")) {
         String lvl = logObj["log_level"].as<const char*>();
@@ -236,14 +262,27 @@ void ConfigManager::loadAdvancedConfig(const JsonDocument& doc) {
 
 void ConfigManager::saveWiFiConfig(JsonDocument& doc) const {
     JsonObject wifiObj = doc.createNestedObject("wifi");
-    wifiObj["ssid"] = wifi.ssid;
-    wifiObj["password"] = wifi.password;
-    wifiObj["hostname"] = wifi.hostname;
+    wifiObj["mode"] = wifi.mode;
+    wifiObj["ssid"] = wifi.sta_ssid;
+    wifiObj["sta_ssid"] = wifi.sta_ssid;
+    wifiObj["password"] = wifi.sta_password;
+    wifiObj["sta_password"] = wifi.sta_password;
+    wifiObj["hostname"] = wifi.sta_hostname;
+    wifiObj["sta_hostname"] = wifi.sta_hostname;
+    wifiObj["sta_ip_mode"] = wifi.sta_ip_mode;
+    wifiObj["sta_static_ip"] = wifi.sta_static_ip;
+    wifiObj["sta_gateway"] = wifi.sta_gateway;
+    wifiObj["sta_subnet"] = wifi.sta_subnet;
+    wifiObj["ap_ssid"] = wifi.ap_fallback.ssid;
+    wifiObj["ap_password"] = wifi.ap_fallback.password;
+    wifiObj["ap_channel"] = wifi.ap_fallback.channel;
+    wifiObj["ap_fallback"] = wifi.ap_fallback.enabled;
 
     JsonObject apObj = wifiObj.createNestedObject("ap_fallback");
     apObj["enabled"] = wifi.ap_fallback.enabled;
     apObj["ssid"] = wifi.ap_fallback.ssid;
     apObj["password"] = wifi.ap_fallback.password;
+    apObj["channel"] = wifi.ap_fallback.channel;
 }
 
 void ConfigManager::saveHardwareConfig(JsonDocument& doc) const {
@@ -260,6 +299,7 @@ void ConfigManager::saveHardwareConfig(JsonDocument& doc) const {
     canObj["rx_pin"] = hardware.can.rx_pin;
     canObj["bitrate"] = hardware.can.bitrate;
     canObj["mode"] = hardware.can.mode;
+    canObj["termination"] = hardware.can.termination;
 }
 
 void ConfigManager::saveTinyBMSConfig(JsonDocument& doc) const {
@@ -313,6 +353,7 @@ void ConfigManager::saveWebServerConfig(JsonDocument& doc) const {
     webObj["enable_auth"] = web_server.enable_auth;
     webObj["username"] = web_server.username;
     webObj["password"] = web_server.password;
+    webObj["max_ws_clients"] = web_server.max_ws_clients;
 }
 
 void ConfigManager::saveLoggingConfig(JsonDocument& doc) const {
@@ -322,6 +363,11 @@ void ConfigManager::saveLoggingConfig(JsonDocument& doc) const {
     logObj["log_uart_traffic"] = logging.log_uart_traffic;
     logObj["log_can_traffic"] = logging.log_can_traffic;
     logObj["log_cvl_changes"] = logging.log_cvl_changes;
+    logObj["output_serial"] = logging.output_serial;
+    logObj["output_web"] = logging.output_web;
+    logObj["output_sd"] = logging.output_sd;
+    logObj["output_syslog"] = logging.output_syslog;
+    logObj["syslog_server"] = logging.syslog_server;
 }
 
 void ConfigManager::saveAdvancedConfig(JsonDocument& doc) const {
@@ -353,7 +399,7 @@ const char* ConfigManager::logLevelToString(LogLevel level) const {
 
 void ConfigManager::printConfig() const {
     logger.log(LOG_DEBUG, "=== CONFIG LOADED ===");
-    logger.log(LOG_DEBUG, "WiFi: SSID=" + wifi.ssid + " Hostname=" + wifi.hostname);
+    logger.log(LOG_DEBUG, "WiFi: SSID=" + wifi.sta_ssid + " Hostname=" + wifi.sta_hostname);
     logger.log(LOG_DEBUG, "UART: RX=" + String(hardware.uart.rx_pin) +
                               " TX=" + String(hardware.uart.tx_pin) +
                               " Baud=" + String(hardware.uart.baudrate));

@@ -214,7 +214,7 @@ async function readRegister(regNum) {
     setRegisterState(regNum, 'reading');
     
     try {
-        const response = await fetchAPI(`/api/tinybms/register/${regNum}`);
+        const response = await fetchAPI(`/api/tinybms/register?address=${regNum}`);
         
         if (response && response.success) {
             const value = response.value;
@@ -254,7 +254,7 @@ async function writeRegister(regNum) {
     setRegisterState(regNum, 'writing');
     
     try {
-        const response = await postAPI(`/api/tinybms/register/${regNum}`, { value });
+        const response = await postAPI('/api/tinybms/register', { address: regNum, value });
         
         if (response && response.success) {
             registerBmsValues[regNum] = value;

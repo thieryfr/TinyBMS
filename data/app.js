@@ -208,9 +208,31 @@ function showTab(tabName) {
 // API Calls
 // ============================================
 
-async function fetchAPI(endpoint) {
+async function fetchAPI(endpoint, params = null, options = {}) {
     try {
-        const response = await fetch(endpoint);
+        let url = endpoint;
+
+        if (params) {
+            if (params instanceof URLSearchParams) {
+                const query = params.toString();
+                if (query) {
+                    url += (url.includes('?') ? '&' : '?') + query;
+                }
+            } else if (typeof params === 'object') {
+                const searchParams = new URLSearchParams();
+                Object.entries(params).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null && value !== '') {
+                        searchParams.append(key, value);
+                    }
+                });
+                const query = searchParams.toString();
+                if (query) {
+                    url += (url.includes('?') ? '&' : '?') + query;
+                }
+            }
+        }
+
+        const response = await fetch(url, options);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }

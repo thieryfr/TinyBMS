@@ -604,18 +604,32 @@ function saveCvlSettings() {
     settings.bulkThreshold = parseFloat(document.getElementById('bulkThreshold').value);
     settings.floatThreshold = parseFloat(document.getElementById('floatThreshold').value);
     settings.floatExit = parseFloat(document.getElementById('floatExit').value);
-    
-    // TODO: Send to ESP32 via API
+
+    const payload = {
+        cvl: {
+            enabled: settings.cvlEnabled,
+            bulk_transition_soc: settings.bulkThreshold,
+            transition_float_soc: settings.floatThreshold,
+            float_exit_soc: settings.floatExit
+        }
+    };
+
     fetch('/api/config/cvl', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-    }).then(() => {
-        saveSettings(settings);
-    }).catch(err => {
-        console.error('Failed to save CVL settings:', err);
-        showToast('Erreur sauvegarde CVL', 'danger');
-    });
+        body: JSON.stringify(payload)
+    }).then(response => response.json())
+      .then(result => {
+          if (result?.success) {
+              saveSettings(settings);
+              showToast('Paramètres CVL enregistrés', 'success');
+          } else {
+              throw new Error(result?.message || 'API error');
+          }
+      }).catch(err => {
+          console.error('Failed to save CVL settings:', err);
+          showToast('Erreur sauvegarde CVL', 'danger');
+      });
 }
 
 function saveDisplaySettings() {
