@@ -1,0 +1,98 @@
+{
+  "live_data": {
+    "voltage": 52.1,
+    "current": -23.5,
+    "soc_percent": 78.4,
+    "soh_percent": 95.2,
+    "temperature": 253,
+    "min_cell_mv": 3320,
+    "max_cell_mv": 3358,
+    "cell_imbalance_mv": 38,
+    "balancing_bits": 3,
+    "online_status": 145
+  },
+  "stats": {
+    "cvl_current_v": 54.2,
+    "cvl_state": 3,
+    "can_tx_count": 128,
+    "can_rx_count": 124,
+    "can_tx_errors": 1,
+    "can_rx_errors": 0,
+    "can_bus_off_count": 0,
+    "can_queue_overflows": 2,
+    "uart_errors": 0,
+    "uart_success_count": 640,
+    "uart_timeouts": 3,
+    "uart_crc_errors": 1,
+    "uart_retry_count": 4,
+    "victron_keepalive_ok": true,
+    "ccl_limit_a": 85.0,
+    "dcl_limit_a": 95.0,
+    "can": {
+      "tx_success": 128,
+      "rx_success": 124,
+      "tx_errors": 1,
+      "rx_errors": 0,
+      "bus_off_count": 0,
+      "rx_dropped": 2
+    },
+    "uart": {
+      "success": 640,
+      "errors": 0,
+      "timeouts": 3,
+      "crc_errors": 1,
+      "retry_count": 4
+    },
+    "keepalive": {
+      "ok": true,
+      "last_tx_ms": 120000,
+      "last_rx_ms": 119200,
+      "interval_ms": 1000,
+      "timeout_ms": 10000,
+      "since_last_rx_ms": 800
+    },
+    "event_bus": {
+      "total_events_published": 2048,
+      "total_events_dispatched": 4096,
+      "queue_overruns": 0,
+      "dispatch_errors": 0,
+      "total_subscribers": 7,
+      "current_queue_depth": 0
+    }
+  },
+  "status_message": {
+    "message": "VE.Can keepalive OK",
+    "level": 0,
+    "level_name": "info",
+    "source_id": 2,
+    "timestamp_ms": 12345678
+  },
+  "alarms": [
+    {
+      "event": "raised",
+      "timestamp_ms": 12345000,
+      "source_id": 1,
+      "sequence": 77,
+      "code": 30,
+      "severity": 1,
+      "severity_name": "warning",
+      "message": "Imbalance above alarm threshold",
+      "value": 38.0,
+      "active": true
+    },
+    {
+      "event": "warning",
+      "timestamp_ms": 12344000,
+      "source_id": 2,
+      "sequence": 72,
+      "code": 44,
+      "severity": 0,
+      "severity_name": "info",
+      "message": "CAN retry",
+      "value": 0,
+      "active": false
+    }
+  ],
+  "alarms_active": true,
+  "uptime_ms": 86400000
+}

@@ -144,6 +144,7 @@ enum AlarmCode {
     // Temperature alarms
     ALARM_OVERTEMPERATURE = 20,
     ALARM_UNDERTEMPERATURE = 21,
+    ALARM_LOW_T_CHARGE    = 22,
 
     // Cell imbalance alarms
     ALARM_CELL_IMBALANCE = 30,
@@ -153,6 +154,8 @@ enum AlarmCode {
     ALARM_UART_TIMEOUT = 41,
     ALARM_CAN_ERROR = 42,
     ALARM_CAN_TIMEOUT = 43,
+    ALARM_CAN_TX_ERROR = 44,
+    ALARM_CAN_KEEPALIVE_LOST = 45,
 
     // System alarms
     ALARM_WATCHDOG_RESET = 50,
