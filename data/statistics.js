@@ -112,7 +112,7 @@ async function loadStatisticsData() {
         
         const response = await fetchAPI('/api/statistics', params);
         
-        if (response && response.success) {
+        if (response && response.success && response.data) {
             statsData = { ...statsData, ...response.data };
             updateAllStatistics();
         } else {

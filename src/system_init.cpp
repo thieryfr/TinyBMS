@@ -83,11 +83,24 @@ bool initializeWiFi() {
         return false;
     }
 
-    WiFi.mode(WIFI_STA);
-    WiFi.setHostname(config.wifi.hostname.c_str());
-    logger.log(LOG_INFO, "[WiFi] Connecting to SSID: " + config.wifi.ssid);
+    WiFi.mode(config.wifi.mode.equalsIgnoreCase("ap") ? WIFI_AP : WIFI_STA);
+    WiFi.setHostname(config.wifi.sta_hostname.c_str());
+    logger.log(LOG_INFO, "[WiFi] Connecting to SSID: " + config.wifi.sta_ssid);
 
-    WiFi.begin(config.wifi.ssid.c_str(), config.wifi.password.c_str());
+    if (config.wifi.sta_ip_mode.equalsIgnoreCase("static") &&
+        config.wifi.sta_static_ip.length() > 0) {
+        IPAddress ip, gateway, subnet;
+        if (ip.fromString(config.wifi.sta_static_ip) &&
+            gateway.fromString(config.wifi.sta_gateway) &&
+            subnet.fromString(config.wifi.sta_subnet)) {
+            WiFi.config(ip, gateway, subnet);
+            logger.log(LOG_INFO, String("[WiFi] Static IP configured: ") + ip.toString());
+        } else {
+            logger.log(LOG_WARN, "[WiFi] Invalid static IP configuration, falling back to DHCP");
+        }
+    }
+
+    WiFi.begin(config.wifi.sta_ssid.c_str(), config.wifi.sta_password.c_str());
 
     uint8_t attempts = 0;
     const uint8_t MAX_ATTEMPTS = 20;
@@ -103,7 +116,7 @@ bool initializeWiFi() {
     if (WiFi.status() == WL_CONNECTED) {
         logger.log(LOG_INFO, "[WiFi] Connected ✓");
         logger.log(LOG_INFO, "[WiFi] IP Address: " + WiFi.localIP().toString());
-        logger.log(LOG_INFO, "[WiFi] Hostname: " + config.wifi.hostname);
+        logger.log(LOG_INFO, "[WiFi] Hostname: " + config.wifi.sta_hostname);
         logger.log(LOG_INFO, "[WiFi] RSSI: " + String(WiFi.RSSI()) + " dBm");
         publishStatusIfPossible("WiFi client connected", STATUS_LEVEL_NOTICE);
         success = true;

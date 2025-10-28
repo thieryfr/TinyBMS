@@ -63,6 +63,12 @@ public:
      */
     String getLogs();
 
+    /**
+     * @brief Efface le fichier de logs et le recrée
+     * @return true si l'opération réussit, false sinon
+     */
+    bool clearLogs();
+
 private:
     LogLevel current_level_;      // Niveau de journalisation actuel
     File log_file_;               // Fichier de logs sur SPIFFS

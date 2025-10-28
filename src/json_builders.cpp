@@ -112,20 +112,23 @@ String getStatusJSON() {
 // TINYBMS CONFIG JSON
 // ============================================================================
 String getConfigJSON() {
-    StaticJsonDocument<512> doc;
-    
+    StaticJsonDocument<640> doc;
+
+    doc["success"] = true;
+
     const TinyBMS_Config& cfg = bridge.getConfig();
-    doc["fully_charged_voltage_mv"] = cfg.fully_charged_voltage_mv;
-    doc["fully_discharged_voltage_mv"] = cfg.fully_discharged_voltage_mv;
-    doc["charge_finished_current_ma"] = cfg.charge_finished_current_ma;
-    doc["battery_capacity_ah"] = cfg.battery_capacity_ah_scaled / 100.0;
-    doc["cell_count"] = cfg.cell_count;
-    doc["overvoltage_cutoff_mv"] = cfg.overvoltage_cutoff_mv;
-    doc["undervoltage_cutoff_mv"] = cfg.undervoltage_cutoff_mv;
-    doc["discharge_overcurrent_a"] = cfg.discharge_overcurrent_a;
-    doc["charge_overcurrent_a"] = cfg.charge_overcurrent_a;
-    doc["overheat_cutoff_c"] = cfg.overheat_cutoff_c / 10.0;
-    doc["low_temp_charge_cutoff_c"] = cfg.low_temp_charge_cutoff_c / 10.0;
+    JsonObject config = doc.createNestedObject("config");
+    config["fully_charged_voltage_mv"] = cfg.fully_charged_voltage_mv;
+    config["fully_discharged_voltage_mv"] = cfg.fully_discharged_voltage_mv;
+    config["charge_finished_current_ma"] = cfg.charge_finished_current_ma;
+    config["battery_capacity_ah"] = cfg.battery_capacity_ah_scaled / 100.0;
+    config["cell_count"] = cfg.cell_count;
+    config["overvoltage_cutoff_mv"] = cfg.overvoltage_cutoff_mv;
+    config["undervoltage_cutoff_mv"] = cfg.undervoltage_cutoff_mv;
+    config["discharge_overcurrent_a"] = cfg.discharge_overcurrent_a;
+    config["charge_overcurrent_a"] = cfg.charge_overcurrent_a;
+    config["overheat_cutoff_c"] = cfg.overheat_cutoff_c / 10.0;
+    config["low_temp_charge_cutoff_c"] = cfg.low_temp_charge_cutoff_c / 10.0;
 
     String output;
     serializeJson(doc, output);
@@ -150,19 +153,32 @@ String getSystemConfigJSON() {
 
     // WiFi Info
     JsonObject wifi = doc.createNestedObject("wifi");
-    wifi["ssid"] = config.wifi.ssid;
-    wifi["password"] = config.wifi.password;
-    wifi["hostname"] = config.wifi.hostname;
+    wifi["mode"] = config.wifi.mode;
+    wifi["ssid"] = config.wifi.sta_ssid;
+    wifi["sta_ssid"] = config.wifi.sta_ssid;
+    wifi["password"] = config.wifi.sta_password;
+    wifi["sta_password"] = config.wifi.sta_password;
+    wifi["hostname"] = config.wifi.sta_hostname;
+    wifi["sta_hostname"] = config.wifi.sta_hostname;
+    wifi["sta_ip_mode"] = config.wifi.sta_ip_mode;
+    wifi["sta_static_ip"] = config.wifi.sta_static_ip;
+    wifi["sta_gateway"] = config.wifi.sta_gateway;
+    wifi["sta_subnet"] = config.wifi.sta_subnet;
     wifi["connected"] = WiFi.status() == WL_CONNECTED;
     wifi["ip"] = WiFi.status() == WL_CONNECTED ?
                   WiFi.localIP().toString() : WiFi.softAPIP().toString();
     wifi["rssi"] = WiFi.RSSI();
-    wifi["mode"] = WiFi.status() == WL_CONNECTED ? "STA" : "AP";
+    wifi["mode_active"] = WiFi.status() == WL_CONNECTED ? "STA" : "AP";
+    wifi["ap_ssid"] = config.wifi.ap_fallback.ssid;
+    wifi["ap_password"] = config.wifi.ap_fallback.password;
+    wifi["ap_channel"] = config.wifi.ap_fallback.channel;
+    wifi["ap_fallback"] = config.wifi.ap_fallback.enabled;
 
     JsonObject ap_fallback = wifi.createNestedObject("ap_fallback");
     ap_fallback["enabled"] = config.wifi.ap_fallback.enabled;
     ap_fallback["ssid"] = config.wifi.ap_fallback.ssid;
     ap_fallback["password"] = config.wifi.ap_fallback.password;
+    ap_fallback["channel"] = config.wifi.ap_fallback.channel;
 
     // Hardware
     JsonObject hw = doc.createNestedObject("hardware");

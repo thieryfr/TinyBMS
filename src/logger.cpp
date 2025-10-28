@@ -125,3 +125,22 @@ String Logger::getLogs() {
     }
     return logs;
 }
+
+bool Logger::clearLogs() {
+    if (xSemaphoreTake(log_mutex_, pdMS_TO_TICKS(100)) != pdTRUE) {
+        return false;
+    }
+
+    if (log_file_) {
+        log_file_.close();
+    }
+
+    if (SPIFFS.exists("/logs.txt")) {
+        SPIFFS.remove("/logs.txt");
+    }
+
+    log_file_ = SPIFFS.open("/logs.txt", FILE_APPEND);
+    bool ok = log_file_;
+    xSemaphoreGive(log_mutex_);
+    return ok;
+}

@@ -25,12 +25,90 @@ extern Logger logger;       // ✅ Logger instance
 // External functions
 extern String getConfigJSON();
 
+namespace {
+
+void sendJsonResponse(AsyncWebServerRequest* request, int statusCode, JsonDocument& doc) {
+    String payload;
+    serializeJson(doc, payload);
+    request->send(statusCode, "application/json", payload);
+}
+
+void sendErrorResponse(AsyncWebServerRequest* request, int statusCode, const String& message, const char* code = nullptr) {
+    StaticJsonDocument<256> doc;
+    doc["success"] = false;
+    doc["message"] = message;
+    if (code != nullptr) {
+        doc["error"] = code;
+    }
+    sendJsonResponse(request, statusCode, doc);
+}
+
+}
+
 /**
  * @brief Register TinyBMS API routes
  */
 void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
 
     logger.log(LOG_INFO, "[API] Registering TinyBMS config routes");
+
+    // ============================
+    // GET /api/tinybms/register
+    // ============================
+    server.on("/api/tinybms/register", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!request->hasParam("address")) {
+            sendErrorResponse(request, 400, "Missing address parameter", "missing_address");
+            return;
+        }
+
+        uint16_t address = request->getParam("address")->value().toInt();
+        uint16_t value = 0;
+        bool ok = configEditor.readRegister(address, value);
+
+        StaticJsonDocument<256> doc;
+        doc["success"] = ok;
+        doc["address"] = address;
+        if (ok) {
+            doc["value"] = value;
+        } else {
+            doc["message"] = "Failed to read register";
+        }
+        sendJsonResponse(request, ok ? 200 : 500, doc);
+    });
+
+    // ============================
+    // POST /api/tinybms/register
+    // ============================
+    server.on("/api/tinybms/register", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!request->hasArg("plain")) {
+            sendErrorResponse(request, 400, "Missing body", "missing_body");
+            return;
+        }
+
+        StaticJsonDocument<256> doc;
+        if (deserializeJson(doc, request->arg("plain"))) {
+            sendErrorResponse(request, 400, "Invalid JSON", "invalid_json");
+            return;
+        }
+
+        if (!doc.containsKey("address") || !doc.containsKey("value")) {
+            sendErrorResponse(request, 400, "Missing address or value", "missing_fields");
+            return;
+        }
+
+        uint16_t address = doc["address"].as<uint16_t>();
+        uint16_t value = doc["value"].as<uint16_t>();
+        TinyBMSConfigError err = configEditor.writeRegister(address, value);
+
+        StaticJsonDocument<256> resp;
+        bool ok = err == TinyBMSConfigError::None;
+        resp["success"] = ok;
+        resp["address"] = address;
+        if (!ok) {
+            resp["message"] = tinybmsConfigErrorToString(err);
+        }
+        sendJsonResponse(request, ok ? 200 : 500, resp);
+    });
 
     // ============================
     // GET /api/config/tinybms
@@ -53,7 +131,7 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
 
         if (!request->hasArg("plain")) {
             logger.log(LOG_WARN, "[API] Missing JSON body");
-            request->send(400, "application/json", "{\"error\":\"Missing body\"}");
+            sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
         }
 
@@ -62,7 +140,7 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
 
         if (error) {
             logger.log(LOG_ERROR, String("[API] JSON parse error: ") + error.c_str());
-            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            sendErrorResponse(request, 400, "Invalid JSON", "invalid_json");
             return;
         }
 
@@ -95,7 +173,7 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
         // ✅ Mutex protection
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
             logger.log(LOG_ERROR, "[API] Failed to acquire config mutex");
-            request->send(500, "application/json", "{\"error\":\"Failed to access config\"}");
+            sendErrorResponse(request, 503, "Failed to access config", "config_mutex_timeout");
             return;
         }
 
@@ -103,7 +181,10 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
         TinyBMSConfigResult result = configEditor.writeConfig(cfg);
         if (result.ok()) {
             logger.log(LOG_INFO, "[API] TinyBMS configuration updated");
-            request->send(200, "application/json", "{\"status\":\"Configuration updated\"}");
+            StaticJsonDocument<128> resp;
+            resp["success"] = true;
+            resp["message"] = "Configuration updated";
+            sendJsonResponse(request, 200, resp);
         } else {
             TinyBMSConfigError error = result.error;
             const char* code = tinybmsConfigErrorToString(error);
@@ -134,13 +215,24 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
             logger.log(LOG_ERROR, String("[API] TinyBMS config update failed: ") + result.message);
 
             StaticJsonDocument<256> errorDoc;
-            errorDoc["error"] = result.message;
-            errorDoc["code"] = code;
-            String payload;
-            serializeJson(errorDoc, payload);
-            request->send(status, "application/json", payload);
+            errorDoc["success"] = false;
+            errorDoc["message"] = result.message;
+            errorDoc["error"] = code;
+            sendJsonResponse(request, status, errorDoc);
         }
 
         xSemaphoreGive(configMutex);
+    });
+
+    // ============================
+    // POST /api/tinybms/factory-reset
+    // ============================
+    server.on("/api/tinybms/factory-reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+        StaticJsonDocument<128> doc;
+        doc["success"] = false;
+        doc["message"] = "Factory reset not supported";
+        String payload;
+        serializeJson(doc, payload);
+        request->send(501, "application/json", payload);
     });
 }

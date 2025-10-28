@@ -21,14 +21,20 @@ public:
     bool save();
 
     struct WiFiConfig {
-        String ssid = "YourSSID";
-        String password = "YourPassword";
+        String mode = "station";
+        String sta_ssid = "YourSSID";
+        String sta_password = "YourPassword";
+        String sta_hostname = "tinybms-victron";
+        String sta_ip_mode = "dhcp";
+        String sta_static_ip = "";
+        String sta_gateway = "";
+        String sta_subnet = "255.255.255.0";
         struct APFallback {
             bool enabled = true;
             String ssid = "TinyBMS-Bridge";
             String password = "12345678";
+            int channel = 6;
         } ap_fallback;
-        String hostname = "tinybms-bridge";
     } wifi;
 
     struct HardwareConfig {
@@ -43,6 +49,7 @@ public:
             int rx_pin = 4;
             uint32_t bitrate = 250000;
             String mode = "normal";
+            bool termination = true;
         } can;
     } hardware;
 
@@ -93,6 +100,7 @@ public:
         bool enable_auth = false;
         String username = "admin";
         String password = "admin";
+        uint8_t max_ws_clients = 4;
     } web_server;
 
     struct LoggingConfig {
@@ -101,6 +109,11 @@ public:
         bool log_uart_traffic = false;
         bool log_can_traffic = false;
         bool log_cvl_changes = true;
+        bool output_serial = true;
+        bool output_web = true;
+        bool output_sd = false;
+        bool output_syslog = false;
+        String syslog_server = "";
     } logging;
 
     struct AdvancedConfig {
