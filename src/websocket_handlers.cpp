@@ -17,6 +17,7 @@
 #include "logger.h"        // ✅ Logging support
 #include "config_manager.h"
 #include "event_bus.h"     // Phase 3: Event Bus integration
+#include "tiny_read_mapping.h"
 
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
@@ -53,7 +54,7 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 // Build Status JSON
 // ====================================================================================
 void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
-    StaticJsonDocument<640> doc;
+    StaticJsonDocument<1536> doc;
 
     doc["voltage"] = round(data.voltage * 100) / 100.0;
     doc["current"] = round(data.current * 10) / 10.0;
@@ -65,6 +66,43 @@ void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
     doc["cell_imbalance_mv"] = data.cell_imbalance_mv;
     doc["online_status"] = data.online_status;
     doc["uptime_ms"] = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    JsonArray registers = doc.createNestedArray("registers");
+    for (size_t i = 0; i < data.snapshotCount(); ++i) {
+        const TinyRegisterSnapshot& snap = data.snapshotAt(i);
+        JsonObject reg = registers.createNestedObject();
+        reg["address"] = snap.address;
+        reg["raw"] = snap.raw_value;
+        reg["word_count"] = snap.raw_word_count;
+
+        const TinyRegisterRuntimeBinding* binding = findTinyRegisterBinding(snap.address);
+        float scaled_value = static_cast<float>(snap.raw_value);
+        if (binding) {
+            scaled_value = static_cast<float>(snap.raw_value) * binding->scale;
+        }
+        reg["value"] = scaled_value;
+        reg["valid"] = snap.raw_word_count > 0;
+
+        const TinyRegisterMetadata* meta = findTinyRegisterMetadata(snap.address);
+        if (meta) {
+            reg["name"] = meta->name;
+            reg["unit"] = meta->unit;
+            reg["type"] = tinyRegisterTypeToString(meta->type);
+            if (meta->comment.length() > 0) {
+                reg["comment"] = meta->comment;
+            }
+        } else if (binding) {
+            reg["type"] = tinyRegisterTypeToString(binding->value_type);
+            if (binding->fallback_name) {
+                reg["name"] = binding->fallback_name;
+            }
+            if (binding->fallback_unit) {
+                reg["unit"] = binding->fallback_unit;
+            }
+        } else {
+            reg["type"] = tinyRegisterTypeToString(static_cast<TinyRegisterValueType>(snap.type));
+        }
+    }
 
     BusEvent status_event;
     if (eventBus.getLatest(EVENT_STATUS_MESSAGE, status_event)) {

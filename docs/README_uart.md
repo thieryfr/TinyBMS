@@ -32,3 +32,9 @@ Interroger le BMS TinyBMS via Modbus RTU sur UART, parser les réponses, mettre 
 - Ne pas dépasser 256 octets de réponse (limite fixée dans la fonction).
 - Toujours réinitialiser le timeout UART après tentative (`tiny_uart_.setTimeout`).
 - Ajuster `config.tinybms.poll_interval_ms` pour éviter la surcharge CPU/Watchdog.
+
+## Mapping SPIFFS `tiny_read.json`
+- Le fichier `/data/tiny_read.json` est chargé au démarrage via `initializeTinyReadMapping()` (`src/system_init.cpp`).
+- Le mapping alimente `TinyRegisterRuntimeBinding` et le nouveau tableau `TinyBMS_LiveData::register_snapshots` utilisé par `uartTask` pour peupler dynamiquement les mesures.
+- Les API REST (`getStatusJSON`) et WebSocket renvoient désormais un tableau `registers` contenant adresse, nom, unité et type issus du mapping (fallbacks intégrés si une entrée manque dans le JSON).
+- Un test natif (`tests/native/test_tiny_read_mapping.cpp`) parse un JSON fictif pour vérifier le loader hors matériel; surveiller les logs `[MAPPING]` au boot pour une vérification temps réel.

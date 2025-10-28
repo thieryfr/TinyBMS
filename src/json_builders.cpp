@@ -16,6 +16,7 @@
 #include "json_builders.h"
 #include "tinybms_victron_bridge.h"
 #include "event_bus.h"  // Phase 6: Event Bus integration
+#include "tiny_read_mapping.h"
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
@@ -49,6 +50,43 @@ String getStatusJSON() {
     live["cell_imbalance_mv"] = data.cell_imbalance_mv;
     live["balancing_bits"] = data.balancing_bits;
     live["online_status"] = data.online_status;
+
+    JsonArray registers = live.createNestedArray("registers");
+    for (size_t i = 0; i < data.snapshotCount(); ++i) {
+        const TinyRegisterSnapshot& snap = data.snapshotAt(i);
+        JsonObject reg = registers.createNestedObject();
+        reg["address"] = snap.address;
+        reg["raw"] = snap.raw_value;
+        reg["word_count"] = snap.raw_word_count;
+
+        const TinyRegisterRuntimeBinding* binding = findTinyRegisterBinding(snap.address);
+        float scaled_value = static_cast<float>(snap.raw_value);
+        if (binding) {
+            scaled_value = static_cast<float>(snap.raw_value) * binding->scale;
+        }
+        reg["value"] = scaled_value;
+        reg["valid"] = snap.raw_word_count > 0;
+
+        const TinyRegisterMetadata* meta = findTinyRegisterMetadata(snap.address);
+        if (meta) {
+            reg["name"] = meta->name;
+            reg["unit"] = meta->unit;
+            reg["type"] = tinyRegisterTypeToString(meta->type);
+            if (meta->comment.length() > 0) {
+                reg["comment"] = meta->comment;
+            }
+        } else if (binding) {
+            reg["type"] = tinyRegisterTypeToString(binding->value_type);
+            if (binding->fallback_name) {
+                reg["name"] = binding->fallback_name;
+            }
+            if (binding->fallback_unit) {
+                reg["unit"] = binding->fallback_unit;
+            }
+        } else {
+            reg["type"] = tinyRegisterTypeToString(static_cast<TinyRegisterValueType>(snap.type));
+        }
+    }
 
     // Statistics
     JsonObject stats = doc.createNestedObject("stats");

@@ -36,7 +36,14 @@ $CXX "${CXXFLAGS[@]}" \
     "$ROOT_DIR/src/uart/tinybms_uart_client.cpp" \
     -o "$BUILD_DIR/test_uart_stub"
 
+# Tiny read mapping loader test
+$CXX "${CXXFLAGS[@]}" \
+    "$ROOT_DIR/tests/native/test_tiny_read_mapping.cpp" \
+    "$ROOT_DIR/src/mappings/tiny_read_mapping.cpp" \
+    -o "$BUILD_DIR/test_tiny_read_mapping"
+
 "$BUILD_DIR/test_cvl_logic"
 "$BUILD_DIR/test_event_bus"
 "$BUILD_DIR/test_uart_stub"
+"$BUILD_DIR/test_tiny_read_mapping"
 
