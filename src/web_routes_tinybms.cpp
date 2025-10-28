@@ -12,6 +12,7 @@
 #include "rtos_config.h"
 #include "logger.h"         // ✅ Logging
 #include "config_manager.h" // For config.logging.log_level awareness
+#include "tinybms_config_editor.h"
 #include "web_routes.h"
 
 // External globals
@@ -99,12 +100,45 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
         }
 
         // ✅ Commit change
-        if (configEditor.writeConfig(cfg)) {
+        TinyBMSConfigResult result = configEditor.writeConfig(cfg);
+        if (result.ok()) {
             logger.log(LOG_INFO, "[API] TinyBMS configuration updated");
             request->send(200, "application/json", "{\"status\":\"Configuration updated\"}");
         } else {
-            logger.log(LOG_ERROR, "[API] Failed to update TinyBMS configuration");
-            request->send(500, "application/json", "{\"error\":\"Failed to update configuration\"}");
+            TinyBMSConfigError error = result.error;
+            const char* code = tinybmsConfigErrorToString(error);
+
+            int status = 500;
+            switch (error) {
+                case TinyBMSConfigError::BridgeUnavailable:
+                case TinyBMSConfigError::MutexUnavailable:
+                    status = 503;
+                    break;
+                case TinyBMSConfigError::RegisterNotFound:
+                    status = 404;
+                    break;
+                case TinyBMSConfigError::OutOfRange:
+                    status = 422;
+                    break;
+                case TinyBMSConfigError::Timeout:
+                    status = 504;
+                    break;
+                case TinyBMSConfigError::WriteFailed:
+                    status = 502;
+                    break;
+                default:
+                    status = 500;
+                    break;
+            }
+
+            logger.log(LOG_ERROR, String("[API] TinyBMS config update failed: ") + result.message);
+
+            StaticJsonDocument<256> errorDoc;
+            errorDoc["error"] = result.message;
+            errorDoc["code"] = code;
+            String payload;
+            serializeJson(errorDoc, payload);
+            request->send(status, "application/json", payload);
         }
 
         xSemaphoreGive(configMutex);

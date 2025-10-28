@@ -12,6 +12,7 @@
 #include "logger.h"
 #include "config_manager.h"
 #include "tinybms_victron_bridge.h"
+#include "tinybms_config_editor.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -23,6 +24,7 @@ extern TinyBMS_Victron_Bridge bridge;
 extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t feedMutex;
 extern Logger logger;
+extern TinyBMSConfigEditor configEditor;
 
 // External functions
 extern void initWebServerTask();
@@ -187,8 +189,8 @@ void initializeConfigEditor() {
         xSemaphoreGive(feedMutex);
     }
 
-    // TODO: Implement config editor if needed
-    logger.log(LOG_INFO, "[CONFIG_EDITOR] Skipped (not implemented)");
+    configEditor.begin();
+    logger.log(LOG_INFO, "[CONFIG_EDITOR] Register catalog ready");
 }
 
 // ===================================================================================
