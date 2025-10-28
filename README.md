@@ -3,6 +3,20 @@
 ## Description
 Pont embarqué permettant de convertir les trames TinyBMS (UART/Modbus) vers le protocole CAN-BMS Victron. La pile logicielle combine FreeRTOS (tâches dédiées UART / CAN / CVL / Web), un Event Bus centralisé avec cache et statistiques, un serveur asynchrone (HTTP + WebSocket) et un système de configuration JSON persisté sur SPIFFS.
 
+## Table des matières
+- [Description](#description)
+- [Structure du Projet](#structure-du-projet)
+- [Prérequis matériels](#prérequis-matériels)
+- [Fonctionnalités principales](#fonctionnalités-principales)
+- [Flux de données](#flux-de-données)
+- [Modules](#modules)
+- [Installation](#installation)
+- [Utilisation](#utilisation)
+- [Tests](#tests)
+- [Dépannage CI](#dépannage-ci)
+- [Plan d'actions prioritaire](#plan-dactions-prioritaire)
+- [Notes de développement](#notes-de-développement)
+
 ## Structure du Projet
 ```
 TinyBMS/
@@ -26,6 +40,13 @@ TinyBMS/
 └── partitions.csv                  # Partitionnement ESP32
 ```
 
+## Prérequis matériels
+- **ESP32** avec support CAN natif (ex. ESP32 WROOM + transceiver SN65HVD230).
+- **TinyBMS** connecté en UART (niveau TTL 3.3 V) sur GPIO16/17.
+- **Bus CAN Victron** : câblage différentiel CANH/CANL via transceiver isolé recommandé.
+- **Alimentation stable 12 V** : prévoir une marge pour l'ESP32, le transceiver CAN et le TinyBMS.
+- **Interface de configuration** : ordinateur avec USB-UART pour le premier flash et l'accès console.
+
 ## Fonctionnalités principales
 - **Acquisition TinyBMS** : tâche UART avec retries configurables, statistiques détaillées et publication automatique sur l'Event Bus (`src/bridge_uart.cpp`).
 - **Publication Victron CAN-BMS** : génération des PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F/0x371/0x378/0x379/0x382, supervision keep-alive et alarmes configurables (`src/bridge_can.cpp`, `src/bridge_keepalive.cpp`).
@@ -34,6 +55,15 @@ TinyBMS/
 - **Configuration JSON** : chargement/sauvegarde SPIFFS, instantanés protégés par mutex et API REST pour édition (`src/config_manager.cpp`, `src/web_routes_api.cpp`).
 - **Supervision Web** : serveur HTTP/WS asynchrone, builders JSON riches et diffusion WebSocket (`src/web_server_setup.cpp`, `src/json_builders.cpp`, `src/websocket_handlers.cpp`).
 - **Watchdog & journalisation** : gestion centralisée Task WDT + logs Serial/SPIFFS avec rotation (`src/watchdog_manager.cpp`, `src/logger.cpp`).
+
+## Flux de données
+1. **Acquisition** : la tâche UART récupère en continu les mesures TinyBMS et les publie sur l'Event Bus.
+2. **Normalisation** : les données entrantes sont enrichies (unités, bornes, alarmes) par `cvl_logic` et les builders JSON.
+3. **Diffusion** :
+   - vers le bus **CAN Victron** via `bridge_can` et `bridge_keepalive` ;
+   - vers l'interface **HTTP/WebSocket** pour la supervision distante ;
+   - vers les **journalisations SPIFFS** pour audit ultérieur.
+4. **Configuration** : les changements reçus via l'API REST sont validés, persistés dans SPIFFS et rediffusés sur l'Event Bus.
 
 ## Modules
 - **Initialisation système** – Création des mutex, montage SPIFFS, Event Bus, WiFi, lancement des tâches FreeRTOS (bridge, web, watchdog). Voir `README_system_init.md`.
@@ -93,3 +123,8 @@ TinyBMS/
 1. **Industrialiser la chaîne de build** : automatiser la compilation ESP32 (PlatformIO) et l'exécution des tests natifs dans la CI.
 2. **Étendre la couverture hors matériel** : ajouter des tests unitaires pour l'Event Bus (cache/stats) et un stub TinyBMS pour la couche UART.
 3. **Documenter les diagnostics avancés** : guide terrain pour interpréter compteurs watchdog/CAN/UART et extractions de logs SPIFFS.
+
+## Notes de développement
+- Un **mode simulation** est disponible via `CONFIG_ENABLE_SIMULATION` dans `platformio.ini` pour rejouer des trames TinyBMS depuis `tests/fixtures/uart_samples.log` sans matériel.
+- Les temps critiques (UART/CAN) sont analysables via `scripts/trace_tasks.py` qui exploite les compteurs FreeRTOS exportés en JSON.
+- Les PR doivent inclure la mise à jour des **snapshots JSON** si des champs CAN ou Web changent, afin d'éviter des échecs de tests d'intégration.
