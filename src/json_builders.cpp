@@ -115,7 +115,7 @@ String getConfigJSON() {
 // SYSTEM CONFIG JSON
 // ============================================================================
 String getSystemConfigJSON() {
-    StaticJsonDocument<1024> doc;
+    StaticJsonDocument<3072> doc;
 
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         logger.log(LOG_ERROR, "[JSON] Failed to acquire config mutex");
@@ -128,35 +128,102 @@ String getSystemConfigJSON() {
     // WiFi Info
     JsonObject wifi = doc.createNestedObject("wifi");
     wifi["ssid"] = config.wifi.ssid;
+    wifi["password"] = config.wifi.password;
+    wifi["hostname"] = config.wifi.hostname;
     wifi["connected"] = WiFi.status() == WL_CONNECTED;
     wifi["ip"] = WiFi.status() == WL_CONNECTED ?
-                 WiFi.localIP().toString() : WiFi.softAPIP().toString();
+                  WiFi.localIP().toString() : WiFi.softAPIP().toString();
     wifi["rssi"] = WiFi.RSSI();
-    wifi["hostname"] = config.wifi.hostname;
     wifi["mode"] = WiFi.status() == WL_CONNECTED ? "STA" : "AP";
+
+    JsonObject ap_fallback = wifi.createNestedObject("ap_fallback");
+    ap_fallback["enabled"] = config.wifi.ap_fallback.enabled;
+    ap_fallback["ssid"] = config.wifi.ap_fallback.ssid;
+    ap_fallback["password"] = config.wifi.ap_fallback.password;
 
     // Hardware
     JsonObject hw = doc.createNestedObject("hardware");
-    hw["uart_rx"] = config.hardware.uart.rx_pin;
-    hw["uart_tx"] = config.hardware.uart.tx_pin;
-    hw["uart_baudrate"] = config.hardware.uart.baudrate;
-    hw["can_tx"] = config.hardware.can.tx_pin;
-    hw["can_rx"] = config.hardware.can.rx_pin;
-    hw["can_bitrate"] = config.hardware.can.bitrate;
+    JsonObject uart = hw.createNestedObject("uart");
+    uart["rx_pin"] = config.hardware.uart.rx_pin;
+    uart["tx_pin"] = config.hardware.uart.tx_pin;
+    uart["baudrate"] = config.hardware.uart.baudrate;
+    uart["timeout_ms"] = config.hardware.uart.timeout_ms;
+
+    JsonObject can = hw.createNestedObject("can");
+    can["tx_pin"] = config.hardware.can.tx_pin;
+    can["rx_pin"] = config.hardware.can.rx_pin;
+    can["bitrate"] = config.hardware.can.bitrate;
+    can["mode"] = config.hardware.can.mode;
+
+    // TinyBMS
+    JsonObject tiny = doc.createNestedObject("tinybms");
+    tiny["poll_interval_ms"] = config.tinybms.poll_interval_ms;
+    tiny["uart_retry_count"] = config.tinybms.uart_retry_count;
+    tiny["uart_retry_delay_ms"] = config.tinybms.uart_retry_delay_ms;
+    tiny["broadcast_expected"] = config.tinybms.broadcast_expected;
 
     // CVL Algorithm
     JsonObject cvl = doc.createNestedObject("cvl_algorithm");
     cvl["enabled"] = config.cvl.enabled;
-    cvl["bulk_threshold"] = config.cvl.bulk_soc_threshold;
-    cvl["float_threshold"] = config.cvl.float_soc_threshold;
-    cvl["float_exit"] = config.cvl.float_exit_soc;
+    cvl["bulk_soc_threshold"] = config.cvl.bulk_soc_threshold;
+    cvl["transition_soc_threshold"] = config.cvl.transition_soc_threshold;
+    cvl["float_soc_threshold"] = config.cvl.float_soc_threshold;
+    cvl["float_exit_soc"] = config.cvl.float_exit_soc;
+    cvl["float_approach_offset_mv"] = config.cvl.float_approach_offset_mv;
+    cvl["float_offset_mv"] = config.cvl.float_offset_mv;
+    cvl["minimum_ccl_in_float_a"] = config.cvl.minimum_ccl_in_float_a;
+    cvl["imbalance_hold_threshold_mv"] = config.cvl.imbalance_hold_threshold_mv;
+    cvl["imbalance_release_threshold_mv"] = config.cvl.imbalance_release_threshold_mv;
 
     // Victron
     JsonObject victron = doc.createNestedObject("victron");
-    victron["manufacturer"] = config.victron.manufacturer_name;
+    victron["manufacturer_name"] = config.victron.manufacturer_name;
     victron["battery_name"] = config.victron.battery_name;
-    victron["pgn_update_ms"] = config.victron.pgn_update_interval_ms;
-    victron["cvl_update_ms"] = config.victron.cvl_update_interval_ms;
+    victron["pgn_update_interval_ms"] = config.victron.pgn_update_interval_ms;
+    victron["cvl_update_interval_ms"] = config.victron.cvl_update_interval_ms;
+    victron["keepalive_interval_ms"] = config.victron.keepalive_interval_ms;
+    victron["keepalive_timeout_ms"] = config.victron.keepalive_timeout_ms;
+
+    JsonObject vic_th = victron.createNestedObject("thresholds");
+    vic_th["undervoltage_v"] = config.victron.thresholds.undervoltage_v;
+    vic_th["overvoltage_v"] = config.victron.thresholds.overvoltage_v;
+    vic_th["overtemp_c"] = config.victron.thresholds.overtemp_c;
+    vic_th["low_temp_charge_c"] = config.victron.thresholds.low_temp_charge_c;
+    vic_th["imbalance_warn_mv"] = config.victron.thresholds.imbalance_warn_mv;
+    vic_th["imbalance_alarm_mv"] = config.victron.thresholds.imbalance_alarm_mv;
+    vic_th["soc_low_percent"] = config.victron.thresholds.soc_low_percent;
+    vic_th["soc_high_percent"] = config.victron.thresholds.soc_high_percent;
+    vic_th["derate_current_a"] = config.victron.thresholds.derate_current_a;
+
+    // Web server
+    JsonObject web = doc.createNestedObject("web_server");
+    web["port"] = config.web_server.port;
+    web["websocket_update_interval_ms"] = config.web_server.websocket_update_interval_ms;
+    web["enable_cors"] = config.web_server.enable_cors;
+    web["enable_auth"] = config.web_server.enable_auth;
+    web["username"] = config.web_server.username;
+    web["password"] = config.web_server.password;
+
+    // Logging
+    JsonObject logging = doc.createNestedObject("logging");
+    logging["serial_baudrate"] = config.logging.serial_baudrate;
+    switch (config.logging.log_level) {
+        case LOG_ERROR:   logging["log_level"] = "ERROR"; break;
+        case LOG_WARNING: logging["log_level"] = "WARNING"; break;
+        case LOG_DEBUG:   logging["log_level"] = "DEBUG"; break;
+        case LOG_INFO:
+        default:          logging["log_level"] = "INFO"; break;
+    }
+    logging["log_uart_traffic"] = config.logging.log_uart_traffic;
+    logging["log_can_traffic"] = config.logging.log_can_traffic;
+    logging["log_cvl_changes"] = config.logging.log_cvl_changes;
+
+    // Advanced
+    JsonObject advanced = doc.createNestedObject("advanced");
+    advanced["enable_spiffs"] = config.advanced.enable_spiffs;
+    advanced["enable_ota"] = config.advanced.enable_ota;
+    advanced["watchdog_timeout_s"] = config.advanced.watchdog_timeout_s;
+    advanced["stack_size_bytes"] = config.advanced.stack_size_bytes;
 
     // Watchdog
     JsonObject wdt_cfg = doc.createNestedObject("watchdog_config");
