@@ -78,6 +78,18 @@
       "tiny_scale_unit": "-",
       "comment": "Read via UART/CAN (Reg:52)"
     },
+    "113": {
+      "tiny_name": "Pack Temperature Min",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:113)"
+    },
+    "114": {
+      "tiny_name": "Pack Temperature Max",
+      "tiny_type": "INT16",
+      "tiny_scale_unit": "0.1 °C",
+      "comment": "Read via UART/CAN (Reg:114)"
+    },
     "305": {
       "tiny_name": "CAN Keep-Alive (Inverter→BMS)",
       "tiny_type": "—",
@@ -95,6 +107,36 @@
       "tiny_type": "—",
       "tiny_scale_unit": "—",
       "comment": "Read via CAN (Reg:307)"
+    },
+    "315": {
+      "tiny_name": "Overvoltage Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:315)"
+    },
+    "316": {
+      "tiny_name": "Undervoltage Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 mV",
+      "comment": "Read via UART/CAN (Reg:316)"
+    },
+    "317": {
+      "tiny_name": "Discharge Over-current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via UART/CAN (Reg:317)"
+    },
+    "318": {
+      "tiny_name": "Charge Over-current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
+      "comment": "Read via UART/CAN (Reg:318)"
+    },
+    "319": {
+      "tiny_name": "Overheat Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 °C",
+      "comment": "Read via UART/CAN (Reg:319)"
     },
     "500": {
       "tiny_name": "Manufacturer Name",

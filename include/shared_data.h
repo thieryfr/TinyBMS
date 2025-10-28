@@ -41,6 +41,8 @@ struct TinyBMS_LiveData {
     uint16_t soc_raw;            // Raw SOC (scale 0.002%)
     uint16_t soh_raw;            // Raw SOH (scale 0.002%)
     int16_t temperature;         // 0.1°C
+    int16_t pack_temp_min;       // 0.1°C
+    int16_t pack_temp_max;       // 0.1°C
     uint16_t online_status;      // 0x91-0x97 = OK, 0x9B = Fault
     uint16_t balancing_bits;     // Bitfield: active cell balancing
     uint16_t max_discharge_current; // 0.1A
@@ -48,6 +50,11 @@ struct TinyBMS_LiveData {
     float soc_percent;           // 0–100%
     float soh_percent;           // 0–100%
     uint16_t cell_imbalance_mv;  // Max - Min cell diff (mV)
+    uint16_t cell_overvoltage_mv;    // mV
+    uint16_t cell_undervoltage_mv;   // mV
+    uint16_t discharge_overcurrent_a; // A
+    uint16_t charge_overcurrent_a;    // A
+    uint16_t overheat_cutoff_c;       // °C
     uint16_t register_count; // Dynamic register snapshots count
     TinyRegisterSnapshot register_snapshots[TINY_LIVEDATA_MAX_REGISTERS];
 
@@ -145,6 +152,12 @@ struct TinyBMS_LiveData {
             case TinyLiveDataField::Temperature:
                 temperature = static_cast<int16_t>(raw_value);
                 break;
+            case TinyLiveDataField::PackMinTemperature:
+                pack_temp_min = static_cast<int16_t>(raw_value);
+                break;
+            case TinyLiveDataField::PackMaxTemperature:
+                pack_temp_max = static_cast<int16_t>(raw_value);
+                break;
             case TinyLiveDataField::MinCellMv:
                 min_cell_mv = static_cast<uint16_t>(raw_value);
                 break;
@@ -168,6 +181,21 @@ struct TinyBMS_LiveData {
                 break;
             case TinyLiveDataField::CellImbalanceMv:
                 cell_imbalance_mv = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::CellOvervoltageMv:
+                cell_overvoltage_mv = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::CellUndervoltageMv:
+                cell_undervoltage_mv = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::DischargeOvercurrentA:
+                discharge_overcurrent_a = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::ChargeOvercurrentA:
+                charge_overcurrent_a = static_cast<uint16_t>(raw_value);
+                break;
+            case TinyLiveDataField::OverheatCutoffC:
+                overheat_cutoff_c = static_cast<uint16_t>(raw_value);
                 break;
             case TinyLiveDataField::None:
             default:
