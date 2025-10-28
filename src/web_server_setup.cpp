@@ -109,8 +109,10 @@ void webServerTask(void *pvParameters) {
  * @brief Initialize the web server task
  */
 bool initWebServerTask() {
+    webServerTaskHandle = nullptr;
+
     BaseType_t result = xTaskCreate(webServerTask, "WebServerTask", 8192, NULL, 1, &webServerTaskHandle);
-    if (result != pdPASS) {
+    if (result != pdPASS || webServerTaskHandle == nullptr) {
         logger.log(LOG_ERROR, "[WEB] Failed to create web server task");
         return false;
     }
