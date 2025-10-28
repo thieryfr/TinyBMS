@@ -51,11 +51,17 @@ struct BridgeStats {
     bool     victron_keepalive_ok = false;
 };
 
+namespace mqtt {
+class Publisher;
+} // namespace mqtt
+
 class TinyBMS_Victron_Bridge {
 public:
     explicit TinyBMS_Victron_Bridge(IUartChannel& uart = defaultTinyBmsUart());
 
     bool begin();
+
+    void setMqttPublisher(mqtt::Publisher* publisher);
 
     static void uartTask(void *pvParameters);
     static void canTask(void *pvParameters);
@@ -88,6 +94,8 @@ public:
     TinyBMS_LiveData live_data_{};
     TinyBMS_Config   config_{};
     BridgeStats      stats{};
+
+    mqtt::Publisher* mqtt_publisher_ = nullptr;
 
     bool initialized_ = false;
     bool victron_keepalive_ok_ = false;
