@@ -23,6 +23,11 @@ Interroger le BMS TinyBMS via Modbus RTU sur UART, parser les réponses, mettre 
 - Prévoir un stub TinyBMS pour tests unitaires (non fourni) afin de valider CRC/retries.
 - Tester manuellement le comportement lors d'une coupure UART (vérifier les alarmes `EVENT_WARNING_RAISED`).
 
+## Tests hors matériel
+- Un stub UART TinyBMS est disponible côté natif (`tests/native/stubs/uart_stub.h`) et implémente l'interface `IUartChannel`.
+- Le module `tinybms::readHoldingRegisters` encapsule les échanges Modbus et peut être exercé avec le stub.
+- Exécuter `scripts/run_native_tests.sh` pour compiler et lancer les tests (`test_uart_stub`) validant les requêtes/réponses sans matériel.
+
 ## Points de vigilance
 - Ne pas dépasser 256 octets de réponse (limite fixée dans la fonction).
 - Toujours réinitialiser le timeout UART après tentative (`tiny_uart_.setTimeout`).
