@@ -28,7 +28,7 @@ TinyBMS/
 
 ## Fonctionnalités principales
 - **Acquisition TinyBMS** : tâche UART avec retries configurables, statistiques détaillées et publication automatique sur l'Event Bus (`src/bridge_uart.cpp`).
-- **Publication Victron CAN-BMS** : génération des PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F, supervision keep-alive et alarmes configurables (`src/bridge_can.cpp`, `src/bridge_keepalive.cpp`).
+- **Publication Victron CAN-BMS** : génération des PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F/0x371/0x378/0x379/0x382, supervision keep-alive et alarmes configurables (`src/bridge_can.cpp`, `src/bridge_keepalive.cpp`).
 - **Algorithme CVL évolué** : calcul dynamique CVL/CCL/DCL multi-états avec hystérésis et événements dédiés (`src/cvl_logic.cpp`, `src/bridge_cvl.cpp`).
 - **Event Bus** : singleton FreeRTOS publish/subscribe avec cache par type, statistiques et diffusion WebSocket (`src/event_bus.cpp`).
 - **Configuration JSON** : chargement/sauvegarde SPIFFS, instantanés protégés par mutex et API REST pour édition (`src/config_manager.cpp`, `src/web_routes_api.cpp`).

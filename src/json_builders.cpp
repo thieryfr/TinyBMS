@@ -146,6 +146,8 @@ String getStatusJSON() {
     stats["victron_keepalive_ok"] = bridge.stats.victron_keepalive_ok;
     stats["ccl_limit_a"] = round(bridge.stats.ccl_limit_a * 10) / 10.0;
     stats["dcl_limit_a"] = round(bridge.stats.dcl_limit_a * 10) / 10.0;
+    stats["energy_charged_wh"] = bridge.stats.energy_charged_wh;
+    stats["energy_discharged_wh"] = bridge.stats.energy_discharged_wh;
 
     EventBus::BusStats bus_stats{};
     eventBus.getStats(bus_stats);

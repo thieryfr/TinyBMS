@@ -45,6 +45,8 @@ struct BridgeStats {
     float    cvl_current_v = 0.0f;
     float    ccl_limit_a = 0.0f;
     float    dcl_limit_a = 0.0f;
+    double   energy_charged_wh = 0.0;
+    double   energy_discharged_wh = 0.0;
     CVLState cvl_state = CVL_BULK;
     bool     victron_keepalive_ok = false;
 };
@@ -69,6 +71,10 @@ public:
     void buildPGN_0x35A(uint8_t* d);
     void buildPGN_0x35E(uint8_t* d);
     void buildPGN_0x35F(uint8_t* d);
+    void buildPGN_0x371(uint8_t* d);
+    void buildPGN_0x378(uint8_t* d);
+    void buildPGN_0x379(uint8_t* d);
+    void buildPGN_0x382(uint8_t* d);
 
     void keepAliveSend();
     void keepAliveProcessRX(uint32_t now);
@@ -97,4 +103,9 @@ public:
     uint32_t cvl_update_interval_ms_ = 20000;
     uint32_t keepalive_interval_ms_  = 1000;
     uint32_t keepalive_timeout_ms_   = 10000;
+
+private:
+    void updateEnergyCounters(uint32_t now_ms);
+
+    uint32_t last_energy_update_ms_ = 0;
 };
