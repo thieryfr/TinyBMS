@@ -13,6 +13,7 @@
 #include "config_manager.h"
 #include "logger.h"
 #include "event_bus.h"
+#include "tinybms_config_editor.h"
 
 // Global resources
 SemaphoreHandle_t uartMutex;
@@ -27,6 +28,7 @@ ConfigManager config;
 WatchdogManager Watchdog;
 TinyBMS_Victron_Bridge bridge;
 Logger logger;
+TinyBMSConfigEditor configEditor;
 
 // Task handles
 TaskHandle_t webServerTaskHandle = NULL;
@@ -72,6 +74,8 @@ void setup() {
     } else {
         logger.log(LOG_INFO, "Logging system initialized");
     }
+
+    configEditor.begin();
 
     // Initialize watchdog
     Watchdog.begin(config.advanced.watchdog_timeout_s * 1000);
