@@ -29,7 +29,7 @@ extern EventBus& eventBus;  // Phase 6: Event Bus instance
 // STATUS JSON
 // ============================================================================
 String getStatusJSON() {
-    StaticJsonDocument<1664> doc;  // +status message payload
+    StaticJsonDocument<2048> doc;  // Expanded to include comms + alarm metadata
 
     TinyBMS_LiveData data;
     // Phase 6: Use Event Bus cache instead of legacy queue
@@ -61,20 +61,56 @@ String getStatusJSON() {
     else
         stats["cvl_state_name"] = "UNKNOWN";
 
-    stats["can_tx_count"] = bridge.stats.can_tx_count;
+    JsonObject can_stats = stats.createNestedObject("can");
+    can_stats["tx_success"] = bridge.stats.can_tx_count;
+    can_stats["rx_success"] = bridge.stats.can_rx_count;
+    can_stats["tx_errors"] = bridge.stats.can_tx_errors;
+    can_stats["rx_errors"] = bridge.stats.can_rx_errors;
+    can_stats["bus_off_count"] = bridge.stats.can_bus_off_count;
+    can_stats["rx_dropped"] = bridge.stats.can_queue_overflows;
+
+    stats["can_tx_count"] = bridge.stats.can_tx_count;           // Backward compatibility
     stats["can_rx_count"] = bridge.stats.can_rx_count;
     stats["can_tx_errors"] = bridge.stats.can_tx_errors;
     stats["can_rx_errors"] = bridge.stats.can_rx_errors;
     stats["can_bus_off_count"] = bridge.stats.can_bus_off_count;
     stats["can_queue_overflows"] = bridge.stats.can_queue_overflows;
+
+    JsonObject uart_stats = stats.createNestedObject("uart");
+    uart_stats["success"] = bridge.stats.uart_success_count;
+    uart_stats["errors"] = bridge.stats.uart_errors;
+    uart_stats["timeouts"] = bridge.stats.uart_timeouts;
+    uart_stats["crc_errors"] = bridge.stats.uart_crc_errors;
+    uart_stats["retry_count"] = bridge.stats.uart_retry_count;
+
     stats["uart_errors"] = bridge.stats.uart_errors;
     stats["uart_success_count"] = bridge.stats.uart_success_count;
     stats["uart_timeouts"] = bridge.stats.uart_timeouts;
     stats["uart_crc_errors"] = bridge.stats.uart_crc_errors;
     stats["uart_retry_count"] = bridge.stats.uart_retry_count;
+
+    JsonObject keepalive_stats = stats.createNestedObject("keepalive");
+    keepalive_stats["ok"] = bridge.stats.victron_keepalive_ok;
+    keepalive_stats["last_tx_ms"] = bridge.last_keepalive_tx_ms_;
+    keepalive_stats["last_rx_ms"] = bridge.last_keepalive_rx_ms_;
+    keepalive_stats["interval_ms"] = bridge.keepalive_interval_ms_;
+    keepalive_stats["timeout_ms"] = bridge.keepalive_timeout_ms_;
+    keepalive_stats["since_last_rx_ms"] = bridge.last_keepalive_rx_ms_ > 0 ?
+                                           (millis() - bridge.last_keepalive_rx_ms_) : 0;
+
     stats["victron_keepalive_ok"] = bridge.stats.victron_keepalive_ok;
     stats["ccl_limit_a"] = round(bridge.stats.ccl_limit_a * 10) / 10.0;
     stats["dcl_limit_a"] = round(bridge.stats.dcl_limit_a * 10) / 10.0;
+
+    EventBus::BusStats bus_stats{};
+    eventBus.getStats(bus_stats);
+    JsonObject bus = stats.createNestedObject("event_bus");
+    bus["total_events_published"] = bus_stats.total_events_published;
+    bus["total_events_dispatched"] = bus_stats.total_events_dispatched;
+    bus["queue_overruns"] = bus_stats.queue_overruns;
+    bus["dispatch_errors"] = bus_stats.dispatch_errors;
+    bus["total_subscribers"] = bus_stats.total_subscribers;
+    bus["current_queue_depth"] = bus_stats.current_queue_depth;
 
     // Watchdog info
     JsonObject wdt = doc.createNestedObject("watchdog");
@@ -100,6 +136,42 @@ String getStatusJSON() {
         status["source_id"] = status_event.source_id;
         status["timestamp_ms"] = status_event.timestamp_ms;
     }
+
+    auto appendAlarmEvent = [](JsonArray& arr, const BusEvent& evt, const char* type_label) {
+        JsonObject alarm_obj = arr.createNestedObject();
+        alarm_obj["event"] = type_label;
+        alarm_obj["timestamp_ms"] = evt.timestamp_ms;
+        alarm_obj["source_id"] = evt.source_id;
+        alarm_obj["sequence"] = evt.sequence_number;
+
+        const AlarmEvent& alarm = evt.data.alarm;
+        alarm_obj["code"] = alarm.alarm_code;
+        alarm_obj["severity"] = alarm.severity;
+        static const char* severity_names[] = {"info", "warning", "error", "critical"};
+        if (alarm.severity < (sizeof(severity_names) / sizeof(severity_names[0]))) {
+            alarm_obj["severity_name"] = severity_names[alarm.severity];
+        }
+        alarm_obj["message"] = alarm.message;
+        alarm_obj["value"] = alarm.value;
+        alarm_obj["active"] = alarm.is_active;
+    };
+
+    JsonArray alarms = doc.createNestedArray("alarms");
+    BusEvent alarm_event;
+    bool active_alarm = false;
+    if (eventBus.getLatest(EVENT_ALARM_RAISED, alarm_event)) {
+        appendAlarmEvent(alarms, alarm_event, "raised");
+        active_alarm |= alarm_event.data.alarm.is_active;
+    }
+    if (eventBus.getLatest(EVENT_ALARM_CLEARED, alarm_event)) {
+        appendAlarmEvent(alarms, alarm_event, "cleared");
+        active_alarm &= alarm_event.data.alarm.is_active;
+    }
+    if (eventBus.getLatest(EVENT_WARNING_RAISED, alarm_event)) {
+        appendAlarmEvent(alarms, alarm_event, "warning");
+    }
+
+    doc["alarms_active"] = active_alarm;
 
     String output;
     serializeJson(doc, output);

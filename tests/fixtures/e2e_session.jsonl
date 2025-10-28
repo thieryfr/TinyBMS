@@ -1,0 +1,12 @@
+{"timestamp_ms": 0, "stage": "uart", "event": "live_data", "seq": 1, "details": {"voltage": 52.1, "current": -23.5}}
+{"timestamp_ms": 12, "stage": "event_bus", "event": "publish", "type": "EVENT_LIVE_DATA_UPDATE", "seq": 2}
+{"timestamp_ms": 28, "stage": "can", "event": "tx", "pgn": "0x356", "metrics": {"can_tx_count": 1, "can_rx_count": 0}}
+{"timestamp_ms": 40, "stage": "can", "event": "keepalive_rx", "metrics": {"keepalive_ok": true, "since_last_rx_ms": 40}}
+{"timestamp_ms": 65, "stage": "web_ui", "event": "status_push", "fields": ["live_data", "stats"], "status_seq": 3}
+{"timestamp_ms": 1000, "stage": "uart", "event": "live_data", "seq": 11, "details": {"voltage": 51.9, "current": -22.8}}
+{"timestamp_ms": 1013, "stage": "event_bus", "event": "publish", "type": "EVENT_LIVE_DATA_UPDATE", "seq": 12}
+{"timestamp_ms": 1028, "stage": "can", "event": "tx", "pgn": "0x355", "metrics": {"can_tx_count": 2, "can_rx_count": 1}}
+{"timestamp_ms": 1041, "stage": "can", "event": "keepalive_rx", "metrics": {"keepalive_ok": true, "since_last_rx_ms": 1001}}
+{"timestamp_ms": 1068, "stage": "web_ui", "event": "status_push", "fields": ["live_data", "stats"], "status_seq": 13}
+{"timestamp_ms": 2005, "stage": "can", "event": "keepalive_rx", "metrics": {"keepalive_ok": true, "since_last_rx_ms": 964}}
+{"timestamp_ms": 3002, "stage": "can", "event": "keepalive_rx", "metrics": {"keepalive_ok": true, "since_last_rx_ms": 997}}
