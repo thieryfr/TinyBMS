@@ -1,0 +1,8 @@
+{"timestamp_ms": 0, "stage": "web_ui", "event": "client_connected", "client_id": "alpha"}
+{"timestamp_ms": 2, "stage": "web_ui", "event": "client_connected", "client_id": "beta"}
+{"timestamp_ms": 10, "stage": "web_ui", "event": "status_push", "status_seq": 1, "clients": ["alpha", "beta"], "fields": ["live_data", "stats"]}
+{"timestamp_ms": 25, "stage": "web_ui", "event": "config_broadcast", "clients": ["alpha", "beta"], "config": {"update_interval_ms": 1000, "metrics": ["voltage", "current"]}}
+{"timestamp_ms": 35, "stage": "web_ui", "event": "status_push", "status_seq": 2, "clients": ["alpha", "beta"], "fields": ["stats"]}
+{"timestamp_ms": 48, "stage": "web_ui", "event": "error", "error": "timeout", "client_id": "alpha", "details": {"since_last_heartbeat_ms": 5200}}
+{"timestamp_ms": 55, "stage": "web_ui", "event": "client_disconnected", "client_id": "beta", "reason": "closed_by_client"}
+{"timestamp_ms": 70, "stage": "web_ui", "event": "status_push", "status_seq": 3, "clients": ["alpha"], "fields": ["live_data"]}

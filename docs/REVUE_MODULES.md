@@ -208,18 +208,18 @@ Tests à blanc réalisés :
 | Scénario | Données d'entrée | Résultat attendu | Résultat obtenu | Status |
 | --- | --- | --- | --- | --- |
 | Validation structure JSON | tests/fixtures/status_snapshot.json | Champs stats/can/alarms présents | Test pytest `test_status_snapshot_contains_new_sections` OK | ✅ |
-| Diffusion WebSocket | Cache EventBus + update interval | Payload cohérent pour UI | Analysé via code (manque test automatique) | ⚠️ |
+| Diffusion WebSocket | Cache EventBus + update interval | Payload cohérent pour UI | Tests pytest `test_websocket_notifications` + scénarios multi-clients OK | ✅ |
 
 Interopérabilité :
 
 · Modules connectés : EventBus, Bridge, Watchdog, ConfigManager, Logger
 · Points d'intégration : Routes REST, WebSocket `/ws`, JSON status, upload config
-· Problèmes d'interface : Double définition `webServerTask` (main.ino vs web_server_setup.cpp) susceptible d'erreur de linkage, accès config.* non protégé dans buildPGN/serveStatic, absence de test WebSocket
+· Problèmes d'interface : Double définition `webServerTask` (main.ino vs web_server_setup.cpp) susceptible d'erreur de linkage, accès config.* non protégé dans buildPGN/serveStatic, couverture WebSocket partielle sur scénarios réseau extrêmes
 
 Actions correctives nécessaires :
 
 · Supprimer le doublon `webServerTask` en centralisant la tâche dans web_server_setup.cpp (priorité haute)
-· Ajouter tests end-to-end WebSocket via fixture/simulation (priorité moyenne)
+· Poursuivre l'élargissement des scénarios WebSocket (stress réseau, pertes prolongées) (priorité moyenne)
 · Protéger lectures config.* par configMutex dans routes JSON (priorité moyenne)
 
 ---
