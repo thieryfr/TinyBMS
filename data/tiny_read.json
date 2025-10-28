@@ -2,8 +2,8 @@
   "tiny_read_registers": {
     "32": {
       "tiny_name": "Tiny BMS lifetime counter",
-      "tiny_type": "—",
-      "tiny_scale_unit": "—",
+      "tiny_type": "UINT32",
+      "tiny_scale_unit": "1 s",
       "comment": "Read via UART/CAN (Reg:32)"
     },
     "36": {
@@ -15,7 +15,7 @@
     "38": {
       "tiny_name": "Battery Pack Current",
       "tiny_type": "FLOAT",
-      "tiny_scale_unit": "0.1 A",
+      "tiny_scale_unit": "1 A",
       "comment": "Read via UART/CAN (Reg:38)"
     },
     "40": {
@@ -51,7 +51,7 @@
     "46": {
       "tiny_name": "State Of Charge",
       "tiny_type": "UINT32",
-      "tiny_scale_unit": "0.002 %",
+      "tiny_scale_unit": "0.000001 %",
       "comment": "Read via UART/CAN (Reg:46)"
     },
     "48": {
@@ -73,22 +73,22 @@
       "comment": "Read via UART/CAN (Reg:51)"
     },
     "52": {
-      "tiny_name": "Cell Imbalance Alarm",
-      "tiny_type": "UINT8",
+      "tiny_name": "Real Balancing Bits",
+      "tiny_type": "UINT16",
       "tiny_scale_unit": "-",
       "comment": "Read via UART/CAN (Reg:52)"
     },
     "113": {
       "tiny_name": "Pack Temperature Min",
-      "tiny_type": "INT16",
-      "tiny_scale_unit": "0.1 °C",
-      "comment": "Read via UART/CAN (Reg:113)"
+      "tiny_type": "INT8",
+      "tiny_scale_unit": "1 °C",
+      "comment": "Read via UART/CAN (Reg:113, LSB only)"
     },
     "114": {
       "tiny_name": "Pack Temperature Max",
-      "tiny_type": "INT16",
-      "tiny_scale_unit": "0.1 °C",
-      "comment": "Read via UART/CAN (Reg:114)"
+      "tiny_type": "INT8",
+      "tiny_scale_unit": "**1 °C**",
+      "comment": "**Not a register. Read from MSB of Reg:113**"
     },
     "305": {
       "tiny_name": "Peak Discharge Current Cutoff",
@@ -134,27 +134,27 @@
     },
     "319": {
       "tiny_name": "Overheat Cutoff",
-      "tiny_type": "UINT16",
+      "tiny_type": "INT16",
       "tiny_scale_unit": "1 °C",
       "comment": "Read via UART/CAN (Reg:319)"
     },
     "500": {
-      "tiny_name": "Manufacturer Name",
-      "tiny_type": "STRING(8)",
-      "tiny_scale_unit": "ASCII",
-      "comment": "Read via UART/CAN (Reg:500)"
-    },
-    "501": {
-      "tiny_name": "Firmware Version",
+      "tiny_name": "Hardware/Changes Version",
       "tiny_type": "UINT16",
       "tiny_scale_unit": "-",
-      "comment": "Read via UART/CAN (Reg:501)"
+      "comment": "Reg:500. HW Ver (LSB), HW Changes Ver (MSB)"
+    },
+    "501": {
+      "tiny_name": "Public Firmware/Flags",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": "Reg:501. Public FW Ver (LSB), Flags (MSB)"
     },
     "502": {
-      "tiny_name": "Battery Family",
-      "tiny_type": "STRING(8)",
-      "tiny_scale_unit": "ASCII",
-      "comment": "Read via UART/CAN (Reg:502)"
+      "tiny_name": "Internal Firmware Version",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "-",
+      "comment": Reg:502"
     }
   }
 }
