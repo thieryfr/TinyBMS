@@ -18,9 +18,16 @@ enum class TinyRegisterValueType : uint8_t {
     Uint8,
     Uint16,
     Uint32,
+    Int8,
     Int16,
     Float,
     String
+};
+
+enum class TinyRegisterDataSlice : uint8_t {
+    FullWord = 0,
+    LowByte,
+    HighByte
 };
 
 enum class TinyLiveDataField : uint8_t {
@@ -68,6 +75,7 @@ struct TinyRegisterRuntimeBinding {
     const char* fallback_name = nullptr;
     const char* fallback_unit = nullptr;
     const TinyRegisterMetadata* metadata = nullptr;
+    TinyRegisterDataSlice data_slice = TinyRegisterDataSlice::FullWord;
 };
 
 bool initializeTinyReadMapping(fs::FS& fs, const char* path, Logger* logger = nullptr);

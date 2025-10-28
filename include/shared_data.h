@@ -153,10 +153,10 @@ struct TinyBMS_LiveData {
                 temperature = static_cast<int16_t>(raw_value);
                 break;
             case TinyLiveDataField::PackMinTemperature:
-                pack_temp_min = static_cast<int16_t>(raw_value);
+                pack_temp_min = static_cast<int16_t>(raw_value * 10);
                 break;
             case TinyLiveDataField::PackMaxTemperature:
-                pack_temp_max = static_cast<int16_t>(raw_value);
+                pack_temp_max = static_cast<int16_t>(raw_value * 10);
                 break;
             case TinyLiveDataField::MinCellMv:
                 min_cell_mv = static_cast<uint16_t>(raw_value);

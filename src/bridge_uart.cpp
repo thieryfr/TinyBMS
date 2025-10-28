@@ -169,6 +169,14 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     } else if (binding.value_type == TinyRegisterValueType::Uint32 && binding.register_count >= 2) {
                         raw_value = static_cast<int32_t>((static_cast<uint32_t>(raw_words[0]) << 16) |
                                                          static_cast<uint32_t>(raw_words[1]));
+                    } else if (binding.data_slice == TinyRegisterDataSlice::LowByte ||
+                               binding.data_slice == TinyRegisterDataSlice::HighByte) {
+                        const uint8_t byte_value = (binding.data_slice == TinyRegisterDataSlice::LowByte)
+                            ? static_cast<uint8_t>(raw_words[0] & 0x00FFu)
+                            : static_cast<uint8_t>((raw_words[0] >> 8) & 0x00FFu);
+                        raw_value = binding.is_signed
+                            ? static_cast<int32_t>(static_cast<int8_t>(byte_value))
+                            : static_cast<int32_t>(byte_value);
                     } else {
                         raw_value = binding.is_signed
                             ? static_cast<int32_t>(static_cast<int16_t>(raw_words[0]))
@@ -201,7 +209,8 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
 
                     if (eventBus.isInitialized()) {
                         MqttRegisterEvent mqtt_event{};
-                        mqtt_event.address = binding.register_address;
+                        mqtt_event.address =
+                            (binding.metadata_address != 0) ? binding.metadata_address : binding.register_address;
                         mqtt_event.value_type = binding.value_type;
                         mqtt_event.raw_value = raw_value;
                         mqtt_event.timestamp_ms = now;

@@ -45,8 +45,28 @@ std::vector<TinyRegisterRuntimeBinding> g_bindings = {
     {50, 1, 50, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::OnlineStatus, "System Status", "-", nullptr},
     {51, 1, 51, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::BalancingBits, "Need Balancing", "-", nullptr},
     {52, 1, 52, TinyRegisterValueType::Uint8, false, 1.0f, TinyLiveDataField::None, "Cell Imbalance Alarm", "-", nullptr},
-    {113, 1, 113, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::PackMinTemperature, "Pack Temperature Min", "°C", nullptr},
-    {114, 1, 114, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::PackMaxTemperature, "Pack Temperature Max", "°C", nullptr},
+    {113,
+     1,
+     113,
+     TinyRegisterValueType::Int8,
+     true,
+     1.0f,
+     TinyLiveDataField::PackMinTemperature,
+     "Pack Temperature Min",
+     "°C",
+     nullptr,
+     TinyRegisterDataSlice::LowByte},
+    {113,
+     1,
+     114,
+     TinyRegisterValueType::Int8,
+     true,
+     1.0f,
+     TinyLiveDataField::PackMaxTemperature,
+     "Pack Temperature Max",
+     "°C",
+     nullptr,
+     TinyRegisterDataSlice::HighByte},
     {102, 1, 102, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxDischargeCurrent, "Max Discharge Current", "A", nullptr},
     {103, 1, 103, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxChargeCurrent, "Max Charge Current", "A", nullptr},
     {305, 1, 305, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::None, "Victron Keep-Alive", "-", nullptr},
@@ -79,6 +99,9 @@ TinyRegisterValueType parseType(const char* value) {
     }
     if (type_str.find("INT16") != std::string::npos) {
         return TinyRegisterValueType::Int16;
+    }
+    if (type_str.find("INT8") != std::string::npos) {
+        return TinyRegisterValueType::Int8;
     }
     if (type_str.find("UINT32") != std::string::npos) {
         return TinyRegisterValueType::Uint32;
@@ -425,6 +448,8 @@ String tinyRegisterTypeToString(TinyRegisterValueType type) {
             return "UINT32";
         case TinyRegisterValueType::Int16:
             return "INT16";
+        case TinyRegisterValueType::Int8:
+            return "INT8";
         case TinyRegisterValueType::Float:
             return "FLOAT";
         case TinyRegisterValueType::String:
