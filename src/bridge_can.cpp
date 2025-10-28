@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <string.h>
 #include <math.h>
+#include <cmath>
 #include <algorithm>
 #include "bridge_can.h"
 #include "bridge_keepalive.h"
@@ -27,11 +28,98 @@ extern WatchdogManager Watchdog;
 
 static inline void put_u16_le(uint8_t* b, uint16_t v){ b[0]=v & 0xFF; b[1]=(v>>8)&0xFF; }
 static inline void put_s16_le(uint8_t* b, int16_t v){ b[0]=v & 0xFF; b[1]=(v>>8)&0xFF; }
+static inline void put_u32_le(uint8_t* b, uint32_t v){
+    b[0] = static_cast<uint8_t>(v & 0xFFu);
+    b[1] = static_cast<uint8_t>((v >> 8) & 0xFFu);
+    b[2] = static_cast<uint8_t>((v >> 16) & 0xFFu);
+    b[3] = static_cast<uint8_t>((v >> 24) & 0xFFu);
+}
 static inline uint16_t clamp_u16(int v){ return (uint16_t) (v<0?0:(v>65535?65535:v)); }
 static inline int16_t  clamp_s16(int v){ return (int16_t)  (v<-32768?-32768:(v>32767?32767:v)); }
 static inline int      round_i(float x){ return (int)lrintf(x); }
 
 namespace {
+
+String getRegisterString(const TinyBMS_LiveData& live, uint16_t address) {
+    const TinyRegisterSnapshot* snap = live.findSnapshot(address);
+    if (snap && snap->has_text && snap->text_value.length() > 0) {
+        return snap->text_value;
+    }
+    return String();
+}
+
+uint8_t sanitize7bit(char c) {
+    uint8_t uc = static_cast<uint8_t>(c);
+    uc &= 0x7Fu;
+    if (uc < 0x20u && uc != 0u) {
+        uc = 0x20u;
+    }
+    return uc;
+}
+
+void copyAsciiPadded(uint8_t* dest, size_t length, const String& source, size_t start_index = 0) {
+    for (size_t i = 0; i < length; ++i) {
+        uint8_t value = 0;
+        size_t idx = start_index + i;
+        if (idx < static_cast<size_t>(source.length())) {
+            value = sanitize7bit(source.charAt(static_cast<unsigned int>(idx)));
+        }
+        dest[i] = value;
+    }
+}
+
+String resolveManufacturerName(const TinyBMS_Victron_Bridge& bridge) {
+    String manufacturer = getRegisterString(bridge.live_data_, 500);
+    if (manufacturer.length() == 0) {
+        manufacturer = "TinyBMS";
+        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+            manufacturer = config.victron.manufacturer_name;
+            xSemaphoreGive(configMutex);
+        }
+    }
+    if (manufacturer.length() == 0) {
+        manufacturer = "TinyBMS";
+    }
+    return manufacturer;
+}
+
+String resolveBatteryName(const TinyBMS_Victron_Bridge& bridge) {
+    String name;
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        name = config.victron.battery_name;
+        xSemaphoreGive(configMutex);
+    }
+    if (name.length() == 0) {
+        name = getRegisterString(bridge.live_data_, 502);
+    }
+    if (name.length() == 0) {
+        name = "Lithium Battery";
+    }
+    return name;
+}
+
+String resolveBatteryFamily(const TinyBMS_Victron_Bridge& bridge) {
+    String family = getRegisterString(bridge.live_data_, 502);
+    if (family.length() == 0) {
+        family = resolveBatteryName(bridge);
+    }
+    return family;
+}
+
+uint32_t encodeEnergyWh(double energy_wh) {
+    if (!(energy_wh > 0.0)) {
+        return 0;
+    }
+    double raw = energy_wh * 100.0;
+    if (raw < 0.0) {
+        raw = 0.0;
+    }
+    const double max_raw = 4294967295.0;
+    if (raw > max_raw) {
+        raw = max_raw;
+    }
+    return static_cast<uint32_t>(raw + 0.5);
+}
 
 struct VictronMappingContext {
     const TinyBMS_LiveData& live;
@@ -315,6 +403,44 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     return ok;
 }
 
+void TinyBMS_Victron_Bridge::updateEnergyCounters(uint32_t now_ms) {
+    if (last_energy_update_ms_ == 0) {
+        last_energy_update_ms_ = now_ms;
+        return;
+    }
+
+    uint32_t delta_ms = now_ms - last_energy_update_ms_;
+    last_energy_update_ms_ = now_ms;
+
+    if (delta_ms == 0) {
+        return;
+    }
+
+    float voltage = live_data_.voltage;
+    float current = live_data_.current;
+    if (!std::isfinite(voltage) || !std::isfinite(current)) {
+        return;
+    }
+    if (voltage <= 0.1f) {
+        return;
+    }
+
+    double hours = static_cast<double>(delta_ms) / 3600000.0;
+    double power_w = static_cast<double>(voltage) * static_cast<double>(current);
+    if (power_w >= 0.0) {
+        stats.energy_charged_wh += power_w * hours;
+    } else {
+        stats.energy_discharged_wh += (-power_w) * hours;
+    }
+
+    if (stats.energy_charged_wh < 0.0) {
+        stats.energy_charged_wh = 0.0;
+    }
+    if (stats.energy_discharged_wh < 0.0) {
+        stats.energy_discharged_wh = 0.0;
+    }
+}
+
 void TinyBMS_Victron_Bridge::buildPGN_0x356(uint8_t* d){
     memset(d, 0, 8);
     if (applyVictronMapping(*this, VICTRON_PGN_VOLTAGE_CURRENT, d)) {
@@ -411,21 +537,72 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
 
 void TinyBMS_Victron_Bridge::buildPGN_0x35E(uint8_t* d){
     memset(d, 0, 8);
-    String m = "TinyBMS";
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
-        m = config.victron.manufacturer_name;
-        xSemaphoreGive(configMutex);
+    if (applyVictronMapping(*this, VICTRON_PGN_MANUFACTURER, d)) {
+        return;
     }
-    for (int i=0;i<8 && i<(int)m.length();++i) d[i] = (uint8_t)m[i];
+    copyAsciiPadded(d, 8, resolveManufacturerName(*this));
 }
+
 void TinyBMS_Victron_Bridge::buildPGN_0x35F(uint8_t* d){
     memset(d, 0, 8);
-    String n = "Lithium Battery";
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
-        n = config.victron.battery_name;
-        xSemaphoreGive(configMutex);
+    if (applyVictronMapping(*this, VICTRON_PGN_BATTERY_INFO, d)) {
+        return;
     }
-    for (int i=0;i<8 && i<(int)n.length();++i) d[i] = (uint8_t)n[i];
+    copyAsciiPadded(d, 8, resolveBatteryName(*this));
+}
+
+void TinyBMS_Victron_Bridge::buildPGN_0x371(uint8_t* d){
+    memset(d, 0, 8);
+    if (applyVictronMapping(*this, VICTRON_PGN_BMS_NAME_PART2, d)) {
+        return;
+    }
+    copyAsciiPadded(d, 8, resolveBatteryName(*this), 8);
+}
+
+void TinyBMS_Victron_Bridge::buildPGN_0x378(uint8_t* d){
+    memset(d, 0, 8);
+    if (applyVictronMapping(*this, VICTRON_PGN_ENERGY_COUNTERS, d)) {
+        return;
+    }
+
+    uint32_t energy_in_raw = encodeEnergyWh(stats.energy_charged_wh);
+    uint32_t energy_out_raw = encodeEnergyWh(stats.energy_discharged_wh);
+
+    put_u32_le(&d[0], energy_in_raw);
+    put_u32_le(&d[4], energy_out_raw);
+}
+
+void TinyBMS_Victron_Bridge::buildPGN_0x379(uint8_t* d){
+    memset(d, 0, 8);
+    if (applyVictronMapping(*this, VICTRON_PGN_INSTALLED_CAP, d)) {
+        return;
+    }
+
+    double capacity_ah = 0.0;
+    const TinyRegisterSnapshot* cap_snapshot = live_data_.findSnapshot(306);
+    if (cap_snapshot) {
+        capacity_ah = static_cast<double>(cap_snapshot->raw_value) * 0.01;
+    }
+    if (capacity_ah <= 0.0 && config_.battery_capacity_ah > 0.0f) {
+        capacity_ah = static_cast<double>(config_.battery_capacity_ah);
+    }
+    if (capacity_ah < 0.0) {
+        capacity_ah = 0.0;
+    }
+    if (capacity_ah > 65535.0) {
+        capacity_ah = 65535.0;
+    }
+
+    uint16_t raw_capacity = static_cast<uint16_t>(capacity_ah + 0.5);
+    put_u16_le(&d[0], raw_capacity);
+}
+
+void TinyBMS_Victron_Bridge::buildPGN_0x382(uint8_t* d){
+    memset(d, 0, 8);
+    if (applyVictronMapping(*this, VICTRON_PGN_BATTERY_FAMILY, d)) {
+        return;
+    }
+    copyAsciiPadded(d, 8, resolveBatteryFamily(*this));
 }
 
 void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
@@ -441,6 +618,8 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
             TinyBMS_LiveData d;
             if (eventBus.getLatestLiveData(d)) bridge->live_data_ = d;
 
+            bridge->updateEnergyCounters(now);
+
             uint8_t p[8];
 
             memset(p,0,8); bridge->buildPGN_0x356(p); bridge->sendVictronPGN(VICTRON_PGN_VOLTAGE_CURRENT, p, 8);
@@ -449,6 +628,10 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
             memset(p,0,8); bridge->buildPGN_0x35A(p); bridge->sendVictronPGN(VICTRON_PGN_ALARMS, p, 8);
             memset(p,0,8); bridge->buildPGN_0x35E(p); bridge->sendVictronPGN(VICTRON_PGN_MANUFACTURER, p, 8);
             memset(p,0,8); bridge->buildPGN_0x35F(p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_INFO, p, 8);
+            memset(p,0,8); bridge->buildPGN_0x371(p); bridge->sendVictronPGN(VICTRON_PGN_BMS_NAME_PART2, p, 8);
+            memset(p,0,8); bridge->buildPGN_0x378(p); bridge->sendVictronPGN(VICTRON_PGN_ENERGY_COUNTERS, p, 8);
+            memset(p,0,8); bridge->buildPGN_0x379(p); bridge->sendVictronPGN(VICTRON_PGN_INSTALLED_CAP, p, 8);
+            memset(p,0,8); bridge->buildPGN_0x382(p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_FAMILY, p, 8);
 
             bridge->keepAliveSend();
 

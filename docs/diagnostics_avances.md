@@ -24,7 +24,7 @@ Les compteurs sont maintenus par `TinyBMS_Victron_Bridge::sendVictronPGN` et exp
 
 | Champ | Signification | Seuils / actions recommandées |
 | --- | --- | --- |
-| `stats.can_tx_count` / `stats.can.tx_success` | Trames PGN émises avec succès depuis le démarrage. | Une progression continue confirme l'émission périodique (PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F). Si le compteur stagne, vérifier `keepalive` et la tâche CAN. |
+| `stats.can_tx_count` / `stats.can.tx_success` | Trames PGN émises avec succès depuis le démarrage. | Une progression continue confirme l'émission périodique (PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F/0x371/0x378/0x379/0x382). Si le compteur stagne, vérifier `keepalive` et la tâche CAN. |
 | `stats.can_rx_count` / `stats.can.rx_success` | Trames reçues (keepalive Victron). | Doit augmenter au rythme du keepalive (toutes les 1 s par défaut). Une absence de progression combinée à `keepalive.ok=false` indique une coupure CAN. |
 | `stats.can_tx_errors` / `stats.can.tx_errors` | Erreurs d'émission CAN (driver). | Toute incrémentation doit générer une alarme (`ALARM_CAN_TX_ERROR`). Inspecter le câblage (terminaison 120 Ω) ou réduire le débit (`hardware.can.bitrate`). |
 | `stats.can_rx_errors` | Erreurs de réception (frames corrompues). | Vérifier le blindage du câble et les masses. Peut être lié à du bruit électromagnétique. |
