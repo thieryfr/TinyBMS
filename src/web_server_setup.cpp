@@ -25,6 +25,7 @@ extern ConfigManager config;
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
 extern Logger logger;
+extern TaskHandle_t webServerTaskHandle;
 
 // External functions (defined in other modules)
 extern void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
@@ -98,7 +99,13 @@ void webServerTask(void *pvParameters) {
 /**
  * @brief Initialize the web server task
  */
-void initWebServerTask() {
-    xTaskCreate(webServerTask, "WebServerTask", 8192, NULL, 1, NULL);
+bool initWebServerTask() {
+    BaseType_t result = xTaskCreate(webServerTask, "WebServerTask", 8192, NULL, 1, &webServerTaskHandle);
+    if (result != pdPASS) {
+        logger.log(LOG_ERROR, "[WEB] Failed to create web server task");
+        return false;
+    }
+
     logger.log(LOG_INFO, "[WEB] Web server task created ✓");
+    return true;
 }
