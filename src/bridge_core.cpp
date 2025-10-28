@@ -27,8 +27,9 @@ extern WatchdogManager Watchdog;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[BRIDGE] ") + (msg)); } while(0)
 
-TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge()
-    : initialized_(false),
+TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge(IUartChannel& uart)
+    : tiny_uart_(uart),
+      initialized_(false),
       victron_keepalive_ok_(false) {
     memset(&live_data_, 0, sizeof(live_data_));
     memset(&config_, 0, sizeof(config_));

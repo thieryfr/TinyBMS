@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include "shared_data.h"
 #include "cvl_types.h"
+#include "uart/uart_channel.h"
 
 class HardwareSerial;
 class WatchdogManager;
@@ -50,7 +51,7 @@ struct BridgeStats {
 
 class TinyBMS_Victron_Bridge {
 public:
-    TinyBMS_Victron_Bridge();
+    explicit TinyBMS_Victron_Bridge(IUartChannel& uart = defaultTinyBmsUart());
 
     bool begin();
 
@@ -76,7 +77,7 @@ public:
     TinyBMS_Config   getConfig() const;
 
 public:
-    HardwareSerial& tiny_uart_ = Serial1;
+    IUartChannel& tiny_uart_;
 
     TinyBMS_LiveData live_data_{};
     TinyBMS_Config   config_{};
