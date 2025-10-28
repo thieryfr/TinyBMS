@@ -91,9 +91,9 @@
       "comment": "Read via UART/CAN (Reg:114)"
     },
     "305": {
-      "tiny_name": "CAN Keep-Alive (Inverter→BMS)",
-      "tiny_type": "—",
-      "tiny_scale_unit": "—",
+      "tiny_name": "Peak Discharge Current Cutoff",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 A",
       "comment": "Read via CAN (Reg:305)"
     },
     "306": {
