@@ -167,8 +167,11 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     if (binding.value_type == TinyRegisterValueType::String) {
                         raw_value = 0;
                     } else if (binding.value_type == TinyRegisterValueType::Uint32 && binding.register_count >= 2) {
-                        raw_value = static_cast<int32_t>((static_cast<uint32_t>(raw_words[0]) << 16) |
-                                                         static_cast<uint32_t>(raw_words[1]));
+                        // TinyBMS exposes 32-bit counters as LSW/MSW pairs. Register `binding.register_address`
+                        // holds the low word and the following register the high word (e.g. lifetime counter 32->33).
+                        const uint32_t low_word = static_cast<uint32_t>(raw_words[0]);
+                        const uint32_t high_word = static_cast<uint32_t>(raw_words[1]);
+                        raw_value = static_cast<int32_t>((high_word << 16) | low_word);
                     } else if (binding.data_slice == TinyRegisterDataSlice::LowByte ||
                                binding.data_slice == TinyRegisterDataSlice::HighByte) {
                         const uint8_t byte_value = (binding.data_slice == TinyRegisterDataSlice::LowByte)
