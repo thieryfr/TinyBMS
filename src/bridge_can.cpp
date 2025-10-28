@@ -504,7 +504,7 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
 
     const float pack_voltage_v = ld.voltage;
     const float internal_temp_c = ld.temperature / 10.0f;
-    const bool has_pack_temp = (ld.findSnapshot(113) != nullptr) || (ld.findSnapshot(114) != nullptr);
+    const bool has_pack_temp = (ld.findSnapshot(113) != nullptr);
     const float pack_temp_max_c = has_pack_temp ? static_cast<float>(ld.pack_temp_max) / 10.0f : internal_temp_c;
     const float pack_temp_min_c = has_pack_temp ? static_cast<float>(ld.pack_temp_min) / 10.0f : internal_temp_c;
     const bool has_overvoltage_reg = (ld.findSnapshot(315) != nullptr);

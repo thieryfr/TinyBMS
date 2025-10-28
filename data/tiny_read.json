@@ -84,12 +84,6 @@
       "tiny_scale_unit": "1 °C",
       "comment": "Read via UART/CAN (Reg:113, LSB = Min, MSB = Max)"
     },
-    "114": {
-      "tiny_name": "Pack Temperature Max",
-      "tiny_type": "INT8",
-      "tiny_scale_unit": "1 °C",
-      "comment": "Virtual metadata entry for Reg:113 MSB"
-    },
     "305": {
       "tiny_name": "Peak Discharge Current Cutoff",
       "tiny_type": "UINT16",

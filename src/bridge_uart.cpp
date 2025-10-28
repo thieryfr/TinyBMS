@@ -248,7 +248,7 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     d.online_status = 0x91;
                 }
 
-                const bool has_pack_temp = (d.findSnapshot(113) != nullptr) || (d.findSnapshot(114) != nullptr);
+                const bool has_pack_temp = (d.findSnapshot(113) != nullptr);
                 const bool has_overvoltage_reg = (d.findSnapshot(315) != nullptr);
                 const bool has_undervoltage_reg = (d.findSnapshot(316) != nullptr);
                 const bool has_discharge_overcurrent_reg = (d.findSnapshot(317) != nullptr);
