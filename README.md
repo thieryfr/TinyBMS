@@ -84,6 +84,11 @@ TinyBMS/
 - Le snapshot `tests/fixtures/status_snapshot.json` est vérifié pour garantir la présence des compteurs CAN/UART/Event Bus et des métadonnées d'alarmes.
 - Les résultats et scénarios de tests à blanc sont centralisés dans `docs/REVUE_MODULES.md`.
 
+## Dépannage CI
+- Lors d'un `git commit` ou d'une ouverture de Pull Request, GitHub déclenche automatiquement les pipelines listés dans l'onglet **Checks**.
+- Il est normal de voir un message "CI / build" ou "Native Tests" marqué comme `Started now` : cela signifie simplement que les jobs de compilation et de tests distants sont en cours d'exécution.
+- Tant que ces jobs sont `in progress`, aucun changement local (notamment dans les fichiers `.cpp`) n'est requis. Il suffit d'attendre leur terminaison : ils passeront à l'état ✅ `Success` ou ❌ `Failure`, ce dernier cas fournissant un journal détaillant la cause à corriger.
+
 ## Plan d'actions prioritaire
 1. **Industrialiser la chaîne de build** : automatiser la compilation ESP32 (PlatformIO) et l'exécution des tests natifs dans la CI.
 2. **Étendre la couverture hors matériel** : ajouter des tests unitaires pour l'Event Bus (cache/stats) et un stub TinyBMS pour la couche UART.
