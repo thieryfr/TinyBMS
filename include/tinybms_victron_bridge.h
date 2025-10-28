@@ -40,7 +40,14 @@ struct BridgeStats {
     uint32_t can_tx_count = 0;
     uint32_t can_rx_count = 0;
     uint32_t can_tx_errors = 0;
+    uint32_t can_rx_errors = 0;
+    uint32_t can_bus_off_count = 0;
+    uint32_t can_queue_overflows = 0;
     uint32_t uart_errors = 0;
+    uint32_t uart_success_count = 0;
+    uint32_t uart_timeouts = 0;
+    uint32_t uart_crc_errors = 0;
+    uint32_t uart_retry_count = 0;
     float    cvl_current_v = 0.0f;
     CVLState cvl_state = CVL_BULK;
     bool     victron_keepalive_ok = false;
