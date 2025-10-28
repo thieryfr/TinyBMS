@@ -16,6 +16,7 @@
 #include "event_bus.h"
 #include "bridge_core.h"
 #include "tiny_read_mapping.h"
+#include "victron_can_mapping.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -264,6 +265,7 @@ bool initializeSystem() {
     overall_ok &= spiffs_ok;
 
     bool mapping_ok = false;
+    bool can_mapping_ok = false;
     if (spiffs_ok) {
         mapping_ok = initializeTinyReadMapping(SPIFFS, "/tiny_read.json", &logger);
         if (mapping_ok) {
@@ -271,6 +273,14 @@ bool initializeSystem() {
         } else {
             logger.log(LOG_WARN, "[MAPPING] Failed to load /tiny_read.json");
             publishStatusIfPossible("tiny_read mapping unavailable", STATUS_LEVEL_WARNING);
+        }
+
+        can_mapping_ok = initializeVictronCanMapping(SPIFFS, "/tiny_read_4vic.json", &logger);
+        if (can_mapping_ok) {
+            publishStatusIfPossible("Victron CAN mapping loaded", STATUS_LEVEL_NOTICE);
+        } else {
+            logger.log(LOG_WARN, "[CAN_MAP] Failed to load /tiny_read_4vic.json");
+            publishStatusIfPossible("Victron CAN mapping unavailable", STATUS_LEVEL_WARNING);
         }
     } else {
         logger.log(LOG_WARN, "[MAPPING] Skipping tiny_read mapping (SPIFFS unavailable)");

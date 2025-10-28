@@ -19,6 +19,7 @@
 #include "event_bus.h"
 #include "can_driver.h"
 #include "tinybms_victron_bridge.h"
+#include "victron_can_mapping.h"
 
 // External globals
 extern ConfigManager config;
@@ -171,6 +172,60 @@ bool buildSettingsSnapshot(JsonObject configObj, String& errorMessage) {
 
     xSemaphoreGive(configMutex);
     return true;
+}
+
+void buildVictronCanMappingDocument(JsonDocument& doc) {
+    const auto& definitions = getVictronPgnDefinitions();
+    doc["success"] = true;
+    doc["loaded"] = !definitions.empty();
+    JsonArray pgns = doc.createNestedArray("pgns");
+
+    for (const auto& def : definitions) {
+        JsonObject pgnObj = pgns.createNestedObject();
+        pgnObj["pgn"] = String("0x") + String(def.pgn, HEX);
+        if (def.name.length() > 0) {
+            pgnObj["name"] = def.name;
+        }
+
+        JsonArray fields = pgnObj.createNestedArray("fields");
+        for (const auto& field : def.fields) {
+            JsonObject fieldObj = fields.createNestedObject();
+            fieldObj["name"] = field.name;
+            fieldObj["byte_offset"] = field.byte_offset;
+            if (field.length > 0) {
+                fieldObj["length"] = field.length;
+            }
+            if (field.bit_length > 0) {
+                fieldObj["bit_offset"] = field.bit_offset;
+                fieldObj["bit_length"] = field.bit_length;
+            }
+            fieldObj["encoding"] = victronFieldEncodingToString(field.encoding);
+
+            JsonObject sourceObj = fieldObj.createNestedObject("source");
+            sourceObj["type"] = victronValueSourceTypeToString(field.source.type);
+            if (!field.source.identifier.isEmpty()) {
+                if (field.source.type == VictronValueSourceType::LiveData) {
+                    sourceObj["field"] = tinyLiveDataFieldToString(field.source.live_field);
+                } else {
+                    sourceObj["id"] = field.source.identifier;
+                }
+            }
+            if (field.source.type == VictronValueSourceType::Constant) {
+                sourceObj["value"] = field.source.constant;
+            }
+
+            JsonObject convObj = fieldObj.createNestedObject("conversion");
+            convObj["gain"] = field.conversion.gain;
+            convObj["offset"] = field.conversion.offset;
+            convObj["round"] = field.conversion.round;
+            if (field.conversion.has_min) {
+                convObj["min"] = field.conversion.min_value;
+            }
+            if (field.conversion.has_max) {
+                convObj["max"] = field.conversion.max_value;
+            }
+        }
+    }
 }
 
 bool applySettingsPayload(const JsonObjectConst& settings,
@@ -511,6 +566,15 @@ void setupAPIRoutes(AsyncWebServer& server) {
         doc["spiffs_used"] = SPIFFS.usedBytes();
         doc["spiffs_total"] = SPIFFS.totalBytes();
 
+        sendJsonResponse(request, 200, doc);
+    });
+
+    // ===========================================
+    // GET /api/can/mapping
+    // ===========================================
+    server.on("/api/can/mapping", HTTP_GET, [](AsyncWebServerRequest *request) {
+        StaticJsonDocument<4096> doc;
+        buildVictronCanMappingDocument(doc);
         sendJsonResponse(request, 200, doc);
     });
 
