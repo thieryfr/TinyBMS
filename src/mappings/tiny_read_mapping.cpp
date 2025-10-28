@@ -32,16 +32,27 @@ namespace {
 
 std::vector<TinyRegisterMetadata> g_metadata;
 std::vector<TinyRegisterRuntimeBinding> g_bindings = {
-    {0, 1, 36, TinyRegisterValueType::Float, false, 0.01f, TinyLiveDataField::Voltage, "Battery Pack Voltage", "V", nullptr},
-    {1, 1, 38, TinyRegisterValueType::Float, true, 0.1f, TinyLiveDataField::Current, "Battery Pack Current", "A", nullptr},
-    {2, 1, 46, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::SocPercent, "State Of Charge", "%", nullptr},
-    {3, 1, 45, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::SohPercent, "State Of Health", "%", nullptr},
-    {4, 1, 48, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::Temperature, "Internal Temperature", "°C", nullptr},
-    {5, 1, 40, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::MinCellMv, "Min Cell Voltage", "mV", nullptr},
-    {6, 1, 41, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::MaxCellMv, "Max Cell Voltage", "mV", nullptr},
-    {7, 1, 51, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::BalancingBits, "Balancing Bits", "-", nullptr},
-    {8, 1, 103, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxChargeCurrent, "Max Charge Current", "A", nullptr},
-    {9, 1, 102, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxDischargeCurrent, "Max Discharge Current", "A", nullptr}
+    {32, 1, 32, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::None, "Lifetime Counter", "-", nullptr},
+    {36, 1, 36, TinyRegisterValueType::Float, false, 0.01f, TinyLiveDataField::Voltage, "Battery Pack Voltage", "V", nullptr},
+    {38, 1, 38, TinyRegisterValueType::Float, true, 0.1f, TinyLiveDataField::Current, "Battery Pack Current", "A", nullptr},
+    {40, 1, 40, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::MinCellMv, "Min Cell Voltage", "mV", nullptr},
+    {41, 1, 41, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::MaxCellMv, "Max Cell Voltage", "mV", nullptr},
+    {42, 1, 42, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::None, "External Temperature #1", "°C", nullptr},
+    {43, 1, 43, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::None, "External Temperature #2", "°C", nullptr},
+    {45, 1, 45, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::SohPercent, "State Of Health", "%", nullptr},
+    {46, 1, 46, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::SocPercent, "State Of Charge", "%", nullptr},
+    {48, 1, 48, TinyRegisterValueType::Int16, true, 0.1f, TinyLiveDataField::Temperature, "Internal Temperature", "°C", nullptr},
+    {50, 1, 50, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::OnlineStatus, "System Status", "-", nullptr},
+    {51, 1, 51, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::BalancingBits, "Need Balancing", "-", nullptr},
+    {52, 1, 52, TinyRegisterValueType::Uint8, false, 1.0f, TinyLiveDataField::None, "Cell Imbalance Alarm", "-", nullptr},
+    {102, 1, 102, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxDischargeCurrent, "Max Discharge Current", "A", nullptr},
+    {103, 1, 103, TinyRegisterValueType::Uint16, false, 0.1f, TinyLiveDataField::MaxChargeCurrent, "Max Charge Current", "A", nullptr},
+    {305, 1, 305, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::None, "Victron Keep-Alive", "-", nullptr},
+    {306, 1, 306, TinyRegisterValueType::Uint16, false, 0.01f, TinyLiveDataField::None, "Battery Capacity", "Ah", nullptr},
+    {307, 1, 307, TinyRegisterValueType::Uint16, false, 1.0f, TinyLiveDataField::None, "Identification Handshake", "-", nullptr},
+    {500, 4, 500, TinyRegisterValueType::String, false, 1.0f, TinyLiveDataField::None, "Manufacturer Name", nullptr, nullptr},
+    {501, 2, 501, TinyRegisterValueType::Uint32, false, 1.0f, TinyLiveDataField::None, "Firmware Version", nullptr, nullptr},
+    {502, 4, 502, TinyRegisterValueType::String, false, 1.0f, TinyLiveDataField::None, "Battery Family", nullptr, nullptr}
 };
 
 std::unordered_map<uint16_t, const TinyRegisterMetadata*> g_metadata_lookup;
