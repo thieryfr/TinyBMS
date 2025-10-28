@@ -39,7 +39,7 @@ Phase : 1 (Infrastructure Event Bus en parallèle)
 - **Contenu** : Déclaration de la classe EventBus (singleton)
 - **API publique** :
   - **Initialisation** : `begin(queue_size)`
-  - **Publication** : `publish()`, `publishLiveData()`, `publishAlarm()`, `publishConfigChange()`, `publishCVLStateChange()`
+  - **Publication** : `publish()`, `publishLiveData()`, `publishAlarm()`, `publishConfigChange()`, `publishCVLStateChange()`, `publishStatus()`
   - **Souscription** : `subscribe()`, `subscribeMultiple()`, `unsubscribe()`, `unsubscribeAll()`
   - **Récupération** : `getLatest()`, `getLatestLiveData()`, `hasLatest()`
   - **Statistiques** : `getStats()`, `resetStats()`, `getSubscriberCount()`

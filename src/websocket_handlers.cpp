@@ -52,7 +52,7 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 // Build Status JSON
 // ====================================================================================
 void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<640> doc;
 
     doc["voltage"] = round(data.voltage * 100) / 100.0;
     doc["current"] = round(data.current * 10) / 10.0;
@@ -64,6 +64,19 @@ void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
     doc["cell_imbalance_mv"] = data.cell_imbalance_mv;
     doc["online_status"] = data.online_status;
     doc["uptime_ms"] = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    BusEvent status_event;
+    if (eventBus.getLatest(EVENT_STATUS_MESSAGE, status_event)) {
+        JsonObject status = doc.createNestedObject("status_message");
+        status["message"] = status_event.data.status.message;
+        status["level"] = status_event.data.status.level;
+        static const char* level_names[] = {"info", "notice", "warning", "error"};
+        if (status_event.data.status.level < (sizeof(level_names) / sizeof(level_names[0]))) {
+            status["level_name"] = level_names[status_event.data.status.level];
+        }
+        status["source_id"] = status_event.source_id;
+        status["timestamp_ms"] = status_event.timestamp_ms;
+    }
 
     serializeJson(doc, output);
 }

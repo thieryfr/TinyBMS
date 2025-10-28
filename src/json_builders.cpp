@@ -29,7 +29,7 @@ extern EventBus& eventBus;  // Phase 6: Event Bus instance
 // STATUS JSON
 // ============================================================================
 String getStatusJSON() {
-    StaticJsonDocument<1536> doc;  // 1.5KB pour inclure watchdog
+    StaticJsonDocument<1664> doc;  // +status message payload
 
     TinyBMS_LiveData data;
     // Phase 6: Use Event Bus cache instead of legacy queue
@@ -77,6 +77,19 @@ String getStatusJSON() {
     wdt["time_until_timeout_ms"] = Watchdog.getTimeUntilTimeout();
 
     doc["uptime_ms"] = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+    BusEvent status_event;
+    if (eventBus.getLatest(EVENT_STATUS_MESSAGE, status_event)) {
+        JsonObject status = doc.createNestedObject("status_message");
+        status["message"] = status_event.data.status.message;
+        status["level"] = status_event.data.status.level;
+        static const char* level_names[] = {"info", "notice", "warning", "error"};
+        if (status_event.data.status.level < (sizeof(level_names) / sizeof(level_names[0]))) {
+            status["level_name"] = level_names[status_event.data.status.level];
+        }
+        status["source_id"] = status_event.source_id;
+        status["timestamp_ms"] = status_event.timestamp_ms;
+    }
 
     String output;
     serializeJson(doc, output);

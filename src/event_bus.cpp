@@ -248,6 +248,20 @@ bool EventBus::publishCVLStateChange(uint8_t old_state, uint8_t new_state,
     return publish(EVENT_CVL_STATE_CHANGED, &cvl_state, sizeof(cvl_state), source_id);
 }
 
+bool EventBus::publishStatus(const char* message, uint32_t source_id, StatusLevel level) {
+    StatusEvent status_event{};
+    status_event.level = static_cast<uint8_t>(level);
+
+    if (message) {
+        strncpy(status_event.message, message, sizeof(status_event.message) - 1);
+        status_event.message[sizeof(status_event.message) - 1] = '\0';
+    } else {
+        status_event.message[0] = '\0';
+    }
+
+    return publish(EVENT_STATUS_MESSAGE, &status_event, sizeof(status_event), source_id);
+}
+
 // ====================================================================================
 // SUBSCRIBING TO EVENTS
 // ====================================================================================
@@ -752,6 +766,8 @@ bool EventBus::validateDataSize(EventType type, size_t data_size) {
         case EVENT_COMMAND_RECEIVED:
         case EVENT_COMMAND_RESPONSE:
             return data_size == sizeof(CommandEvent);
+        case EVENT_STATUS_MESSAGE:
+            return data_size == sizeof(StatusEvent);
         default:
             // For other types, just check max size
             return data_size <= sizeof(((BusEvent*)0)->data.raw_data);

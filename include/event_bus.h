@@ -184,8 +184,22 @@ public:
                                float new_cvl_voltage,
                                float new_ccl_current = 0.0,
                                float new_dcl_current = 0.0,
-                               uint32_t state_duration_ms = 0,
-                               uint32_t source_id = SOURCE_ID_CVL);
+                              uint32_t state_duration_ms = 0,
+                              uint32_t source_id = SOURCE_ID_CVL);
+
+    /**
+     * @brief Publish a human-readable status message
+     *
+     * Convenience function for EVENT_STATUS_MESSAGE.
+     *
+     * @param message Null-terminated status string (truncated to 63 chars)
+     * @param source_id Source component (default: SYSTEM)
+     * @param level Informational level (default: STATUS_LEVEL_INFO)
+     * @return true if published successfully
+     */
+    bool publishStatus(const char* message,
+                       uint32_t source_id = SOURCE_ID_SYSTEM,
+                       StatusLevel level = STATUS_LEVEL_INFO);
 
     // ====================================================================================
     // SUBSCRIBING TO EVENTS

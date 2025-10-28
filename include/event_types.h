@@ -56,6 +56,7 @@ enum EventType {
     EVENT_SYSTEM_STATUS = 50,         // System status (uptime, health, etc.)
     EVENT_WATCHDOG_FED = 51,          // Watchdog fed
     EVENT_ERROR_OCCURRED = 52,        // System error
+    EVENT_STATUS_MESSAGE = 53,        // Human-readable status message
 
     // ==================== Connectivity Events ====================
     EVENT_WIFI_CONNECTED = 60,        // WiFi connected
@@ -110,6 +111,17 @@ enum AlarmSeverity {
     ALARM_SEVERITY_WARNING = 1,
     ALARM_SEVERITY_ERROR = 2,
     ALARM_SEVERITY_CRITICAL = 3
+};
+
+/**
+ * @enum StatusLevel
+ * @brief Informational level for status messages published on the bus
+ */
+enum StatusLevel : uint8_t {
+    STATUS_LEVEL_INFO = 0,
+    STATUS_LEVEL_NOTICE = 1,
+    STATUS_LEVEL_WARNING = 2,
+    STATUS_LEVEL_ERROR = 3
 };
 
 /**
@@ -216,6 +228,15 @@ struct SystemStatusEvent {
 };
 
 /**
+ * @struct StatusEvent
+ * @brief Data for EVENT_STATUS_MESSAGE
+ */
+struct StatusEvent {
+    char message[64];               // Human-readable status message
+    uint8_t level;                  // Informational level (StatusLevel enum)
+};
+
+/**
  * @struct WiFiEvent
  * @brief Data for EVENT_WIFI_CONNECTED / EVENT_WIFI_DISCONNECTED
  */
@@ -265,6 +286,7 @@ struct BusEvent {
         ConfigChangeEvent config_change;      // For EVENT_CONFIG_CHANGED
         CommandEvent command;                 // For EVENT_COMMAND_*
         SystemStatusEvent system_status;      // For EVENT_SYSTEM_STATUS
+        StatusEvent status;                   // For EVENT_STATUS_MESSAGE
         WiFiEvent wifi;                       // For EVENT_WIFI_*
         WebSocketClientEvent websocket;       // For EVENT_WEBSOCKET_CLIENT_*
         uint8_t raw_data[128];                // Fallback for custom data
@@ -310,6 +332,7 @@ struct BusEvent {
             case EVENT_SYSTEM_STATUS: return "SYSTEM_STATUS";
             case EVENT_WATCHDOG_FED: return "WATCHDOG_FED";
             case EVENT_ERROR_OCCURRED: return "ERROR_OCCURRED";
+            case EVENT_STATUS_MESSAGE: return "STATUS_MESSAGE";
             case EVENT_WIFI_CONNECTED: return "WIFI_CONNECTED";
             case EVENT_WIFI_DISCONNECTED: return "WIFI_DISCONNECTED";
             case EVENT_WEBSOCKET_CLIENT_CONNECTED: return "WEBSOCKET_CLIENT_CONNECTED";

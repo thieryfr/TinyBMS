@@ -32,7 +32,8 @@ void TinyBMS_Victron_Bridge::keepAliveProcessRX(uint32_t now_ms){
             if (!victron_keepalive_ok_) {
                 victron_keepalive_ok_ = true;
                 stats.victron_keepalive_ok = true;
-                eventBus.publishStatus("VE.Can keepalive OK", SOURCE_ID_CAN);
+                // Inform observers (WebSocket, REST) that the keep-alive is healthy again
+                eventBus.publishStatus("VE.Can keepalive OK", SOURCE_ID_CAN, STATUS_LEVEL_INFO);
                 BRIDGE_LOG(LOG_INFO, "VE.Can keepalive detected");
             }
         }
