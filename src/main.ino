@@ -35,21 +35,6 @@ TaskHandle_t webServerTaskHandle = NULL;
 TaskHandle_t websocketTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
 
-void webServerTask(void *pvParameters) {
-    setupWebServer();
-    logger.log(LOG_INFO, "Web server started");
-
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-
-        // Stack monitoring → Debug only
-        UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
-        logger.log(LOG_DEBUG, "webServerTask stack: " + String(stackHighWaterMark));
-
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
 void setup() {
     Serial.begin(115200);
 

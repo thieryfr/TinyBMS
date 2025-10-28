@@ -18,6 +18,7 @@ extern Logger logger;
 extern EventBus& eventBus;
 extern ConfigManager config;
 extern SemaphoreHandle_t feedMutex;
+extern SemaphoreHandle_t configMutex;
 extern WatchdogManager Watchdog;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CAN] ") + (msg)); } while(0)
@@ -38,8 +39,14 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     stats.can_bus_off_count = driverStats.bus_off_events;
     stats.can_queue_overflows = driverStats.rx_dropped;
 
+    bool log_can_traffic = false;
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        log_can_traffic = config.logging.log_can_traffic;
+        xSemaphoreGive(configMutex);
+    }
+
     if (ok) {
-        if (config.logging.log_can_traffic) BRIDGE_LOG(LOG_DEBUG, String("TX PGN 0x") + String(pgn_id, HEX));
+        if (log_can_traffic) BRIDGE_LOG(LOG_DEBUG, String("TX PGN 0x") + String(pgn_id, HEX));
     } else {
         eventBus.publishAlarm(ALARM_CAN_TX_ERROR, "CAN TX failed", ALARM_SEVERITY_WARNING, pgn_id, SOURCE_ID_CAN);
         BRIDGE_LOG(LOG_WARN, String("TX failed PGN 0x") + String(pgn_id, HEX));
@@ -85,7 +92,11 @@ void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
 void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
     memset(d, 0, 8);
     const auto& ld = live_data_;
-    const auto& th = config.victron.thresholds;
+    ConfigManager::VictronConfig::Thresholds th{};
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        th = config.victron.thresholds;
+        xSemaphoreGive(configMutex);
+    }
 
     const float V = ld.voltage;
     const float T = ld.temperature / 10.0f;
@@ -122,12 +133,20 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
 
 void TinyBMS_Victron_Bridge::buildPGN_0x35E(uint8_t* d){
     memset(d, 0, 8);
-    const String& m = config.victron.manufacturer_name;
+    String m = "TinyBMS";
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        m = config.victron.manufacturer_name;
+        xSemaphoreGive(configMutex);
+    }
     for (int i=0;i<8 && i<(int)m.length();++i) d[i] = (uint8_t)m[i];
 }
 void TinyBMS_Victron_Bridge::buildPGN_0x35F(uint8_t* d){
     memset(d, 0, 8);
-    const String& n = config.victron.battery_name;
+    String n = "Lithium Battery";
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        n = config.victron.battery_name;
+        xSemaphoreGive(configMutex);
+    }
     for (int i=0;i<8 && i<(int)n.length();++i) d[i] = (uint8_t)n[i];
 }
 

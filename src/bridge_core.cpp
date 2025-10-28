@@ -45,9 +45,24 @@ TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge()
 bool TinyBMS_Victron_Bridge::begin() {
     BRIDGE_LOG(LOG_INFO, "Initializing TinyBMS-Victron Bridge...");
 
+    ConfigManager::HardwareConfig::UART uart_cfg{};
+    ConfigManager::HardwareConfig::CAN can_cfg{};
+    ConfigManager::TinyBMSConfig tinybms_cfg{};
+    ConfigManager::VictronConfig victron_cfg{};
+
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        uart_cfg = config.hardware.uart;
+        can_cfg = config.hardware.can;
+        tinybms_cfg = config.tinybms;
+        victron_cfg = config.victron;
+        xSemaphoreGive(configMutex);
+    } else {
+        BRIDGE_LOG(LOG_WARN, "Using default configuration values (config mutex unavailable)");
+    }
+
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-        tiny_uart_.begin(config.hardware.uart.baudrate, SERIAL_8N1,
-                         config.hardware.uart.rx_pin, config.hardware.uart.tx_pin);
+        tiny_uart_.begin(uart_cfg.baudrate, SERIAL_8N1,
+                         uart_cfg.rx_pin, uart_cfg.tx_pin);
         xSemaphoreGive(uartMutex);
         BRIDGE_LOG(LOG_INFO, "UART initialized");
     } else {
@@ -56,24 +71,19 @@ bool TinyBMS_Victron_Bridge::begin() {
     }
 
     BRIDGE_LOG(LOG_INFO, "Initializing CAN...");
-    if (!CanDriver::begin(config.hardware.can.tx_pin,
-                          config.hardware.can.rx_pin,
-                          config.hardware.can.bitrate)) {
+    if (!CanDriver::begin(can_cfg.tx_pin,
+                          can_cfg.rx_pin,
+                          can_cfg.bitrate)) {
         BRIDGE_LOG(LOG_ERROR, "CAN init failed");
         return false;
     }
     BRIDGE_LOG(LOG_INFO, "CAN initialized OK");
 
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        uart_poll_interval_ms_  = std::max<uint32_t>(20, config.tinybms.poll_interval_ms);
-        pgn_update_interval_ms_ = std::max<uint32_t>(100, config.victron.pgn_update_interval_ms);
-        cvl_update_interval_ms_ = std::max<uint32_t>(500, config.victron.cvl_update_interval_ms);
-        keepalive_interval_ms_  = std::max<uint32_t>(200, config.victron.keepalive_interval_ms);
-        keepalive_timeout_ms_   = std::max<uint32_t>(1000, config.victron.keepalive_timeout_ms);
-        xSemaphoreGive(configMutex);
-    } else {
-        BRIDGE_LOG(LOG_WARN, "Using default task intervals (config mutex unavailable)");
-    }
+    uart_poll_interval_ms_  = std::max<uint32_t>(20, tinybms_cfg.poll_interval_ms);
+    pgn_update_interval_ms_ = std::max<uint32_t>(100, victron_cfg.pgn_update_interval_ms);
+    cvl_update_interval_ms_ = std::max<uint32_t>(500, victron_cfg.cvl_update_interval_ms);
+    keepalive_interval_ms_  = std::max<uint32_t>(200, victron_cfg.keepalive_interval_ms);
+    keepalive_timeout_ms_   = std::max<uint32_t>(1000, victron_cfg.keepalive_timeout_ms);
 
     last_keepalive_rx_ms_ = millis();
     stats.victron_keepalive_ok = false;
