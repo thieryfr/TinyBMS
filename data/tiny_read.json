@@ -103,9 +103,9 @@
       "comment": "Read via UART/CAN (Reg:306)"
     },
     "307": {
-      "tiny_name": "Identification handshake (Inv→BMS)",
-      "tiny_type": "—",
-      "tiny_scale_unit": "—",
+      "tiny_name": "Number Of Series Cells",
+      "tiny_type": "UINT16",
+      "tiny_scale_unit": "1 cell",
       "comment": "Read via CAN (Reg:307)"
     },
     "315": {
