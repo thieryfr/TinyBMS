@@ -63,7 +63,15 @@ String getStatusJSON() {
 
     stats["can_tx_count"] = bridge.stats.can_tx_count;
     stats["can_rx_count"] = bridge.stats.can_rx_count;
+    stats["can_tx_errors"] = bridge.stats.can_tx_errors;
+    stats["can_rx_errors"] = bridge.stats.can_rx_errors;
+    stats["can_bus_off_count"] = bridge.stats.can_bus_off_count;
+    stats["can_queue_overflows"] = bridge.stats.can_queue_overflows;
     stats["uart_errors"] = bridge.stats.uart_errors;
+    stats["uart_success_count"] = bridge.stats.uart_success_count;
+    stats["uart_timeouts"] = bridge.stats.uart_timeouts;
+    stats["uart_crc_errors"] = bridge.stats.uart_crc_errors;
+    stats["uart_retry_count"] = bridge.stats.uart_retry_count;
     stats["victron_keepalive_ok"] = bridge.stats.victron_keepalive_ok;
 
     // Watchdog info

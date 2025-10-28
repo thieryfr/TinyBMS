@@ -31,11 +31,16 @@ static inline int      round_i(float x){ return (int)lrintf(x); }
 bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data, uint8_t dlc) {
     CanFrame f; f.id = pgn_id; f.dlc = dlc; f.extended = false; memcpy(f.data, data, dlc);
     bool ok = CanDriver::send(f);
+    CanDriverStats driverStats = CanDriver::getStats();
+    stats.can_tx_count = driverStats.tx_success;
+    stats.can_tx_errors = driverStats.tx_errors;
+    stats.can_rx_errors = driverStats.rx_errors;
+    stats.can_bus_off_count = driverStats.bus_off_events;
+    stats.can_queue_overflows = driverStats.rx_dropped;
+
     if (ok) {
-        stats.can_tx_count++;
         if (config.logging.log_can_traffic) BRIDGE_LOG(LOG_DEBUG, String("TX PGN 0x") + String(pgn_id, HEX));
     } else {
-        stats.can_tx_errors++;
         eventBus.publishAlarm(ALARM_CAN_TX_ERROR, "CAN TX failed", ALARM_SEVERITY_WARNING, pgn_id, SOURCE_ID_CAN);
         BRIDGE_LOG(LOG_WARN, String("TX failed PGN 0x") + String(pgn_id, HEX));
     }
@@ -153,6 +158,13 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
                 xSemaphoreGive(feedMutex);
             }
         }
+
+        CanDriverStats driverStats = CanDriver::getStats();
+        bridge->stats.can_tx_count = driverStats.tx_success;
+        bridge->stats.can_tx_errors = driverStats.tx_errors;
+        bridge->stats.can_rx_errors = driverStats.rx_errors;
+        bridge->stats.can_bus_off_count = driverStats.bus_off_events;
+        bridge->stats.can_queue_overflows = driverStats.rx_dropped;
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }

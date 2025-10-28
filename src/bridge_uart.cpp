@@ -3,6 +3,7 @@
  * @brief UART polling from TinyBMS → EventBus
  */
 #include <Arduino.h>
+#include <algorithm>
 #include "bridge_uart.h"
 #include "logger.h"
 #include "event_bus.h"
@@ -16,17 +17,154 @@ extern ConfigManager config;
 extern SemaphoreHandle_t uartMutex;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
+extern SemaphoreHandle_t configMutex;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[UART] ") + (msg)); } while(0)
 
+namespace {
+
+constexpr uint8_t TINYBMS_SLAVE_ADDRESS = 0x01;
+constexpr uint8_t MODBUS_READ_HOLDING_REGS = 0x03;
+
+uint16_t modbusCRC16(const uint8_t* data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (uint8_t bit = 0; bit < 8; ++bit) {
+            if (crc & 0x0001) {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    return crc;
+}
+
+} // namespace
+
 bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
-    if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        BRIDGE_LOG(LOG_ERROR, "UART mutex unavailable for read");
+    if (output == nullptr || count == 0) {
+        BRIDGE_LOG(LOG_ERROR, "Invalid readTinyRegisters arguments");
         return false;
     }
-    for (uint16_t i = 0; i < count; ++i) output[i] = 0;
+
+    const TickType_t mutex_timeout = pdMS_TO_TICKS(100);
+    if (xSemaphoreTake(uartMutex, mutex_timeout) != pdTRUE) {
+        BRIDGE_LOG(LOG_ERROR, "UART mutex unavailable for read");
+        stats.uart_errors++;
+        stats.uart_timeouts++;
+        return false;
+    }
+
+    std::fill_n(output, count, static_cast<uint16_t>(0));
+
+    uint8_t attempt_count = 3;
+    uint32_t retry_delay_ms = 50;
+    uint32_t response_timeout_ms = 100;
+
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        attempt_count = std::max<uint8_t>(static_cast<uint8_t>(1), config.tinybms.uart_retry_count);
+        retry_delay_ms = config.tinybms.uart_retry_delay_ms;
+        response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
+        xSemaphoreGive(configMutex);
+    } else {
+        BRIDGE_LOG(LOG_WARN, "Using default UART retry configuration (config mutex unavailable)");
+    }
+
+    const size_t expected_data_bytes = static_cast<size_t>(count) * 2U;
+    const size_t expected_response_len = 3 + expected_data_bytes + 2;
+    if (expected_response_len > 256) {
+        BRIDGE_LOG(LOG_ERROR, "Requested register span too large");
+        xSemaphoreGive(uartMutex);
+        return false;
+    }
+
+    uint32_t retries_used = 0;
+    bool success = false;
+    uint32_t previous_timeout = tiny_uart_.getTimeout();
+    tiny_uart_.setTimeout(response_timeout_ms);
+
+    for (uint8_t attempt = 0; attempt < attempt_count && !success; ++attempt) {
+        if (attempt > 0) {
+            ++retries_used;
+            if (retry_delay_ms > 0) {
+                vTaskDelay(pdMS_TO_TICKS(retry_delay_ms));
+            }
+        }
+
+        while (tiny_uart_.available() > 0) {
+            tiny_uart_.read();
+        }
+
+        uint8_t request[8];
+        request[0] = TINYBMS_SLAVE_ADDRESS;
+        request[1] = MODBUS_READ_HOLDING_REGS;
+        request[2] = static_cast<uint8_t>((start_addr >> 8) & 0xFF);
+        request[3] = static_cast<uint8_t>(start_addr & 0xFF);
+        request[4] = static_cast<uint8_t>((count >> 8) & 0xFF);
+        request[5] = static_cast<uint8_t>(count & 0xFF);
+        const uint16_t crc = modbusCRC16(request, 6);
+        request[6] = static_cast<uint8_t>(crc & 0xFF);
+        request[7] = static_cast<uint8_t>((crc >> 8) & 0xFF);
+
+        size_t written = tiny_uart_.write(request, sizeof(request));
+        tiny_uart_.flush();
+        if (written != sizeof(request)) {
+            BRIDGE_LOG(LOG_ERROR, "Failed to write full Modbus request");
+            continue;
+        }
+
+        uint8_t response[256];
+        size_t received = tiny_uart_.readBytes(response, expected_response_len);
+        if (received != expected_response_len) {
+            BRIDGE_LOG(LOG_WARN, String("UART timeout (received ") + received + " / " + expected_response_len + " bytes)");
+            stats.uart_timeouts++;
+            continue;
+        }
+
+        const uint16_t resp_crc = static_cast<uint16_t>(response[received - 2]) |
+                                   (static_cast<uint16_t>(response[received - 1]) << 8);
+        const uint16_t calc_crc = modbusCRC16(response, received - 2);
+        if (resp_crc != calc_crc) {
+            BRIDGE_LOG(LOG_WARN, "CRC mismatch on TinyBMS response");
+            stats.uart_crc_errors++;
+            continue;
+        }
+
+        if (response[1] & 0x80) {
+            BRIDGE_LOG(LOG_ERROR, String("TinyBMS Modbus exception: 0x") + String(response[2], HEX));
+            continue;
+        }
+
+        if (response[0] != TINYBMS_SLAVE_ADDRESS || response[1] != MODBUS_READ_HOLDING_REGS) {
+            BRIDGE_LOG(LOG_ERROR, "Unexpected Modbus header in TinyBMS response");
+            continue;
+        }
+
+        if (response[2] != expected_data_bytes) {
+            BRIDGE_LOG(LOG_ERROR, "Unexpected Modbus payload length");
+            continue;
+        }
+
+        for (uint16_t i = 0; i < count; ++i) {
+            const size_t idx = 3 + i * 2;
+            output[i] = static_cast<uint16_t>(response[idx] << 8 | response[idx + 1]);
+        }
+
+        success = true;
+        stats.uart_success_count++;
+    }
+
+    tiny_uart_.setTimeout(previous_timeout);
+    stats.uart_retry_count += retries_used;
+
+    if (!success) {
+        stats.uart_errors++;
+    }
+
     xSemaphoreGive(uartMutex);
-    return true;
+    return success;
 }
 
 void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
@@ -76,7 +214,6 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     eventBus.publishAlarm(ALARM_LOW_T_CHARGE, "Charging at low T", ALARM_SEVERITY_WARNING, T, SOURCE_ID_UART);
                 }
             } else {
-                bridge->stats.uart_errors++;
                 eventBus.publishAlarm(ALARM_UART_ERROR, "TinyBMS UART error", ALARM_SEVERITY_WARNING, bridge->stats.uart_errors, SOURCE_ID_UART);
             }
 
