@@ -45,6 +45,10 @@ Pour garantir la sécurité de la batterie (notamment la vôtre, spécifiée à 
 
 ### 2. Formule Dynamique (Implémentée dans `compute_cell_protection_cvl`)
 
+Condition,Formule de CVLprotection​ (Volts),Explication
+Si ErreurV​≤0 (Cellule ≤3.50 V),3.65 V×Ncells​,Le CVL est fixé à la tension max du pack (aucune réduction).
+Si ErreurV​>0 (Cellule >3.50 V),(3.65 V×Ncells​)−(150.0×ErreurV​),Le CVL est abaissé proportionnellement à l'approche de la coupure.
+
 Le CVL de protection est calculé en fonction de l'erreur Erreur_V par rapport au seuil de sécurité.
 
 Erreur_V = max_cell_voltage_v − VCELL_SAFETY_THRESHOLD
