@@ -101,6 +101,10 @@ bool TinyBMS_Victron_Bridge::begin() {
     return true;
 }
 
+void TinyBMS_Victron_Bridge::setMqttPublisher(mqtt::Publisher* publisher) {
+    mqtt_publisher_ = publisher;
+}
+
 bool Bridge_CreateTasks(TinyBMS_Victron_Bridge* bridge) {
     if (!bridge || !bridge->initialized_) return false;
 

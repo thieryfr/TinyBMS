@@ -14,6 +14,7 @@
 #include "rtos_config.h"
 #include "uart/tinybms_uart_client.h"
 #include "tiny_read_mapping.h"
+#include "mqtt/publisher.h"
 
 extern Logger logger;
 extern EventBus& eventBus;
@@ -197,6 +198,19 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
 
                     const String* text_ptr = text_value.length() > 0 ? &text_value : nullptr;
                     d.applyBinding(binding, raw_value, scaled_value, text_ptr, raw_words);
+
+                    if (bridge->mqtt_publisher_) {
+                        mqtt::RegisterValue sample;
+                        if (mqtt::buildRegisterValue(binding,
+                                                     raw_value,
+                                                     scaled_value,
+                                                     text_ptr,
+                                                     raw_words,
+                                                     now,
+                                                     sample)) {
+                            bridge->mqtt_publisher_->publishRegister(sample);
+                        }
+                    }
                 }
 
                 d.cell_imbalance_mv = (d.max_cell_mv > d.min_cell_mv)
