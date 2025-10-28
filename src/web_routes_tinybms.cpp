@@ -86,9 +86,9 @@ void registerTinyBMSRoutes(AsyncWebServer& server) {
         if (doc.containsKey("charge_overcurrent_a"))
             cfg.charge_overcurrent_a = doc["charge_overcurrent_a"];
         if (doc.containsKey("overheat_temp_c"))
-            cfg.overheat_temp_c = doc["overheat_temp_c"].as<float>() * 10;
+            cfg.overheat_cutoff_c = doc["overheat_temp_c"].as<float>() * 10;
         if (doc.containsKey("low_temp_charge_c"))
-            cfg.low_temp_charge_c = doc["low_temp_charge_c"].as<float>() * 10;
+            cfg.low_temp_charge_cutoff_c = doc["low_temp_charge_c"].as<float>() * 10;
 
         // ✅ Mutex protection
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) != pdTRUE) {

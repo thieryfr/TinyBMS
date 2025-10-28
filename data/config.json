@@ -35,9 +35,21 @@
   "victron": {
     "pgn_update_interval_ms": 1000,
     "cvl_update_interval_ms": 20000,
+    "keepalive_interval_ms": 1000,
     "keepalive_timeout_ms": 10000,
     "manufacturer_name": "ENEPAQ",
-    "battery_name": "TinyBMS 16S100A"
+    "battery_name": "TinyBMS 16S100A",
+    "thresholds": {
+      "undervoltage_v": 44.0,
+      "overvoltage_v": 58.4,
+      "overtemp_c": 55.0,
+      "low_temp_charge_c": 0.0,
+      "imbalance_warn_mv": 100,
+      "imbalance_alarm_mv": 200,
+      "soc_low_percent": 10.0,
+      "soc_high_percent": 99.0,
+      "derate_current_a": 1.0
+    }
   },
   
   "cvl_algorithm": {
