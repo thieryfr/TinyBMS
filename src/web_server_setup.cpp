@@ -26,6 +26,7 @@ extern AsyncWebServer server;
 extern AsyncWebSocket ws;
 extern Logger logger;
 extern TaskHandle_t webServerTaskHandle;
+extern SemaphoreHandle_t configMutex;
 
 // External functions (defined in other modules)
 extern void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
@@ -38,6 +39,14 @@ void setupWebServer() {
     logger.log(LOG_INFO, "========================================");
     logger.log(LOG_INFO, "   Web Server Configuration");
     logger.log(LOG_INFO, "========================================");
+
+    ConfigManager::WebServerConfig web_config{};
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        web_config = config.web_server;
+        xSemaphoreGive(configMutex);
+    } else {
+        logger.log(LOG_WARN, "[WEB] Using default web server settings (config mutex unavailable)");
+    }
 
     // Configure WebSocket
     ws.onEvent(onWebSocketEvent);
@@ -57,7 +66,7 @@ void setupWebServer() {
     logger.log(LOG_INFO, "[API] TinyBMS config routes configured");
 
     // CORS if enabled
-    if (config.web_server.enable_cors) {
+    if (web_config.enable_cors) {
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
         logger.log(LOG_INFO, "[WEB] CORS enabled for all origins");
     } else {
@@ -72,7 +81,7 @@ void setupWebServer() {
 
     // Start server
     server.begin();
-    logger.log(LOG_INFO, String("[WEB] Server started on port ") + String(config.web_server.port));
+    logger.log(LOG_INFO, String("[WEB] Server started on port ") + String(web_config.port));
 
     logger.log(LOG_INFO, "========================================");
     logger.log(LOG_INFO, "   ✓ Web Server Ready!");

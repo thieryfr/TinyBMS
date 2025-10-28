@@ -4,6 +4,7 @@
  */
 
 #include <Arduino.h>
+#include <algorithm>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -98,21 +99,30 @@ void websocketTask(void *pvParameters) {
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         static uint32_t last_update_ms = 0;
 
-        if (now - last_update_ms >= config.web_server.websocket_update_interval_ms) {
+        ConfigManager::WebServerConfig web_config{};
+        ConfigManager::LoggingConfig logging_config{};
+        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            web_config = config.web_server;
+            logging_config = config.logging;
+            xSemaphoreGive(configMutex);
+        }
+
+        const uint32_t interval_ms = std::max<uint32_t>(50, web_config.websocket_update_interval_ms);
+
+        if (now - last_update_ms >= interval_ms) {
 
             TinyBMS_LiveData data;
             // Phase 3: Use Event Bus cache instead of legacy queue
             if (eventBus.getLatestLiveData(data)) {
 
                 String json;
-                if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                    buildStatusJSON(json, data);
-                    xSemaphoreGive(configMutex);
+                buildStatusJSON(json, data);
+
+                if (!json.isEmpty()) {
+                    notifyClients(json);
                 }
 
-                notifyClients(json);
-
-                if (config.logging.log_can_traffic) {
+                if (logging_config.log_can_traffic) {
                     logger.log(LOG_DEBUG,
                         "WebSocket TX: V=" + String(data.voltage) +
                         " I=" + String(data.current) +
@@ -132,6 +142,6 @@ void websocketTask(void *pvParameters) {
         UBaseType_t stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
         logger.log(LOG_DEBUG, "websocketTask stack: " + String(stackHighWaterMark));
 
-        vTaskDelay(pdMS_TO_TICKS(config.web_server.websocket_update_interval_ms));
+        vTaskDelay(pdMS_TO_TICKS(interval_ms));
     }
 }
