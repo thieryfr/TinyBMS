@@ -87,8 +87,8 @@
     "114": {
       "tiny_name": "Pack Temperature Max",
       "tiny_type": "INT8",
-      "tiny_scale_unit": "**1 °C**",
-      "comment": "**Not a register. Read from MSB of Reg:113**"
+      "tiny_scale_unit": "1 °C",
+      "comment": "Not a register. Read from MSB of Reg:113"
     },
     "305": {
       "tiny_name": "Peak Discharge Current Cutoff",
