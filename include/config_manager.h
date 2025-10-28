@@ -93,6 +93,23 @@ public:
         uint16_t imbalance_release_threshold_mv = 50;
     } cvl;
 
+    struct MqttConfig {
+        bool enabled = false;
+        String uri = "mqtt://127.0.0.1";
+        uint16_t port = 1883;
+        String client_id = "tinybms-victron";
+        String username = "";
+        String password = "";
+        String root_topic = "victron/tinybms";
+        bool clean_session = true;
+        bool use_tls = false;
+        String server_certificate = "";
+        uint16_t keepalive_seconds = 30;
+        uint32_t reconnect_interval_ms = 5000;
+        uint8_t default_qos = 0;
+        bool retain_by_default = false;
+    } mqtt;
+
     struct WebServerConfig {
         uint16_t port = 80;
         uint32_t websocket_update_interval_ms = 1000;
@@ -131,6 +148,7 @@ private:
     void loadTinyBMSConfig(const JsonDocument& doc);
     void loadVictronConfig(const JsonDocument& doc);
     void loadCVLConfig(const JsonDocument& doc);
+    void loadMqttConfig(const JsonDocument& doc);
     void loadWebServerConfig(const JsonDocument& doc);
     void loadLoggingConfig(const JsonDocument& doc);
     void loadAdvancedConfig(const JsonDocument& doc);
@@ -140,6 +158,7 @@ private:
     void saveTinyBMSConfig(JsonDocument& doc) const;
     void saveVictronConfig(JsonDocument& doc) const;
     void saveCVLConfig(JsonDocument& doc) const;
+    void saveMqttConfig(JsonDocument& doc) const;
     void saveWebServerConfig(JsonDocument& doc) const;
     void saveLoggingConfig(JsonDocument& doc) const;
     void saveAdvancedConfig(JsonDocument& doc) const;

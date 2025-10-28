@@ -199,17 +199,35 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     const String* text_ptr = text_value.length() > 0 ? &text_value : nullptr;
                     d.applyBinding(binding, raw_value, scaled_value, text_ptr, raw_words);
 
-                    if (bridge->mqtt_publisher_) {
-                        mqtt::RegisterValue sample;
-                        if (mqtt::buildRegisterValue(binding,
-                                                     raw_value,
-                                                     scaled_value,
-                                                     text_ptr,
-                                                     raw_words,
-                                                     now,
-                                                     sample)) {
-                            bridge->mqtt_publisher_->publishRegister(sample);
+                    if (eventBus.isInitialized()) {
+                        MqttRegisterEvent mqtt_event{};
+                        mqtt_event.address = binding.register_address;
+                        mqtt_event.value_type = binding.value_type;
+                        mqtt_event.raw_value = raw_value;
+                        mqtt_event.timestamp_ms = now;
+
+                        const uint8_t copy_count = std::min<uint8_t>(binding.register_count,
+                                                                      static_cast<uint8_t>(TINY_REGISTER_MAX_WORDS));
+                        mqtt_event.raw_word_count = copy_count;
+                        for (uint8_t i = 0; i < copy_count; ++i) {
+                            mqtt_event.raw_words[i] = raw_words[i];
                         }
+                        for (uint8_t i = copy_count; i < TINY_REGISTER_MAX_WORDS; ++i) {
+                            mqtt_event.raw_words[i] = 0;
+                        }
+
+                        mqtt_event.has_text = (text_ptr != nullptr);
+                        if (mqtt_event.has_text) {
+                            size_t text_len = static_cast<size_t>(text_value.length());
+                            if (text_len >= sizeof(mqtt_event.text_value)) {
+                                text_len = sizeof(mqtt_event.text_value) - 1;
+                            }
+                            text_value.toCharArray(mqtt_event.text_value, text_len + 1);
+                        } else {
+                            mqtt_event.text_value[0] = '\0';
+                        }
+
+                        eventBus.publishMqttRegister(mqtt_event, SOURCE_ID_UART);
                     }
                 }
 

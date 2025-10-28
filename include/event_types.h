@@ -64,8 +64,11 @@ enum EventType {
     EVENT_WEBSOCKET_CLIENT_CONNECTED = 62,    // WebSocket client connected
     EVENT_WEBSOCKET_CLIENT_DISCONNECTED = 63, // WebSocket client disconnected
 
+    // ==================== MQTT Events ====================
+    EVENT_MQTT_REGISTER_VALUE = 64,   // Register decoded and ready for MQTT publish
+
     // ==================== Total Count ====================
-    EVENT_TYPE_COUNT = 64             // Total number of event types
+    EVENT_TYPE_COUNT = 65             // Total number of event types
 };
 
 // ====================================================================================
@@ -260,6 +263,21 @@ struct WebSocketClientEvent {
     bool is_connected;              // Connection status
 };
 
+/**
+ * @struct MqttRegisterEvent
+ * @brief Data for EVENT_MQTT_REGISTER_VALUE
+ */
+struct MqttRegisterEvent {
+    uint16_t address;                                  // TinyBMS register address
+    TinyRegisterValueType value_type;                  // Wire type of the register
+    uint8_t raw_word_count;                            // Number of 16-bit words captured
+    int32_t raw_value;                                 // Aggregated raw value (first word or combined)
+    bool has_text;                                     // True if a textual representation is present
+    char text_value[64];                               // Textual payload (null-terminated)
+    uint16_t raw_words[TINY_REGISTER_MAX_WORDS];       // Raw word buffer for advanced decoding
+    uint32_t timestamp_ms;                             // Capture timestamp (ms)
+};
+
 // ====================================================================================
 // MAIN EVENT STRUCTURE
 // ====================================================================================
@@ -292,6 +310,7 @@ struct BusEvent {
         StatusEvent status;                   // For EVENT_STATUS_MESSAGE
         WiFiEvent wifi;                       // For EVENT_WIFI_*
         WebSocketClientEvent websocket;       // For EVENT_WEBSOCKET_CLIENT_*
+        MqttRegisterEvent mqtt_register;      // For EVENT_MQTT_REGISTER_VALUE
         uint8_t raw_data[128];                // Fallback for custom data
     } data;
 
@@ -340,6 +359,7 @@ struct BusEvent {
             case EVENT_WIFI_DISCONNECTED: return "WIFI_DISCONNECTED";
             case EVENT_WEBSOCKET_CLIENT_CONNECTED: return "WEBSOCKET_CLIENT_CONNECTED";
             case EVENT_WEBSOCKET_CLIENT_DISCONNECTED: return "WEBSOCKET_CLIENT_DISCONNECTED";
+            case EVENT_MQTT_REGISTER_VALUE: return "MQTT_REGISTER_VALUE";
             default: return "UNKNOWN";
         }
     }

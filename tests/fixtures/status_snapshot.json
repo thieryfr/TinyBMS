@@ -58,6 +58,22 @@
       "dispatch_errors": 0,
       "total_subscribers": 7,
       "current_queue_depth": 0
+    },
+    "mqtt": {
+      "enabled": true,
+      "configured": true,
+      "subscribed": true,
+      "connected": true,
+      "client_id": "tinybms-victron",
+      "root_topic": "victron/tinybms",
+      "publish_count": 512,
+      "failed_count": 0,
+      "last_publish_ms": 12345670,
+      "last_error_code": 0,
+      "qos": 1,
+      "retain": false,
+      "clean_session": true,
+      "use_tls": false
     }
   },
   "status_message": {

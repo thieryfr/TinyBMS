@@ -134,6 +134,19 @@ public:
                          uint32_t source_id = SOURCE_ID_UART);
 
     /**
+     * @brief Publish a register snapshot ready for MQTT formatting
+     *
+     * Convenience function for EVENT_MQTT_REGISTER_VALUE.
+     *
+     * @param data Register payload constructed from TinyBMS bindings
+     * @param source_id Source component (default: UART)
+     * @return true if published successfully
+     */
+    bool publishMqttRegister(const MqttRegisterEvent& data,
+                              uint32_t source_id = SOURCE_ID_UART,
+                              bool from_isr = false);
+
+    /**
      * @brief Publish an alarm event
      *
      * Convenience function for EVENT_ALARM_RAISED.

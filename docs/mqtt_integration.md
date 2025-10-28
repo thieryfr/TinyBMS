@@ -9,6 +9,7 @@ Comme les autres modules, MQTT module doit impérativement publier et consommer 
 * `TinyBMS_LiveData::appendSnapshot` continue de stocker toutes les mesures décodées depuis les trames Modbus TinyBMS. Chaque instantané contient la valeur brute (`raw_words`), la valeur numérique décodée et, le cas échéant, une chaîne.
 * `TinyBMS_Victron_Bridge::uartTask` applique désormais `mqtt::buildRegisterValue` juste après `TinyBMS_LiveData::applyBinding`. Cette étape transforme la valeur Modbus (brute + échelle `TinyRegisterRuntimeBinding`) en structure `mqtt::RegisterValue` prête à être publiée vers un backend.
 * `TinyBMS_Victron_Bridge::setMqttPublisher` permet d'enregistrer une implémentation de `mqtt::Publisher` qui recevra toutes les mesures TinyBMS au fil des acquisitions UART.
+* Le bus d'évènements expose désormais `EVENT_MQTT_REGISTER_VALUE` contenant les échantillons modbus prêts à être transformés en messages MQTT. `mqtt::VictronMqttBridge` s'y abonne et reconstruit les métadonnées via `mqtt::buildRegisterValue` avant de publier vers le broker.
 
 ## Interface `mqtt::Publisher`
 

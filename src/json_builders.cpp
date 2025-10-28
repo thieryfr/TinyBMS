@@ -17,6 +17,7 @@
 #include "tinybms_victron_bridge.h"
 #include "event_bus.h"  // Phase 6: Event Bus integration
 #include "tiny_read_mapping.h"
+#include "mqtt/victron_mqtt_bridge.h"
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
@@ -25,6 +26,7 @@ extern WatchdogManager Watchdog;
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
 extern EventBus& eventBus;  // Phase 6: Event Bus instance
+extern mqtt::VictronMqttBridge mqttBridge;
 
 // ============================================================================
 // STATUS JSON
@@ -158,6 +160,9 @@ String getStatusJSON() {
     bus["dispatch_errors"] = bus_stats.dispatch_errors;
     bus["total_subscribers"] = bus_stats.total_subscribers;
     bus["current_queue_depth"] = bus_stats.current_queue_depth;
+
+    JsonObject mqtt_stats = stats.createNestedObject("mqtt");
+    mqttBridge.appendStatus(mqtt_stats);
 
     // Watchdog info
     JsonObject wdt = doc.createNestedObject("watchdog");

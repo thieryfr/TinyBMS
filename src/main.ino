@@ -13,6 +13,7 @@
 #include "config_manager.h"
 #include "logger.h"
 #include "event_bus.h"
+#include "mqtt/victron_mqtt_bridge.h"
 #include "tinybms_config_editor.h"
 
 // Global resources
@@ -30,10 +31,13 @@ TinyBMS_Victron_Bridge bridge;
 Logger logger;
 TinyBMSConfigEditor configEditor;
 
+mqtt::VictronMqttBridge mqttBridge(eventBus);
+
 // Task handles
 TaskHandle_t webServerTaskHandle = NULL;
 TaskHandle_t websocketTaskHandle = NULL;
 TaskHandle_t watchdogTaskHandle = NULL;
+TaskHandle_t mqttTaskHandle = NULL;
 
 void setup() {
     Serial.begin(115200);

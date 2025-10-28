@@ -54,6 +54,7 @@ bool ConfigManager::begin(const char* filename) {
     loadTinyBMSConfig(doc);
     loadVictronConfig(doc);
     loadCVLConfig(doc);
+    loadMqttConfig(doc);
     loadWebServerConfig(doc);
     loadLoggingConfig(doc);
     loadAdvancedConfig(doc);
@@ -82,6 +83,7 @@ bool ConfigManager::save() {
     saveTinyBMSConfig(doc);
     saveVictronConfig(doc);
     saveCVLConfig(doc);
+    saveMqttConfig(doc);
     saveWebServerConfig(doc);
     saveLoggingConfig(doc);
     saveAdvancedConfig(doc);
@@ -217,6 +219,26 @@ void ConfigManager::loadCVLConfig(const JsonDocument& doc) {
     cvl.imbalance_release_threshold_mv = cvlObj["imbalance_release_threshold_mv"] | cvl.imbalance_release_threshold_mv;
 }
 
+void ConfigManager::loadMqttConfig(const JsonDocument& doc) {
+    JsonObjectConst mqttObj = doc["mqtt"].as<JsonObjectConst>();
+    if (mqttObj.isNull()) return;
+
+    mqtt.enabled = mqttObj["enabled"] | mqtt.enabled;
+    mqtt.uri = mqttObj["uri"] | mqtt.uri;
+    mqtt.port = mqttObj["port"] | mqtt.port;
+    mqtt.client_id = mqttObj["client_id"] | mqtt.client_id;
+    mqtt.username = mqttObj["username"] | mqtt.username;
+    mqtt.password = mqttObj["password"] | mqtt.password;
+    mqtt.root_topic = mqttObj["root_topic"] | mqtt.root_topic;
+    mqtt.clean_session = mqttObj["clean_session"] | mqtt.clean_session;
+    mqtt.use_tls = mqttObj["use_tls"] | mqtt.use_tls;
+    mqtt.server_certificate = mqttObj["server_certificate"] | mqtt.server_certificate;
+    mqtt.keepalive_seconds = mqttObj["keepalive_seconds"] | mqtt.keepalive_seconds;
+    mqtt.reconnect_interval_ms = mqttObj["reconnect_interval_ms"] | mqtt.reconnect_interval_ms;
+    mqtt.default_qos = mqttObj["default_qos"] | mqtt.default_qos;
+    mqtt.retain_by_default = mqttObj["retain_by_default"] | mqtt.retain_by_default;
+}
+
 void ConfigManager::loadWebServerConfig(const JsonDocument& doc) {
     JsonObjectConst webObj = doc["web_server"].as<JsonObjectConst>();
     if (webObj.isNull()) return;
@@ -345,6 +367,24 @@ void ConfigManager::saveCVLConfig(JsonDocument& doc) const {
     cvlObj["imbalance_release_threshold_mv"] = cvl.imbalance_release_threshold_mv;
 }
 
+void ConfigManager::saveMqttConfig(JsonDocument& doc) const {
+    JsonObject mqttObj = doc.createNestedObject("mqtt");
+    mqttObj["enabled"] = mqtt.enabled;
+    mqttObj["uri"] = mqtt.uri;
+    mqttObj["port"] = mqtt.port;
+    mqttObj["client_id"] = mqtt.client_id;
+    mqttObj["username"] = mqtt.username;
+    mqttObj["password"] = mqtt.password;
+    mqttObj["root_topic"] = mqtt.root_topic;
+    mqttObj["clean_session"] = mqtt.clean_session;
+    mqttObj["use_tls"] = mqtt.use_tls;
+    mqttObj["server_certificate"] = mqtt.server_certificate;
+    mqttObj["keepalive_seconds"] = mqtt.keepalive_seconds;
+    mqttObj["reconnect_interval_ms"] = mqtt.reconnect_interval_ms;
+    mqttObj["default_qos"] = mqtt.default_qos;
+    mqttObj["retain_by_default"] = mqtt.retain_by_default;
+}
+
 void ConfigManager::saveWebServerConfig(JsonDocument& doc) const {
     JsonObject webObj = doc.createNestedObject("web_server");
     webObj["port"] = web_server.port;
@@ -407,5 +447,8 @@ void ConfigManager::printConfig() const {
                               " TX=" + String(hardware.can.tx_pin) +
                               " Bitrate=" + String(hardware.can.bitrate));
     logger.log(LOG_DEBUG, "Victron keepalive timeout=" + String(victron.keepalive_timeout_ms) + "ms");
+    logger.log(LOG_DEBUG, String("MQTT: enabled=") + (mqtt.enabled ? "true" : "false") +
+                               ", uri=" + mqtt.uri +
+                               ", root=" + mqtt.root_topic);
     logger.log(LOG_DEBUG, "Logging Level=" + String(logLevelToString(logging.log_level)));
 }
