@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include "shared_data.h"
+#include "cvl_types.h"
 
 class HardwareSerial;
 class WatchdogManager;
@@ -28,14 +29,6 @@ struct TinyBMS_Config {
     uint16_t low_temp_charge_cutoff_c = 0;   // 0.1 °C units
 };
 
-enum CVLState : uint8_t {
-    CVL_BULK = 0,
-    CVL_TRANSITION = 1,
-    CVL_FLOAT_APPROACH = 2,
-    CVL_FLOAT = 3,
-    CVL_IMBALANCE_HOLD = 4
-};
-
 struct BridgeStats {
     uint32_t can_tx_count = 0;
     uint32_t can_rx_count = 0;
@@ -49,6 +42,8 @@ struct BridgeStats {
     uint32_t uart_crc_errors = 0;
     uint32_t uart_retry_count = 0;
     float    cvl_current_v = 0.0f;
+    float    ccl_limit_a = 0.0f;
+    float    dcl_limit_a = 0.0f;
     CVLState cvl_state = CVL_BULK;
     bool     victron_keepalive_ok = false;
 };
