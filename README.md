@@ -15,7 +15,8 @@ TinyBMS/
 ├── README_watchdog.md              # Gestion watchdog
 ├── README_logger.md                # Journalisation
 ├── docs/                            # Documentation technique & bilans de revue
-│   └── REVUE_MODULES.md            # Rapport de cohérence détaillé
+│   ├── REVUE_MODULES.md            # Rapport de cohérence détaillé
+│   └── diagnostics_avances.md      # Guide de diagnostics terrain (watchdog/CAN/UART, SPIFFS)
 ├── data/                           # Contenu SPIFFS (config + UI)
 ├── include/                        # Headers partagés (API modules)
 ├── src/                            # Implémentations C++/INO
@@ -44,6 +45,7 @@ TinyBMS/
 - **Logger** – Journalisation SPIFFS + Serial avec rotation, niveau configurable. Voir `README_logger.md`.
 - **Cartographie modules** – Résumé des responsabilités fichiers dans `README_MAPPING.md`.
 - **Rapport de revue** – Statuts, tests et actions correctives par module dans `docs/REVUE_MODULES.md`.
+- **Diagnostics avancés** – Interprétation des compteurs Watchdog/CAN/UART et procédures SPIFFS dans `docs/diagnostics_avances.md`.
 
 ## Installation
 1. Installer [PlatformIO Core](https://platformio.org/) ou l'extension VS Code correspondante.
