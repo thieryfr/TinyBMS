@@ -45,9 +45,9 @@ Pour garantir la sécurité de la batterie (notamment la vôtre, spécifiée à 
 
 ### 2. Formule Dynamique (Implémentée dans `compute_cell_protection_cvl`)
 
-Le CVL de protection est calculé en fonction de l'erreur ($\text{Erreur}_{\text{V}}$) par rapport au seuil de sécurité.
+Le CVL de protection est calculé en fonction de l'erreur Erreur_V par rapport au seuil de sécurité.
 
-$$\text{Erreur}_{\text{V}} = \text{max\_cell\_voltage\_v} - \text{VCELL\_SAFETY\_THRESHOLD}$$
+Erreur_V = max_cell_voltage_v − VCELL_SAFETY_THRESHOLD
 
 $$\text{CVL}_{\text{protection}} = \begin{cases} \text{VCELL\_CUTOFF\_V} \times \text{N}_{\text{cells}} & \text{si } \text{Erreur}_{\text{V}} \le 0 \text{ (Charge normale)} \\ \text{V}_{\text{absmax}} - (\text{K}_{\text{p}} \times \text{Erreur}_{\text{V}}) & \text{si } \text{Erreur}_{\text{V}} > 0 \text{ (Réduction du CVL)} \end{cases}$$
 
@@ -55,9 +55,42 @@ $$\text{CVL}_{\text{protection}} = \begin{cases} \text{VCELL\_CUTOFF\_V} \times 
 
 À la fin de la fonction `computeCvlLimits`, la limite CVL calculée par la machine à états SOC (`result.cvl_voltage_v`) est comparée à la limite calculée par la protection (`protection_cvl`).
 
-$$\text{CVL}_{\text{final}} = \min(\text{CVL}_{\text{soc\_based}}, \text{CVL}_{\text{protection}})$$
+      CVL_final = min (CVL soc_based , CVL protection)
 
 Ceci assure que la limite de tension la plus restrictive (la plus basse) est toujours transmise au chargeur.
+
+CVL 
+protection
+​	
+ ={ 
+VCELL_CUTOFF_V×N 
+cells
+​	
+ 
+V 
+absmax
+​	
+ −(K 
+p
+​	
+ ×Erreur 
+V
+​	
+ )
+​	
+  
+si Erreur 
+V
+​	
+ ≤0 (Charge normale)
+si Erreur 
+V
+​	
+ >0 (R 
+e
+ˊ
+ duction du CVL)
+​
 
 ---
 
