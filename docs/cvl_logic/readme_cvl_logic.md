@@ -49,7 +49,8 @@ Le CVL de protection est calculé en fonction de l'erreur Erreur_V par rapport a
 
 Erreur_V = max_cell_voltage_v − VCELL_SAFETY_THRESHOLD
 
-$$\text{CVL}_{\text{protection}} = \begin{cases} \text{VCELL\_CUTOFF\_V} \times \text{N}_{\text{cells}} & \text{si } \text{Erreur}_{\text{V}} \le 0 \text{ (Charge normale)} \\ \text{V}_{\text{absmax}} - (\text{K}_{\text{p}} \times \text{Erreur}_{\text{V}}) & \text{si } \text{Erreur}_{\text{V}} > 0 \text{ (Réduction du CVL)} \end{cases}$$
+CVL_protection}} = \begin{cases} 
+VCELL\_CUTOFF\_V} \times \text{N}_{\text{cells}} & \text{si } \text{Erreur}_{\text{V}} \le 0 \text{ (Charge normale)} \\ \text{V}_{\text{absmax}} - (\text{K}_{\text{p}} \times \text{Erreur}_{\text{V}}) & \text{si } \text{Erreur_V > 0 Réduction du CVL \end{cases}
 
 ### 3. Logique de Fusion
 
