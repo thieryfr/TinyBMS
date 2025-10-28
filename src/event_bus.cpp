@@ -196,6 +196,12 @@ bool EventBus::publishLiveData(const TinyBMS_LiveData& data, uint32_t source_id)
     return publish(EVENT_LIVE_DATA_UPDATE, &data, sizeof(data), source_id);
 }
 
+bool EventBus::publishMqttRegister(const MqttRegisterEvent& data,
+                                   uint32_t source_id,
+                                   bool from_isr) {
+    return publish(EVENT_MQTT_REGISTER_VALUE, &data, sizeof(data), source_id, from_isr);
+}
+
 bool EventBus::publishAlarm(uint16_t alarm_code, const char* message,
                             AlarmSeverity severity, float value,
                             uint32_t source_id) {

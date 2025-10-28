@@ -17,6 +17,7 @@
 #include "bridge_core.h"
 #include "tiny_read_mapping.h"
 #include "victron_can_mapping.h"
+#include "mqtt/victron_mqtt_bridge.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -30,10 +31,12 @@ extern SemaphoreHandle_t feedMutex;
 extern Logger logger;
 extern TinyBMSConfigEditor configEditor;
 extern EventBus& eventBus;
+extern mqtt::VictronMqttBridge mqttBridge;
 
 extern TaskHandle_t webServerTaskHandle;
 extern TaskHandle_t websocketTaskHandle;
 extern TaskHandle_t watchdogTaskHandle;
+extern TaskHandle_t mqttTaskHandle;
 
 namespace {
 
@@ -64,6 +67,17 @@ bool createTask(const char* name,
 
     logger.log(LOG_INFO, String("[TASK] ") + name + " created ✓");
     return true;
+}
+
+void mqttLoopTask(void* pvParameters) {
+    auto* client = static_cast<mqtt::VictronMqttBridge*>(pvParameters);
+    const TickType_t delay = pdMS_TO_TICKS(1000);
+    while (true) {
+        if (client) {
+            client->loop();
+        }
+        vTaskDelay(delay);
+    }
 }
 
 } // namespace
@@ -235,6 +249,73 @@ bool initializeBridge() {
     return success;
 }
 
+bool initializeMqttBridge() {
+    logger.log(LOG_INFO, "========================================");
+    logger.log(LOG_INFO, "   MQTT Victron Bridge");
+    logger.log(LOG_INFO, "========================================");
+
+    ConfigManager::MqttConfig mqtt_cfg{};
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        mqtt_cfg = config.mqtt;
+        xSemaphoreGive(configMutex);
+    } else {
+        logger.log(LOG_WARN, "[MQTT] Using default MQTT configuration (mutex unavailable)");
+    }
+
+    mqttBridge.enable(mqtt_cfg.enabled);
+
+    if (!mqtt_cfg.enabled) {
+        logger.log(LOG_INFO, "[MQTT] Disabled via configuration");
+        publishStatusIfPossible("MQTT bridge disabled", STATUS_LEVEL_NOTICE);
+        return true;
+    }
+
+    if (!mqttBridge.begin()) {
+        publishStatusIfPossible("MQTT event subscription failed", STATUS_LEVEL_ERROR);
+        return false;
+    }
+
+    mqtt::BrokerSettings broker{};
+    broker.uri = mqtt_cfg.uri;
+    broker.port = mqtt_cfg.port;
+    broker.client_id = mqtt_cfg.client_id;
+    broker.username = mqtt_cfg.username;
+    broker.password = mqtt_cfg.password;
+    broker.root_topic = mqtt_cfg.root_topic;
+    broker.clean_session = mqtt_cfg.clean_session;
+    broker.use_tls = mqtt_cfg.use_tls;
+    broker.server_certificate = mqtt_cfg.server_certificate;
+    broker.keepalive_seconds = mqtt_cfg.keepalive_seconds;
+    broker.reconnect_interval_ms = mqtt_cfg.reconnect_interval_ms;
+    broker.default_qos = mqtt_cfg.default_qos;
+    broker.retain_by_default = mqtt_cfg.retain_by_default;
+
+    mqttBridge.configure(broker);
+
+    bool connected = mqttBridge.connect();
+    if (connected) {
+        publishStatusIfPossible("MQTT bridge connected", STATUS_LEVEL_NOTICE);
+    } else {
+        publishStatusIfPossible("MQTT bridge connection failed", STATUS_LEVEL_WARNING);
+    }
+
+    bool task_ok = createTask(
+        "MQTT",
+        mqttLoopTask,
+        4096,
+        &mqttBridge,
+        TASK_NORMAL_PRIORITY,
+        &mqttTaskHandle
+    );
+
+    if (!task_ok) {
+        logger.log(LOG_ERROR, "[MQTT] Failed to create loop task");
+        publishStatusIfPossible("MQTT loop task failed", STATUS_LEVEL_ERROR);
+    }
+
+    return task_ok;
+}
+
 // ===================================================================================
 // Config Editor Initialization (placeholder for future implementation)
 // ===================================================================================
@@ -299,6 +380,9 @@ bool initializeSystem() {
 
     const bool wifi_ok = initializeWiFi();
     overall_ok &= wifi_ok;
+
+    const bool mqtt_ok = initializeMqttBridge();
+    overall_ok &= mqtt_ok;
 
     const bool bridge_ok = initializeBridge();
     overall_ok &= bridge_ok;

@@ -112,6 +112,11 @@ class EndToEndFlowTest(unittest.TestCase):
         self.assertIn("uart", stats)
         self.assertIn("keepalive", stats)
         self.assertIn("event_bus", stats)
+        self.assertIn("mqtt", stats)
+
+        mqtt_stats = stats["mqtt"]
+        for key in ("enabled", "configured", "connected", "publish_count"):
+            self.assertIn(key, mqtt_stats)
 
         can_stats = stats["can"]
         self.assertIn("tx_success", can_stats)
