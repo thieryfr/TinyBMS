@@ -9,27 +9,28 @@
 
 /**
  * @brief Initialize all system components (WiFi, SPIFFS, Bridge, Web Server)
+ * @return true if every critical component was initialized successfully
  */
-void initializeSystem();
+bool initializeSystem();
 
 /**
  * @brief Initialize WiFi in STA mode or AP fallback
  */
-void initializeWiFi();
+bool initializeWiFi();
 
 /**
  * @brief Initialize SPIFFS filesystem
  */
-void initializeSPIFFS();
+bool initializeSPIFFS();
 
 /**
  * @brief Initialize TinyBMS-Victron bridge
  */
-void initializeBridge();
+bool initializeBridge();
 
 /**
  * @brief Initialize config editor (placeholder)
  */
-void initializeConfigEditor();
+bool initializeConfigEditor();
 
 #endif // SYSTEM_INIT_H
