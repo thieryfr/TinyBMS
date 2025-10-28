@@ -209,6 +209,15 @@ struct TinyBMS_LiveData {
                       const String* text_value,
                       const uint16_t* words_buffer) {
         applyField(binding.live_field, scaled_value, raw_value);
+
+        if (binding.live_field == TinyLiveDataField::PackMinTemperature && words_buffer != nullptr &&
+            binding.register_count > 0) {
+            const uint16_t word = words_buffer[0];
+            const uint8_t high_byte = static_cast<uint8_t>((word >> 8) & 0xFFu);
+            const int8_t signed_high = static_cast<int8_t>(high_byte);
+            pack_temp_max = static_cast<int16_t>(signed_high) * 10;
+        }
+
         appendSnapshot(binding.metadata_address,
                        binding.value_type,
                        raw_value,
