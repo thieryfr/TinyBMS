@@ -18,22 +18,7 @@
 extern SemaphoreHandle_t uartMutex;
 extern TinyBMS_Victron_Bridge bridge;
 
-// -----------------------------------------------------------------------------
-// Helper constants
-// -----------------------------------------------------------------------------
 namespace {
-
-constexpr uint16_t REG_FULLY_CHARGED_VOLTAGE      = 300;
-constexpr uint16_t REG_FULLY_DISCHARGED_VOLTAGE   = 301;
-constexpr uint16_t REG_CHARGE_FINISHED_CURRENT    = 304;
-constexpr uint16_t REG_BATTERY_CAPACITY           = 306;
-constexpr uint16_t REG_CELL_COUNT                 = 307;
-constexpr uint16_t REG_OVERVOLTAGE_CUTOFF         = 315;
-constexpr uint16_t REG_UNDERVOLTAGE_CUTOFF        = 316;
-constexpr uint16_t REG_DISCHARGE_OVERCURRENT      = 317;
-constexpr uint16_t REG_CHARGE_OVERCURRENT         = 318;
-constexpr uint16_t REG_OVERHEAT_CUTOFF            = 319;
-constexpr uint16_t REG_LOW_TEMP_CHARGE_CUTOFF     = 320;
 
 const char* toStringInternal(TinyBMSConfigError error) {
     switch (error) {
@@ -45,6 +30,14 @@ const char* toStringInternal(TinyBMSConfigError error) {
         case TinyBMSConfigError::WriteFailed:      return "write_failed";
         case TinyBMSConfigError::BridgeUnavailable:return "bridge_unavailable";
         default:                                   return "unknown";
+    }
+}
+
+const char* accessToString(TinyRegisterAccess access) {
+    switch (access) {
+        case TinyRegisterAccess::ReadOnly:  return "ro";
+        case TinyRegisterAccess::WriteOnly: return "wo";
+        case TinyRegisterAccess::ReadWrite: default: return "rw";
     }
 }
 
@@ -74,25 +67,44 @@ void TinyBMSConfigEditor::begin() {
 // JSON helpers
 // -----------------------------------------------------------------------------
 String TinyBMSConfigEditor::getRegistersJSON() {
-    DynamicJsonDocument doc(8192);
+    DynamicJsonDocument doc(12288);
+    doc["success"] = true;
+    doc["count"] = registers_count_;
     JsonArray regs = doc.createNestedArray("registers");
 
     for (uint8_t i = 0; i < registers_count_; i++) {
         JsonObject reg = regs.createNestedObject();
         reg["address"] = registers_[i].address;
-        reg["description"] = registers_[i].description;
+        reg["key"] = registers_[i].key;
+        reg["label"] = registers_[i].description;
+        reg["group"] = registers_[i].group;
         reg["unit"] = registers_[i].unit;
-        reg["min"] = registers_[i].min_value;
-        reg["max"] = registers_[i].max_value;
-        reg["value"] = registers_[i].current_value;
         reg["type"] = registers_[i].type;
         reg["comment"] = registers_[i].comment;
+        reg["access"] = accessToString(registers_[i].access);
+        reg["scale"] = registers_[i].scale;
+        reg["offset"] = registers_[i].offset;
+        reg["step"] = registers_[i].step;
+        reg["precision"] = registers_[i].precision;
+        reg["default"] = registers_[i].default_user_value;
+        reg["raw_default"] = registers_[i].default_raw_value;
+        reg["value"] = registers_[i].current_user_value;
+        reg["raw_value"] = registers_[i].current_raw_value;
         reg["is_enum"] = registers_[i].is_enum;
+
+        if (registers_[i].has_min) {
+            reg["min"] = registers_[i].min_value;
+        }
+        if (registers_[i].has_max) {
+            reg["max"] = registers_[i].max_value;
+        }
 
         if (registers_[i].is_enum) {
             JsonArray enums = reg.createNestedArray("enum_values");
             for (uint8_t j = 0; j < registers_[i].enum_count; j++) {
-                enums.add(registers_[i].enum_values[j]);
+                JsonObject entry = enums.createNestedObject();
+                entry["value"] = registers_[i].enum_values[j].value;
+                entry["label"] = registers_[i].enum_values[j].label;
             }
         }
     }
@@ -106,7 +118,22 @@ String TinyBMSConfigEditor::getRegistersJSON() {
 // -----------------------------------------------------------------------------
 // Register IO
 // -----------------------------------------------------------------------------
-bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
+bool TinyBMSConfigEditor::readRegister(uint16_t address, float &value) {
+    uint16_t raw_value = 0;
+    if (!readRegisterRaw(address, raw_value)) {
+        return false;
+    }
+
+    int8_t idx = findRegisterIndex(address);
+    if (idx >= 0) {
+        value = registers_[idx].current_user_value;
+    } else {
+        value = 0.0f;
+    }
+    return true;
+}
+
+bool TinyBMSConfigEditor::readRegisterRaw(uint16_t address, uint16_t &value) {
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         CONFIG_LOG(LOG_ERROR, "UART mutex unavailable for read");
         return false;
@@ -118,6 +145,8 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
         xSemaphoreGive(uartMutex);
         return false;
     }
+
+    TinyBMSConfigRegister &reg = registers_[idx];
 
     char cmd[16];
     snprintf(cmd, sizeof(cmd), ":0001%02X\r\n", address % 256);
@@ -133,11 +162,18 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
 
             if (c == '\n' && response.startsWith(":") && response.length() >= 8) {
                 String hex_value = response.substring(3, 7);
-                value = strtol(hex_value.c_str(), nullptr, 16);
-                registers_[idx].current_value = value;
+                value = static_cast<uint16_t>(strtol(hex_value.c_str(), nullptr, 16));
+                float user_value = convertRawToUser(reg, value);
+                reg.current_raw_value = value;
+                reg.current_user_value = user_value;
 
-                CONFIG_LOG(LOG_INFO, "Reg " + String(address) + " → " +
-                                     String(value) + " (0x" + String(value, HEX) + ")");
+                String user_str = String(user_value, reg.precision);
+                String log_message = "Reg " + String(address) + " → " + user_str;
+                if (!reg.unit.isEmpty()) {
+                    log_message += " " + reg.unit;
+                }
+                log_message += " (raw=0x" + String(value, HEX) + ")";
+                CONFIG_LOG(LOG_INFO, log_message);
                 xSemaphoreGive(uartMutex);
                 return true;
             }
@@ -150,7 +186,27 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
     return false;
 }
 
-TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, uint16_t value) {
+TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, float user_value) {
+    int8_t idx = findRegisterIndex(address);
+    if (idx < 0) {
+        return TinyBMSConfigError::RegisterNotFound;
+    }
+
+    TinyBMSConfigRegister &reg = registers_[idx];
+    TinyBMSConfigError validation = validateValue(reg, user_value);
+    if (validation != TinyBMSConfigError::None) {
+        return validation;
+    }
+
+    uint16_t raw_value = 0;
+    if (!convertUserToRaw(reg, user_value, raw_value)) {
+        return TinyBMSConfigError::OutOfRange;
+    }
+
+    return writeRegisterRaw(address, raw_value);
+}
+
+TinyBMSConfigError TinyBMSConfigEditor::writeRegisterRaw(uint16_t address, uint16_t value) {
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         CONFIG_LOG(LOG_ERROR, "UART mutex unavailable for write");
         return TinyBMSConfigError::MutexUnavailable;
@@ -163,13 +219,7 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, uint16_t
         return TinyBMSConfigError::RegisterNotFound;
     }
 
-    if (value < registers_[idx].min_value || value > registers_[idx].max_value) {
-        CONFIG_LOG(LOG_WARN, "Value " + String(value) + " out of range [" +
-                               String(registers_[idx].min_value) + "-" +
-                               String(registers_[idx].max_value) + "]");
-        xSemaphoreGive(uartMutex);
-        return TinyBMSConfigError::OutOfRange;
-    }
+    TinyBMSConfigRegister &reg = registers_[idx];
 
     char cmd[20];
     snprintf(cmd, sizeof(cmd), ":0101%02X%04X\r\n", address % 256, value);
@@ -186,9 +236,17 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, uint16_t
 
             if (c == '\n') {
                 if (response.indexOf(":OK") >= 0 || response.indexOf("ACK") >= 0) {
-                    registers_[idx].current_value = value;
-                    CONFIG_LOG(LOG_INFO, "Write OK → Reg " + String(address) +
-                                             " = " + String(value));
+                    float user_value = convertRawToUser(reg, value);
+                    reg.current_raw_value = value;
+                    reg.current_user_value = user_value;
+
+                    String log_message = "Write OK → Reg " + String(address) + " = " +
+                                         String(user_value, reg.precision);
+                    if (!reg.unit.isEmpty()) {
+                        log_message += " " + reg.unit;
+                    }
+                    log_message += " (raw=" + String(value) + ")";
+                    CONFIG_LOG(LOG_INFO, log_message);
                     xSemaphoreGive(uartMutex);
                     return TinyBMSConfigError::None;
                 }
@@ -212,7 +270,7 @@ uint8_t TinyBMSConfigEditor::readAllRegisters() {
     uint8_t success_count = 0;
 
     for (uint8_t i = 0; i < registers_count_; i++) {
-        uint16_t value;
+        float value = 0.0f;
         if (readRegister(registers_[i].address, value)) {
             success_count++;
         }
@@ -241,29 +299,34 @@ TinyBMSConfigResult TinyBMSConfigEditor::writeConfig(const TinyBMS_Config &cfg) 
         return result;
     }
 
-    struct RegisterWrite {
-        uint16_t address;
-        uint16_t value;
-        const char *field_name;
-    } updates[] = {
-        {REG_FULLY_CHARGED_VOLTAGE,    cfg.fully_charged_voltage_mv,       "fully_charged_voltage_mv"},
-        {REG_FULLY_DISCHARGED_VOLTAGE, cfg.fully_discharged_voltage_mv,    "fully_discharged_voltage_mv"},
-        {REG_CHARGE_FINISHED_CURRENT,  cfg.charge_finished_current_ma,     "charge_finished_current_ma"},
-        {REG_BATTERY_CAPACITY,         static_cast<uint16_t>(std::lroundf(cfg.battery_capacity_ah_scaled)), "battery_capacity_ah"},
-        {REG_CELL_COUNT,               cfg.cell_count,                     "cell_count"},
-        {REG_OVERVOLTAGE_CUTOFF,       cfg.overvoltage_cutoff_mv,          "overvoltage_cutoff_mv"},
-        {REG_UNDERVOLTAGE_CUTOFF,      cfg.undervoltage_cutoff_mv,         "undervoltage_cutoff_mv"},
-        {REG_DISCHARGE_OVERCURRENT,    cfg.discharge_overcurrent_a,        "discharge_overcurrent_a"},
-        {REG_CHARGE_OVERCURRENT,       cfg.charge_overcurrent_a,           "charge_overcurrent_a"},
-        {REG_OVERHEAT_CUTOFF,          static_cast<uint16_t>(std::lroundf(cfg.overheat_cutoff_c / 10.0f)), "overheat_cutoff_c"},
-        {REG_LOW_TEMP_CHARGE_CUTOFF,   static_cast<uint16_t>(std::lroundf(cfg.low_temp_charge_cutoff_c / 10.0f)), "low_temp_charge_cutoff_c"}
+    struct ConfigBinding {
+        const char* key;
+        float value;
+    } bindings[] = {
+        {"fully_charged_voltage_mv", static_cast<float>(cfg.fully_charged_voltage_mv)},
+        {"fully_discharged_voltage_mv", static_cast<float>(cfg.fully_discharged_voltage_mv)},
+        {"charge_finished_current_ma", static_cast<float>(cfg.charge_finished_current_ma)},
+        {"battery_capacity_ah", cfg.battery_capacity_ah},
+        {"cell_count", static_cast<float>(cfg.cell_count)},
+        {"overvoltage_cutoff_mv", static_cast<float>(cfg.overvoltage_cutoff_mv)},
+        {"undervoltage_cutoff_mv", static_cast<float>(cfg.undervoltage_cutoff_mv)},
+        {"discharge_overcurrent_a", static_cast<float>(cfg.discharge_overcurrent_a)},
+        {"charge_overcurrent_a", static_cast<float>(cfg.charge_overcurrent_a)},
+        {"overheat_cutoff_c", cfg.overheat_cutoff_c},
+        {"low_temp_charge_cutoff_c", cfg.low_temp_charge_cutoff_c}
     };
 
-    for (const auto &update : updates) {
-        TinyBMSConfigError err = writeRegister(update.address, update.value);
+    for (const auto &binding : bindings) {
+        int8_t idx = findRegisterIndexByKey(String(binding.key));
+        if (idx < 0) {
+            CONFIG_LOG(LOG_DEBUG, String("Skipping config field '") + binding.key + "' (no register)");
+            continue;
+        }
+
+        TinyBMSConfigError err = writeRegister(registers_[idx].address, binding.value);
         if (err != TinyBMSConfigError::None) {
             result.error = err;
-            result.message = String("Failed to write ") + update.field_name +
+            result.message = String("Failed to write ") + binding.key +
                              " (" + tinybmsConfigErrorToString(err) + ")";
             CONFIG_LOG(LOG_ERROR, result.message);
             return result;
@@ -288,155 +351,135 @@ int8_t TinyBMSConfigEditor::findRegisterIndex(uint16_t address) const {
     return -1;
 }
 
-void TinyBMSConfigEditor::addRegister(uint16_t address,
-                                      const String &description,
-                                      const String &unit,
-                                      uint16_t min_value,
-                                      uint16_t max_value,
-                                      const String &type,
-                                      const String &comment,
-                                      uint16_t default_value) {
-    if (registers_count_ >= MAX_REGISTERS) {
-        CONFIG_LOG(LOG_WARN, "Register table full, skipping address " + String(address));
+void TinyBMSConfigEditor::initializeRegisters() {
+    registers_count_ = 0;
+    const auto &metadata = getTinyRwRegisters();
+    if (metadata.empty()) {
+        CONFIG_LOG(LOG_ERROR, "[CONFIG_EDITOR] tiny_rw_bms mapping unavailable");
         return;
     }
 
-    TinyBMSConfigRegister &reg = registers_[registers_count_++];
-    reg.address = address;
-    reg.description = description;
-    reg.unit = unit;
-    reg.min_value = min_value;
-    reg.max_value = max_value;
-    reg.current_value = default_value;
-    reg.type = type;
-    reg.comment = comment;
-    reg.is_enum = false;
-    reg.enum_count = 0;
-}
+    for (const auto &meta : metadata) {
+        if (registers_count_ >= MAX_REGISTERS) {
+            CONFIG_LOG(LOG_WARN, "Register catalog full, skipping " + String(meta.address));
+            break;
+        }
 
-void TinyBMSConfigEditor::addEnumRegister(uint16_t address,
-                                          const String &description,
-                                          const String &unit,
-                                          uint16_t min_value,
-                                          uint16_t max_value,
-                                          const String &type,
-                                          const String &comment,
-                                          const String enum_values[],
-                                          uint8_t enum_count,
-                                          uint16_t default_value) {
-    addRegister(address, description, unit, min_value, max_value, type, comment, default_value);
-
-    TinyBMSConfigRegister &reg = registers_[registers_count_ - 1];
-    reg.is_enum = true;
-    reg.enum_count = std::min<uint8_t>(enum_count, 10);
-    for (uint8_t i = 0; i < reg.enum_count; ++i) {
-        reg.enum_values[i] = enum_values[i];
+        TinyBMSConfigRegister &reg = registers_[registers_count_++];
+        reg.address = meta.address;
+        reg.key = meta.key;
+        reg.description = meta.label;
+        reg.group = meta.group;
+        reg.unit = meta.unit;
+        reg.type = meta.type;
+        reg.comment = meta.comment;
+        reg.access = meta.access;
+        reg.value_class = meta.value_class;
+        reg.has_min = meta.has_min;
+        reg.min_value = meta.min_value;
+        reg.has_max = meta.has_max;
+        reg.max_value = meta.max_value;
+        reg.scale = meta.scale;
+        reg.offset = meta.offset;
+        reg.step = meta.step;
+        reg.precision = meta.precision;
+        reg.default_raw_value = meta.default_raw;
+        reg.default_user_value = meta.default_value;
+        reg.current_raw_value = meta.default_raw;
+        reg.current_user_value = meta.default_value;
+        reg.is_enum = !meta.enum_values.empty();
+        reg.enum_count = std::min<uint8_t>(meta.enum_values.size(), static_cast<uint8_t>(sizeof(reg.enum_values) / sizeof(reg.enum_values[0])));
+        for (uint8_t i = 0; i < reg.enum_count; ++i) {
+            reg.enum_values[i].value = meta.enum_values[i].value;
+            reg.enum_values[i].label = meta.enum_values[i].label;
+        }
     }
 }
 
-void TinyBMSConfigEditor::initializeRegisters() {
-    registers_count_ = 0;
+int8_t TinyBMSConfigEditor::findRegisterIndexByKey(const String &key) const {
+    if (key.isEmpty()) {
+        return -1;
+    }
 
-    addRegister(REG_FULLY_CHARGED_VOLTAGE,
-                "Fully Charged Voltage",
-                "mV",
-                1200,
-                4500,
-                "UINT16",
-                "Cell voltage when considered fully charged",
-                3650);
+    for (uint8_t i = 0; i < registers_count_; ++i) {
+        if (registers_[i].key == key) {
+            return i;
+        }
+    }
+    return -1;
+}
 
-    addRegister(REG_FULLY_DISCHARGED_VOLTAGE,
-                "Fully Discharged Voltage",
-                "mV",
-                1000,
-                3500,
-                "UINT16",
-                "Cell voltage considered fully discharged",
-                3250);
+bool TinyBMSConfigEditor::convertUserToRaw(const TinyBMSConfigRegister &reg, float user_value, uint16_t &raw) const {
+    if (reg.is_enum) {
+        uint16_t candidate = static_cast<uint16_t>(std::lround(user_value));
+        if (reg.enum_count > 0) {
+            bool found = false;
+            for (uint8_t i = 0; i < reg.enum_count; ++i) {
+                if (reg.enum_values[i].value == candidate) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        raw = candidate;
+        return true;
+    }
 
-    addRegister(REG_CHARGE_FINISHED_CURRENT,
-                "Charge Finished Current",
-                "mA",
-                100,
-                5000,
-                "UINT16",
-                "Current threshold signalling charge completion",
-                1000);
+    float denominator = std::abs(reg.scale) < 1e-6f ? 1.0f : reg.scale;
+    float scaled = (user_value - reg.offset) / denominator;
 
-    addRegister(REG_BATTERY_CAPACITY,
-                "Battery Capacity",
-                "0.01Ah",
-                10,
-                65500,
-                "UINT16",
-                "Battery capacity used for SOC calculations",
-                3140);
+    if (reg.value_class == TinyRegisterValueClass::Int) {
+        long candidate = std::lround(scaled);
+        if (candidate < -32768 || candidate > 32767) {
+            return false;
+        }
+        raw = static_cast<uint16_t>(static_cast<int16_t>(candidate));
+        return true;
+    }
 
-    const String cell_counts[] = {"4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"};
-    addEnumRegister(REG_CELL_COUNT,
-                    "Number of Series Cells",
-                    "cells",
-                    4,
-                    16,
-                    "UINT16",
-                    "Configured number of series-connected cells",
-                    cell_counts,
-                    sizeof(cell_counts) / sizeof(cell_counts[0]),
-                    16);
+    long candidate = std::lround(scaled);
+    if (candidate < 0 || candidate > 65535) {
+        return false;
+    }
+    raw = static_cast<uint16_t>(candidate);
+    return true;
+}
 
-    addRegister(REG_OVERVOLTAGE_CUTOFF,
-                "Over-voltage Cutoff",
-                "mV",
-                1200,
-                4500,
-                "UINT16",
-                "Cell voltage threshold to stop charging",
-                3800);
+float TinyBMSConfigEditor::convertRawToUser(const TinyBMSConfigRegister &reg, uint16_t raw) const {
+    float base = static_cast<float>(raw);
+    if (reg.value_class == TinyRegisterValueClass::Int) {
+        base = static_cast<float>(static_cast<int16_t>(raw));
+    }
+    return base * reg.scale + reg.offset;
+}
 
-    addRegister(REG_UNDERVOLTAGE_CUTOFF,
-                "Under-voltage Cutoff",
-                "mV",
-                800,
-                3500,
-                "UINT16",
-                "Cell voltage threshold to stop discharging",
-                2800);
+TinyBMSConfigError TinyBMSConfigEditor::validateValue(const TinyBMSConfigRegister &reg, float user_value) const {
+    if (reg.is_enum) {
+        uint16_t candidate = static_cast<uint16_t>(std::lround(user_value));
+        if (reg.enum_count > 0) {
+            for (uint8_t i = 0; i < reg.enum_count; ++i) {
+                if (reg.enum_values[i].value == candidate) {
+                    return TinyBMSConfigError::None;
+                }
+            }
+            CONFIG_LOG(LOG_WARN, "Enum value " + String(candidate) + " not allowed for register " + String(reg.address));
+            return TinyBMSConfigError::OutOfRange;
+        }
+        return TinyBMSConfigError::None;
+    }
 
-    addRegister(REG_DISCHARGE_OVERCURRENT,
-                "Discharge Over-current Cutoff",
-                "A",
-                1,
-                750,
-                "UINT16",
-                "Current limit for discharge protection",
-                65);
+    if (reg.has_min && user_value < reg.min_value - 0.0001f) {
+        CONFIG_LOG(LOG_WARN, "Value " + String(user_value, reg.precision) + " below minimum " + String(reg.min_value, reg.precision) + " for register " + String(reg.address));
+        return TinyBMSConfigError::OutOfRange;
+    }
+    if (reg.has_max && user_value > reg.max_value + 0.0001f) {
+        CONFIG_LOG(LOG_WARN, "Value " + String(user_value, reg.precision) + " above maximum " + String(reg.max_value, reg.precision) + " for register " + String(reg.address));
+        return TinyBMSConfigError::OutOfRange;
+    }
 
-    addRegister(REG_CHARGE_OVERCURRENT,
-                "Charge Over-current Cutoff",
-                "A",
-                1,
-                750,
-                "UINT16",
-                "Current limit for charge protection",
-                90);
-
-    addRegister(REG_OVERHEAT_CUTOFF,
-                "Overheat Cutoff",
-                "°C",
-                20,
-                90,
-                "UINT16",
-                "Temperature threshold to stop charging/discharging",
-                60);
-
-    addRegister(REG_LOW_TEMP_CHARGE_CUTOFF,
-                "Low Temperature Charge Cutoff",
-                "°C",
-                0,
-                50,
-                "UINT16",
-                "Temperature below which charging is disabled",
-                0);
+    return TinyBMSConfigError::None;
 }
 

@@ -231,14 +231,14 @@ String getConfigJSON() {
     config["fully_charged_voltage_mv"] = cfg.fully_charged_voltage_mv;
     config["fully_discharged_voltage_mv"] = cfg.fully_discharged_voltage_mv;
     config["charge_finished_current_ma"] = cfg.charge_finished_current_ma;
-    config["battery_capacity_ah"] = cfg.battery_capacity_ah_scaled / 100.0;
+    config["battery_capacity_ah"] = cfg.battery_capacity_ah;
     config["cell_count"] = cfg.cell_count;
     config["overvoltage_cutoff_mv"] = cfg.overvoltage_cutoff_mv;
     config["undervoltage_cutoff_mv"] = cfg.undervoltage_cutoff_mv;
     config["discharge_overcurrent_a"] = cfg.discharge_overcurrent_a;
     config["charge_overcurrent_a"] = cfg.charge_overcurrent_a;
-    config["overheat_cutoff_c"] = cfg.overheat_cutoff_c / 10.0;
-    config["low_temp_charge_cutoff_c"] = cfg.low_temp_charge_cutoff_c / 10.0;
+    config["overheat_cutoff_c"] = cfg.overheat_cutoff_c;
+    config["low_temp_charge_cutoff_c"] = cfg.low_temp_charge_cutoff_c;
 
     String output;
     serializeJson(doc, output);
