@@ -4,6 +4,8 @@
  */
 #include <Arduino.h>
 #include <algorithm>
+#include <array>
+#include <map>
 #include "bridge_uart.h"
 #include "logger.h"
 #include "event_bus.h"
@@ -24,8 +26,20 @@ extern SemaphoreHandle_t configMutex;
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[UART] ") + (msg)); } while(0)
 
 namespace {
-constexpr uint16_t TINY_REG_VOLTAGE = 36;
-constexpr uint16_t TINY_READ_COUNT = 17;
+struct TinyRegisterReadBlock {
+    uint16_t start;
+    uint16_t count;
+};
+
+constexpr TinyRegisterReadBlock kTinyReadBlocks[] = {
+    {32, 21},   // Lifetime counter + primary live data window
+    {102, 2},   // Charge/discharge limits
+    {305, 3},   // Victron keep-alive and handshake window
+    {500, 6}    // Manufacturer / firmware / family strings
+};
+
+constexpr size_t kTinyReadBlockCount = sizeof(kTinyReadBlocks) / sizeof(kTinyReadBlocks[0]);
+constexpr uint16_t kTinyMaxReadWords = 32;
 }
 
 bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
@@ -106,27 +120,90 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
         if (now - bridge->last_uart_poll_ms_ >= bridge->uart_poll_interval_ms_) {
             TinyBMS_LiveData d{};
             d.resetSnapshots();
-            uint16_t regs[TINY_READ_COUNT] = {0};
 
-            if (bridge->readTinyRegisters(TINY_REG_VOLTAGE, TINY_READ_COUNT, regs)) {
+            std::map<uint16_t, uint16_t> register_values;
+            std::array<uint16_t, kTinyMaxReadWords> buffer{};
+            bool read_success = true;
+
+            for (size_t i = 0; i < kTinyReadBlockCount; ++i) {
+                const auto& block = kTinyReadBlocks[i];
+                std::fill(buffer.begin(), buffer.end(), 0);
+                if (!bridge->readTinyRegisters(block.start, block.count, buffer.data())) {
+                    read_success = false;
+                    break;
+                }
+
+                for (uint16_t word = 0; word < block.count; ++word) {
+                    register_values[block.start + word] = buffer[word];
+                }
+            }
+
+            if (read_success) {
                 const auto& bindings = getTinyRegisterBindings();
                 for (const auto& binding : bindings) {
-                    if (binding.raw_index >= TINY_READ_COUNT) {
+                    if (binding.register_count == 0) {
                         continue;
                     }
 
-                    int32_t raw_value = binding.is_signed
-                        ? static_cast<int16_t>(regs[binding.raw_index])
-                        : static_cast<int32_t>(regs[binding.raw_index]);
+                    uint16_t raw_words[TINY_REGISTER_MAX_WORDS] = {0};
+                    bool has_all_words = true;
+                    for (uint8_t idx = 0; idx < binding.register_count; ++idx) {
+                        auto it = register_values.find(static_cast<uint16_t>(binding.register_address + idx));
+                        if (it == register_values.end()) {
+                            has_all_words = false;
+                            break;
+                        }
+                        raw_words[idx] = it->second;
+                    }
+
+                    if (!has_all_words) {
+                        continue;
+                    }
+
+                    int32_t raw_value = 0;
+                    if (binding.value_type == TinyRegisterValueType::String) {
+                        raw_value = 0;
+                    } else if (binding.value_type == TinyRegisterValueType::Uint32 && binding.register_count >= 2) {
+                        raw_value = static_cast<int32_t>((static_cast<uint32_t>(raw_words[0]) << 16) |
+                                                         static_cast<uint32_t>(raw_words[1]));
+                    } else {
+                        raw_value = binding.is_signed
+                            ? static_cast<int32_t>(static_cast<int16_t>(raw_words[0]))
+                            : static_cast<int32_t>(raw_words[0]);
+                    }
+
                     float scaled_value = static_cast<float>(raw_value) * binding.scale;
-                    d.applyBinding(binding, raw_value, scaled_value);
+
+                    String text_value;
+                    if (binding.value_type == TinyRegisterValueType::String) {
+                        text_value.reserve(binding.register_count * 2);
+                        for (uint8_t idx = 0; idx < binding.register_count; ++idx) {
+                            char high = static_cast<char>((raw_words[idx] >> 8) & 0xFF);
+                            char low = static_cast<char>(raw_words[idx] & 0xFF);
+                            if (high != '\0') {
+                                text_value += high;
+                            }
+                            if (low != '\0') {
+                                text_value += low;
+                            }
+                        }
+                    } else if (binding.metadata_address == 501 && binding.register_count >= 2) {
+                        uint16_t major = raw_words[0];
+                        uint16_t minor = raw_words[1];
+                        text_value = String(major) + "." + String(minor);
+                    }
+
+                    const String* text_ptr = text_value.length() > 0 ? &text_value : nullptr;
+                    d.applyBinding(binding, raw_value, scaled_value, text_ptr, raw_words);
                 }
 
                 d.cell_imbalance_mv = (d.max_cell_mv > d.min_cell_mv)
                     ? static_cast<uint16_t>(d.max_cell_mv - d.min_cell_mv)
                     : 0;
 
-                d.online_status = 0x91;
+                if (d.online_status == 0) {
+                    d.online_status = 0x91;
+                }
 
                 bridge->live_data_ = d;
                 eventBus.publishLiveData(d, SOURCE_ID_UART);

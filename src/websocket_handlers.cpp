@@ -76,12 +76,19 @@ void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
         reg["word_count"] = snap.raw_word_count;
 
         const TinyRegisterRuntimeBinding* binding = findTinyRegisterBinding(snap.address);
-        float scaled_value = static_cast<float>(snap.raw_value);
-        if (binding) {
-            scaled_value = static_cast<float>(snap.raw_value) * binding->scale;
+        if (binding && binding->value_type == TinyRegisterValueType::String && snap.has_text) {
+            reg["value"] = snap.text_value;
+        } else {
+            float scaled_value = static_cast<float>(snap.raw_value);
+            if (binding) {
+                scaled_value = static_cast<float>(snap.raw_value) * binding->scale;
+            }
+            reg["value"] = scaled_value;
         }
-        reg["value"] = scaled_value;
         reg["valid"] = snap.raw_word_count > 0;
+        if (snap.has_text) {
+            reg["text"] = snap.text_value;
+        }
 
         const TinyRegisterMetadata* meta = findTinyRegisterMetadata(snap.address);
         if (meta) {

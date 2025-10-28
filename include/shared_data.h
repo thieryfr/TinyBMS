@@ -7,16 +7,22 @@
 #define SHARED_DATA_H
 
 #include <Arduino.h>
+#include <algorithm>
 
 #include "tiny_read_mapping.h"
 
-constexpr size_t TINY_LIVEDATA_MAX_REGISTERS = 10;
+constexpr size_t TINY_LIVEDATA_MAX_REGISTERS = 32;
+
+constexpr size_t TINY_REGISTER_MAX_WORDS = 8;
 
 struct TinyRegisterSnapshot {
     int32_t raw_value;
     uint16_t address;
     uint8_t raw_word_count;
     uint8_t type;
+    bool has_text;
+    String text_value;
+    uint16_t raw_words[TINY_REGISTER_MAX_WORDS];
 };
 
 // ====================================================================================
@@ -67,9 +73,10 @@ struct TinyBMS_LiveData {
 
     bool appendSnapshot(uint16_t address,
                         TinyRegisterValueType type,
-                        float /*scaled_value*/,
                         int32_t raw_value,
-                        uint8_t raw_words) {
+                        uint8_t raw_words,
+                        const String* text_value,
+                        const uint16_t* words_buffer) {
         if (register_count >= TINY_LIVEDATA_MAX_REGISTERS) {
             return false;
         }
@@ -79,6 +86,26 @@ struct TinyBMS_LiveData {
         snap.type = static_cast<uint8_t>(type);
         snap.raw_value = raw_value;
         snap.raw_word_count = raw_words;
+        snap.has_text = (text_value != nullptr && text_value->length() > 0);
+        if (snap.has_text) {
+            snap.text_value = *text_value;
+        } else {
+            snap.text_value = String();
+        }
+
+        if (words_buffer && raw_words > 0) {
+            uint8_t copy_count = std::min<uint8_t>(raw_words, static_cast<uint8_t>(TINY_REGISTER_MAX_WORDS));
+            for (uint8_t i = 0; i < copy_count; ++i) {
+                snap.raw_words[i] = words_buffer[i];
+            }
+            for (uint8_t i = copy_count; i < TINY_REGISTER_MAX_WORDS; ++i) {
+                snap.raw_words[i] = 0;
+            }
+        } else {
+            for (uint8_t i = 0; i < TINY_REGISTER_MAX_WORDS; ++i) {
+                snap.raw_words[i] = 0;
+            }
+        }
         return true;
     }
 
@@ -150,13 +177,16 @@ struct TinyBMS_LiveData {
 
     void applyBinding(const TinyRegisterRuntimeBinding& binding,
                       int32_t raw_value,
-                      float scaled_value) {
+                      float scaled_value,
+                      const String* text_value,
+                      const uint16_t* words_buffer) {
         applyField(binding.live_field, scaled_value, raw_value);
         appendSnapshot(binding.metadata_address,
                        binding.value_type,
-                       scaled_value,
                        raw_value,
-                       binding.register_count);
+                       binding.register_count,
+                       text_value,
+                       words_buffer);
     }
 };
 

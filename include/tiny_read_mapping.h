@@ -51,7 +51,7 @@ struct TinyRegisterMetadata {
 };
 
 struct TinyRegisterRuntimeBinding {
-    uint8_t raw_index = 0;
+    uint16_t register_address = 0;
     uint8_t register_count = 1;
     uint16_t metadata_address = 0;
     TinyRegisterValueType value_type = TinyRegisterValueType::Unknown;
