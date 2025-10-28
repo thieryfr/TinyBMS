@@ -144,11 +144,11 @@
       "tiny_scale_unit": "ASCII",
       "comment": "Read via UART/CAN (Reg:500)"
     },
-    "501.502": {
+    "501": {
       "tiny_name": "Firmware Version",
       "tiny_type": "UINT16",
       "tiny_scale_unit": "-",
-      "comment": "Read via UART/CAN (Reg:501.502)"
+      "comment": "Read via UART/CAN (Reg:501)"
     },
     "502": {
       "tiny_name": "Battery Family",
