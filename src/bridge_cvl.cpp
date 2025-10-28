@@ -1,4 +1,3 @@
-
 /**
  * @file bridge_cvl.cpp
  * @brief CVL task (simple demo implementation)
@@ -15,7 +14,7 @@ extern EventBus& eventBus;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 
-#define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CVL] ") + msg); } while(0)
+#define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CVL] ") + (msg)); } while(0)
 
 void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
     auto *bridge = static_cast<TinyBMS_Victron_Bridge*>(pvParameters);
@@ -23,11 +22,11 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
 
     while (true) {
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-        if (now - bridge->last_cvl_update_ms_ >= CVL_UPDATE_INTERVAL_MS) {
+        if (now - bridge->last_cvl_update_ms_ >= bridge->cvl_update_interval_ms_) {
             TinyBMS_LiveData d;
             if (eventBus.getLatestLiveData(d)) {
                 bridge->stats.cvl_current_v = d.voltage;
-                bridge->stats.cvl_state = CVL_BULK_ABSORPTION;
+                bridge->stats.cvl_state = CVL_FLOAT;
                 logger.log(LOG_DEBUG, String("[CVL] setpoint=") + String(bridge->stats.cvl_current_v, 2) + "V");
             }
             bridge->last_cvl_update_ms_ = now;
@@ -37,6 +36,6 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
                 xSemaphoreGive(feedMutex);
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(CVL_UPDATE_INTERVAL_MS));
+        vTaskDelay(pdMS_TO_TICKS(bridge->cvl_update_interval_ms_));
     }
 }

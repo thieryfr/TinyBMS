@@ -1,10 +1,10 @@
-
 /**
  * @file bridge_can.cpp
  * @brief CAN TX (PGNs) + RX polling (KeepAlive)
  */
 #include <Arduino.h>
 #include <string.h>
+#include <math.h>
 #include "bridge_can.h"
 #include "bridge_keepalive.h"
 #include "logger.h"
@@ -20,7 +20,7 @@ extern ConfigManager config;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 
-#define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CAN] ") + msg); } while(0)
+#define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CAN] ") + (msg)); } while(0)
 
 static inline void put_u16_le(uint8_t* b, uint16_t v){ b[0]=v & 0xFF; b[1]=(v>>8)&0xFF; }
 static inline void put_s16_le(uint8_t* b, int16_t v){ b[0]=v & 0xFF; b[1]=(v>>8)&0xFF; }
@@ -29,7 +29,7 @@ static inline int16_t  clamp_s16(int v){ return (int16_t)  (v<-32768?-32768:(v>3
 static inline int      round_i(float x){ return (int)lrintf(x); }
 
 bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data, uint8_t dlc) {
-    CanFrame f; f.id = pgn_id; f.dlc = dlc; memcpy(f.data, data, dlc);
+    CanFrame f; f.id = pgn_id; f.dlc = dlc; f.extended = false; memcpy(f.data, data, dlc);
     bool ok = CanDriver::send(f);
     if (ok) {
         stats.can_tx_count++;
@@ -42,7 +42,6 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     return ok;
 }
 
-// ---- PGN 0x356 (U/I/T)
 void TinyBMS_Victron_Bridge::buildPGN_0x356(uint8_t* d){
     const auto& ld = live_data_;
     uint16_t u_001V = clamp_u16(round_i(ld.voltage * 100.0f));
@@ -54,7 +53,6 @@ void TinyBMS_Victron_Bridge::buildPGN_0x356(uint8_t* d){
     d[6]=d[7]=0;
 }
 
-// ---- PGN 0x355 (SOC/SOH in 0.1%)
 void TinyBMS_Victron_Bridge::buildPGN_0x355(uint8_t* d){
     const auto& ld = live_data_;
     uint16_t soc_01 = clamp_u16(round_i(ld.soc_percent * 10.0f));
@@ -64,7 +62,6 @@ void TinyBMS_Victron_Bridge::buildPGN_0x355(uint8_t* d){
     d[4]=d[5]=d[6]=d[7]=0;
 }
 
-// ---- PGN 0x351 (CVL/CCL/DCL)
 void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
     const auto& ld = live_data_;
     uint16_t cvl_001V = clamp_u16(round_i(ld.voltage * 100.0f));
@@ -76,58 +73,44 @@ void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
     d[6]=d[7]=0;
 }
 
-// ---- PGN 0x35A (Alarms/Warnings), 2-bit encoding (00 normal, 01 warn, 10 alarm)
 void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
     memset(d, 0, 8);
     const auto& ld = live_data_;
-
-    const float UV = 44.0f;
-    const float OV = 58.4f;
-    const float OT = 55.0f;
-    const float LT = 0.0f;
-    const uint16_t IMB = 200;
-    const float SOC_LOW = 10.0f;
-    const float SOC_HIGH = 99.0f;
-    const uint16_t MINLIM = 10; // 1.0A
+    const auto& th = config.victron.thresholds;
 
     const float V = ld.voltage;
-    const float T = ld.temperature/10.0f;
+    const float T = ld.temperature / 10.0f;
+    const uint16_t imbalance = ld.cell_imbalance_mv;
 
-    uint8_t alarms = 0;
-    uint8_t warns  = 0;
-
-    // helpers: 0=no, 1=warn, 2=alarm
+    uint8_t b0 = 0;
     auto set = [](bool condAlarm, bool condWarn)->uint8_t{
         return condAlarm ? 2 : (condWarn ? 1 : 0);
     };
 
-    // Byte0: pack 4x2-bit fields (UnderV, OverV, OverT, LowTCharge)
-    uint8_t b0 = 0;
-    b0 = encode2bit(b0, 0, set(V < UV && V > 0.1f, false));         // UnderVoltage
-    b0 = encode2bit(b0, 1, set(V > OV, false));                     // OverVoltage
-    b0 = encode2bit(b0, 2, set(T > OT, false));                     // OverTemperature
-    b0 = encode2bit(b0, 3, set(T < LT && ld.current > 3.0f, false));// LowTempCharge
+    b0 = encode2bit(b0, 0, set(V < th.undervoltage_v && V > 0.1f, false));
+    b0 = encode2bit(b0, 1, set(V > th.overvoltage_v, false));
+    b0 = encode2bit(b0, 2, set(T > th.overtemp_c, false));
+    b0 = encode2bit(b0, 3, set(T < th.low_temp_charge_c && ld.current > 3.0f, false));
     d[0] = b0;
 
-    // Byte1: pack 4x2-bit fields (Imbalance, Comms, SOC low/high/derating aggregated as warn)
     uint8_t b1 = 0;
-    b1 = encode2bit(b1, 0, set(ld.cell_imbalance_mv > IMB, (ld.cell_imbalance_mv > 100))); // Imbalance
-    bool commErr = (stats.uart_errors > 0 || stats.can_tx_errors > 0);
-    b1 = encode2bit(b1, 1, set(false, commErr)); // Communications issues as warning
-    bool lowSOC  = (ld.soc_percent <= SOC_LOW);
-    bool highSOC = (ld.soc_percent >= SOC_HIGH);
-    bool derate  = (ld.max_charge_current <= MINLIM || ld.max_discharge_current <= MINLIM);
-    // pack lowSOC as warn, highSOC as warn (info), derate as warn (use remaining 2-bit slots)
-    b1 = encode2bit(b1, 2, set(false, lowSOC));  // Low SOC
-    b1 = encode2bit(b1, 3, set(false, derate));  // Derating
+    b1 = encode2bit(b1, 0, set(imbalance > th.imbalance_alarm_mv, imbalance > th.imbalance_warn_mv));
+    bool commErr = (stats.uart_errors > 0 || stats.can_tx_errors > 0 || !stats.victron_keepalive_ok);
+    b1 = encode2bit(b1, 1, set(false, commErr));
+
+    bool lowSOC  = (ld.soc_percent <= th.soc_low_percent);
+    bool highSOC = (ld.soc_percent >= th.soc_high_percent);
+    uint16_t minLimit = static_cast<uint16_t>(th.derate_current_a * 10.0f);
+    bool derate = (ld.max_charge_current <= minLimit || ld.max_discharge_current <= minLimit);
+
+    b1 = encode2bit(b1, 2, set(false, lowSOC));
+    b1 = encode2bit(b1, 3, set(false, derate || highSOC));
     d[1] = b1;
 
-    // Byte7: System status (optional): 01 = online, 10 = offline/alarm
     d[7] = 0;
-    d[7] = encode2bit(d[7], 0, (commErr || (V<UV) || (V>OV) || (T>OT)) ? 2 : 1);
+    d[7] = encode2bit(d[7], 0, (commErr || (V<th.undervoltage_v) || (V>th.overvoltage_v) || (T>th.overtemp_c)) ? 2 : 1);
 }
 
-// ---- PGN 0x35E / 0x35F ASCII 8
 void TinyBMS_Victron_Bridge::buildPGN_0x35E(uint8_t* d){
     memset(d, 0, 8);
     const String& m = config.victron.manufacturer_name;
@@ -146,11 +129,9 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
     while (true) {
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-        // ---- RX KeepAlive polling
         bridge->keepAliveProcessRX(now);
 
-        // ---- TX PGNs @ 1 Hz
-        if (now - bridge->last_pgn_update_ms_ >= PGN_UPDATE_INTERVAL_MS) {
+        if (now - bridge->last_pgn_update_ms_ >= bridge->pgn_update_interval_ms_) {
             TinyBMS_LiveData d;
             if (eventBus.getLatestLiveData(d)) bridge->live_data_ = d;
 
@@ -163,7 +144,6 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
             memset(p,0,8); bridge->buildPGN_0x35E(p); bridge->sendVictronPGN(VICTRON_PGN_MANUFACTURER, p, 8);
             memset(p,0,8); bridge->buildPGN_0x35F(p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_INFO, p, 8);
 
-            // TX KeepAlive every second
             bridge->keepAliveSend();
 
             bridge->last_pgn_update_ms_ = now;
