@@ -1,7 +1,7 @@
 # TinyBMS-Victron Bridge
 
 ## Description
-Pont embarqué permettant de convertir les trames TinyBMS (UART/Modbus) vers le protocole CAN-BMS Victron. L'application s'appuie sur FreeRTOS, un Event Bus centralisé et une interface web/REST pour la supervision.
+Pont embarqué permettant de convertir les trames TinyBMS (UART/Modbus) vers le protocole CAN-BMS Victron. La pile logicielle combine FreeRTOS (tâches dédiées UART / CAN / CVL / Web), un Event Bus centralisé avec cache et statistiques, un serveur asynchrone (HTTP + WebSocket) et un système de configuration JSON persisté sur SPIFFS.
 
 ## Structure du Projet
 ```
@@ -14,10 +14,10 @@ TinyBMS/
 ├── README_cvl.md                   # Algorithme CVL
 ├── README_watchdog.md              # Gestion watchdog
 ├── README_logger.md                # Journalisation
-├── docs/
+├── docs/                            # Documentation technique & bilans de revue
 │   └── REVUE_MODULES.md            # Rapport de cohérence détaillé
 ├── data/                           # Contenu SPIFFS (config + UI)
-├── include/                        # Headers partagés
+├── include/                        # Headers partagés (API modules)
 ├── src/                            # Implémentations C++/INO
 ├── tests/                          # Tests natifs & intégration
 ├── scripts/                        # Outils de déploiement
@@ -25,14 +25,24 @@ TinyBMS/
 └── partitions.csv                  # Partitionnement ESP32
 ```
 
+## Fonctionnalités principales
+- **Acquisition TinyBMS** : tâche UART avec retries configurables, statistiques détaillées et publication automatique sur l'Event Bus (`src/bridge_uart.cpp`).
+- **Publication Victron CAN-BMS** : génération des PGN 0x351/0x355/0x356/0x35A/0x35E/0x35F, supervision keep-alive et alarmes configurables (`src/bridge_can.cpp`, `src/bridge_keepalive.cpp`).
+- **Algorithme CVL évolué** : calcul dynamique CVL/CCL/DCL multi-états avec hystérésis et événements dédiés (`src/cvl_logic.cpp`, `src/bridge_cvl.cpp`).
+- **Event Bus** : singleton FreeRTOS publish/subscribe avec cache par type, statistiques et diffusion WebSocket (`src/event_bus.cpp`).
+- **Configuration JSON** : chargement/sauvegarde SPIFFS, instantanés protégés par mutex et API REST pour édition (`src/config_manager.cpp`, `src/web_routes_api.cpp`).
+- **Supervision Web** : serveur HTTP/WS asynchrone, builders JSON riches et diffusion WebSocket (`src/web_server_setup.cpp`, `src/json_builders.cpp`, `src/websocket_handlers.cpp`).
+- **Watchdog & journalisation** : gestion centralisée Task WDT + logs Serial/SPIFFS avec rotation (`src/watchdog_manager.cpp`, `src/logger.cpp`).
+
 ## Modules
-- **Initialisation système** – Création des mutex, montage SPIFFS, WiFi, lancement des tâches FreeRTOS. Voir `README_system_init.md`.
-- **Gestion de configuration** – Lecture/écriture JSON SPIFFS, notifications Event Bus. Voir `README_config_manager.md`.
-- **Event Bus** – Publish/subscribe, cache d'événements, statistiques. Voir `README_event_bus.md`.
+- **Initialisation système** – Création des mutex, montage SPIFFS, Event Bus, WiFi, lancement des tâches FreeRTOS (bridge, web, watchdog). Voir `README_system_init.md`.
+- **Gestion de configuration** – Lecture/écriture JSON SPIFFS, notifications Event Bus, exposée via API REST. Voir `README_config_manager.md`.
+- **Event Bus** – Publish/subscribe thread-safe, cache par type, statistiques et messages de statut. Voir `README_event_bus.md`.
 - **Acquisition UART TinyBMS** – Modbus RTU, publication des données live. Voir `README_uart.md`.
 - **Algorithme CVL** – Calcul dynamique des limites CVL/CCL/DCL. Voir `README_cvl.md`.
-- **Watchdog Manager** – Supervision Task WDT, statistiques feed. Voir `README_watchdog.md`.
-- **Logger** – Journalisation SPIFFS + Serial avec rotation. Voir `README_logger.md`.
+- **Watchdog Manager** – Supervision Task WDT, statistiques feed & exposition JSON. Voir `README_watchdog.md`.
+- **Logger** – Journalisation SPIFFS + Serial avec rotation, niveau configurable. Voir `README_logger.md`.
+- **Cartographie modules** – Résumé des responsabilités fichiers dans `README_MAPPING.md`.
 - **Rapport de revue** – Statuts, tests et actions correctives par module dans `docs/REVUE_MODULES.md`.
 
 ## Installation
@@ -54,6 +64,10 @@ TinyBMS/
    ```
 3. Alimenter l'ESP32 et connecter TinyBMS (UART GPIO16/17) et Victron (CAN GPIO4/5).
 4. Accéder à l'interface : `http://tinybms-bridge.local` (ou IP). WebSocket disponible sur `/ws`.
+5. API REST disponible :
+   - `GET /api/status` : statut complet (compteurs, keepalive, alarmes, watchdog)
+   - `GET /api/settings` / `POST /api/settings` : consultation/mise à jour de la configuration JSON
+   - `GET /api/logs` / `DELETE /api/logs` : récupération et purge des journaux SPIFFS
 
 ## Tests
 - Tests d'intégration hors matériel :
@@ -65,10 +79,10 @@ TinyBMS/
   g++ -std=c++17 -Iinclude tests/test_cvl_logic.cpp src/cvl_logic.cpp -o /tmp/test_cvl
   /tmp/test_cvl
   ```
+- Le snapshot `tests/fixtures/status_snapshot.json` est vérifié pour garantir la présence des compteurs CAN/UART/Event Bus et des métadonnées d'alarmes.
 - Les résultats et scénarios de tests à blanc sont centralisés dans `docs/REVUE_MODULES.md`.
 
 ## Plan d'actions prioritaire
-1. **Sécuriser les accès configuration** : généraliser `configMutex` dans les modules CAN/Web.
-2. **Résoudre la double définition `webServerTask`** et ajouter des tests WebSocket.
-3. **Automatiser la compilation ESP32** dans la CI (PlatformIO) et enrichir les tests natifs (Event Bus, CVL).
-4. **Documenter les procédures de diagnostic** (watchdog, logs) et mutualiser le montage SPIFFS.
+1. **Industrialiser la chaîne de build** : automatiser la compilation ESP32 (PlatformIO) et l'exécution des tests natifs dans la CI.
+2. **Étendre la couverture hors matériel** : ajouter des tests unitaires pour l'Event Bus (cache/stats) et un stub TinyBMS pour la couche UART.
+3. **Documenter les diagnostics avancés** : guide terrain pour interpréter compteurs watchdog/CAN/UART et extractions de logs SPIFFS.
