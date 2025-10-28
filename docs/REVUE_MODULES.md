@@ -25,8 +25,8 @@ Interopérabilité :
 
 Actions correctives nécessaires :
 
-· Documenter la séquence d'initialisation dans README principal pour faciliter l'intégration d'autres tâches (Phase 1)
-· Ajouter un test de compilation automatisé (pio run) dès que l'environnement ESP32 est disponible en CI
+· Automatiser `pio run` + tests natifs dans la CI dès que l'environnement ESP32 est disponible (priorité moyenne)
+· Ajouter un test d'intégration vérifiant la création de toutes les tâches FreeRTOS (via hooks de monitoring) (priorité moyenne)
 
 ---
 
@@ -50,14 +50,14 @@ Tests à blanc réalisés :
 
 Interopérabilité :
 
-· Modules connectés : Logger, EventBus, Bridge UART/CAN, Web/API
-· Points d'intégration : Mutex configMutex, publication de changements, snapshot CVL
-· Problèmes d'interface : Accès concurrents non protégés dans certains modules (voir actions correctives)
+· Modules connectés : Logger, EventBus, Bridge UART/CAN/CVL, Web/API, TinyBMS Config Editor
+· Points d'intégration : Mutex `configMutex`, publication de changements, snapshot CVL/Victron, export `/api/settings`
+· Problèmes d'interface : Aucun critique observé après généralisation du mutex. Attention à la taille croissante du JSON (limite ArduinoJson).
 
 Actions correctives nécessaires :
 
-· Renforcer l'usage systématique de configMutex côté modules CAN/Web pour éviter les lectures non atomiques (priorité haute)
-· Ajouter un test unitaire dédié au parsing JSON lorsque l'environnement ArduinoJson sera mocké
+· Ajouter un test unitaire dédié au parsing JSON lorsque l'environnement ArduinoJson sera mocké (priorité moyenne)
+· Définir une validation de schéma (ex: script Python) pour prévenir les régressions de structure avant déploiement (priorité moyenne)
 
 ---
 
@@ -125,7 +125,7 @@ Actions correctives nécessaires :
 
 ## Module : CAN Victron & KeepAlive
 
-Statut: À corriger
+Statut: Fonctionnel
 
 Fichiers associés :
 ```
@@ -147,12 +147,12 @@ Interopérabilité :
 
 · Modules connectés : ConfigManager, EventBus, Watchdog, JSON/API
 · Points d'intégration : Construction PGN avec config victron, publication keepalive
-· Problèmes d'interface : Accès à config.victron sans mutex (risque race lors d'une sauvegarde), doublon de responsabilités keepalive entre tâches
+· Problèmes d'interface : Aucun critique observé (lectures `config.*` protégées, keepalive centralisé). Surveiller l'impact du logging CAN verbeux sur les performances.
 
 Actions correctives nécessaires :
 
-· Enrober toutes les lectures de config.* dans bridge_can.cpp avec configMutex (priorité haute)
-· Factoriser la logique keepalive pour éviter duplication bridging/can_driver (priorité moyenne)
+· Ajouter un test natif pour vérifier la génération des PGN (encodage 0x35A) hors matériel (priorité moyenne)
+· Exposer dans `/api/status` la dérive moyenne keep-alive pour faciliter le support terrain (priorité basse)
 
 ---
 
@@ -190,7 +190,7 @@ Actions correctives nécessaires :
 
 ## Module : Interface Web / API / JSON / WebSocket
 
-Statut: À corriger
+Statut: À surveiller
 
 Fichiers associés :
 ```
@@ -214,13 +214,13 @@ Interopérabilité :
 
 · Modules connectés : EventBus, Bridge, Watchdog, ConfigManager, Logger
 · Points d'intégration : Routes REST, WebSocket `/ws`, JSON status, upload config
-· Problèmes d'interface : Double définition `webServerTask` (main.ino vs web_server_setup.cpp) susceptible d'erreur de linkage, accès config.* non protégé dans buildPGN/serveStatic, couverture WebSocket partielle sur scénarios réseau extrêmes
+· Problèmes d'interface : Plus de doublon `webServerTask` (centralisation dans `web_server_setup.cpp`). Reste à renforcer les scénarios de résilience WebSocket (pertes réseau) et à monitorer l'impact de `log_can_traffic` sur les réponses `/api/status`.
 
 Actions correctives nécessaires :
 
-· Supprimer le doublon `webServerTask` en centralisant la tâche dans web_server_setup.cpp (priorité haute)
 · Poursuivre l'élargissement des scénarios WebSocket (stress réseau, pertes prolongées) (priorité moyenne)
-· Protéger lectures config.* par configMutex dans routes JSON (priorité moyenne)
+· Ajouter des tests d'intégration pour les routes d'upload configuration (validation JSON) (priorité moyenne)
+· Mesurer la latence `/api/status` lorsque les logs verbeux sont activés afin de calibrer les limites (priorité basse)
 
 ---
 
@@ -250,7 +250,7 @@ Interopérabilité :
 Actions correctives nécessaires :
 
 · Prévoir scénario de test manuel pour vérifier reset ESP32 (priorité moyenne)
-· Documenter procédures de diagnostic dans README_watchdog
+· Ajouter un test natif simulant une absence de feed prolongée pour vérifier `checkHealth()` (priorité basse)
 
 ---
 
@@ -281,4 +281,5 @@ Actions correctives nécessaires :
 
 · Mutualiser le montage SPIFFS pour éviter appels multiples (priorité basse)
 · Ajouter test unitaire sur changement de niveau via API (priorité moyenne)
+· Couvrir les flags `log_can_traffic` / `log_uart_traffic` / `log_cvl_changes` via tests ciblés ou instrumentation (priorité basse)
 
