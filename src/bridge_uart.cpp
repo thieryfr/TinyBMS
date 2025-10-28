@@ -47,7 +47,7 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
         options.response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
         xSemaphoreGive(configMutex);
     } else {
-        BRIDGE_LOG(LOG_WARN, "Using default UART retry configuration (config mutex unavailable)");
+        BRIDGE_LOG(LOG_WARNING, "Using default UART retry configuration (config mutex unavailable)");
     }
 
     auto delay_adapter = [](uint32_t delay_ms, void*) {
@@ -70,10 +70,10 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
 
     switch (result.last_status) {
         case tinybms::AttemptStatus::Timeout:
-            BRIDGE_LOG(LOG_WARN, String("UART timeout after ") + options.attempt_count + " attempt(s)");
+            BRIDGE_LOG(LOG_WARNING, String("UART timeout after ") + options.attempt_count + " attempt(s)");
             break;
         case tinybms::AttemptStatus::CrcMismatch:
-            BRIDGE_LOG(LOG_WARN, "CRC mismatch on TinyBMS response");
+            BRIDGE_LOG(LOG_WARNING, "CRC mismatch on TinyBMS response");
             break;
         case tinybms::AttemptStatus::WriteError:
             BRIDGE_LOG(LOG_ERROR, "Failed to write full Modbus request");

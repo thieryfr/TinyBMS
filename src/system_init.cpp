@@ -93,7 +93,7 @@ bool initializeWiFi() {
             WiFi.config(ip, gateway, subnet);
             logger.log(LOG_INFO, String("[WiFi] Static IP configured: ") + ip.toString());
         } else {
-            logger.log(LOG_WARN, "[WiFi] Invalid static IP configuration, falling back to DHCP");
+            logger.log(LOG_WARNING, "[WiFi] Invalid static IP configuration, falling back to DHCP");
         }
     }
 
@@ -118,7 +118,7 @@ bool initializeWiFi() {
         publishStatusIfPossible("WiFi client connected", STATUS_LEVEL_NOTICE);
         success = true;
     } else if (config.wifi.ap_fallback.enabled) {
-        logger.log(LOG_WARN, "[WiFi] Connection failed - starting AP mode");
+        logger.log(LOG_WARNING, "[WiFi] Connection failed - starting AP mode");
         WiFi.mode(WIFI_AP);
         WiFi.softAP(config.wifi.ap_fallback.ssid.c_str(), config.wifi.ap_fallback.password.c_str());
         logger.log(LOG_INFO, "[WiFi] AP Mode started ✓");
@@ -203,7 +203,7 @@ bool initializeBridge() {
 
     if (!success) {
         logger.log(LOG_ERROR, "[BRIDGE] Initialization failed!");
-        logger.log(LOG_WARN, "[BRIDGE] Continuing without bridge (web interface still available)");
+        logger.log(LOG_WARNING, "[BRIDGE] Continuing without bridge (web interface still available)");
         publishStatusIfPossible("Bridge unavailable", STATUS_LEVEL_ERROR);
 
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {

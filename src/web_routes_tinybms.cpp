@@ -130,7 +130,7 @@ void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
         logger.log(LOG_INFO, "[API] PUT /api/config/tinybms");
 
         if (!request->hasArg("plain")) {
-            logger.log(LOG_WARN, "[API] Missing JSON body");
+            logger.log(LOG_WARNING, "[API] Missing JSON body");
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
         }

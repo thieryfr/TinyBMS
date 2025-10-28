@@ -45,7 +45,7 @@ void setupWebServer() {
         web_config = config.web_server;
         xSemaphoreGive(configMutex);
     } else {
-        logger.log(LOG_WARN, "[WEB] Using default web server settings (config mutex unavailable)");
+        logger.log(LOG_WARNING, "[WEB] Using default web server settings (config mutex unavailable)");
     }
 
     // Configure WebSocket
@@ -75,7 +75,7 @@ void setupWebServer() {
 
     // 404 handler
     server.onNotFound([](AsyncWebServerRequest *request) {
-        logger.log(LOG_WARN, "[WEB] 404 Not Found: " + request->url());
+        logger.log(LOG_WARNING, "[WEB] 404 Not Found: " + request->url());
         request->send(404, "text/plain", "Not Found");
     });
 

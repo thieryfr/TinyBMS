@@ -58,7 +58,7 @@ bool TinyBMS_Victron_Bridge::begin() {
         victron_cfg = config.victron;
         xSemaphoreGive(configMutex);
     } else {
-        BRIDGE_LOG(LOG_WARN, "Using default configuration values (config mutex unavailable)");
+        BRIDGE_LOG(LOG_WARNING, "Using default configuration values (config mutex unavailable)");
     }
 
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(200)) == pdTRUE) {

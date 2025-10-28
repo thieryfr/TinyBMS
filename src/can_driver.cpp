@@ -80,7 +80,7 @@ void pollAlertsLocked() {
     }
 
     if (alerts & TWAI_ALERT_RECOVERY_COMPLETE) {
-        logger.log(LOG_WARN, "[CAN] Bus recovery complete, restarting TWAI");
+        logger.log(LOG_WARNING, "[CAN] Bus recovery complete, restarting TWAI");
         esp_err_t start_err = twai_start();
         if (start_err == ESP_OK) {
             s_recovering = false;
@@ -91,16 +91,16 @@ void pollAlertsLocked() {
 
     if (alerts & TWAI_ALERT_RX_QUEUE_FULL) {
         s_stats.rx_dropped++;
-        logger.log(LOG_WARN, "[CAN] Driver RX queue full, dropping frame");
+        logger.log(LOG_WARNING, "[CAN] Driver RX queue full, dropping frame");
     }
 
     if (alerts & TWAI_ALERT_TX_FAILED) {
         s_stats.tx_errors++;
-        logger.log(LOG_WARN, "[CAN] Hardware reported TX failure");
+        logger.log(LOG_WARNING, "[CAN] Hardware reported TX failure");
     }
 
     if (alerts & TWAI_ALERT_ERR_PASS) {
-        logger.log(LOG_WARN, "[CAN] Controller entered error passive state");
+        logger.log(LOG_WARNING, "[CAN] Controller entered error passive state");
     }
 }
 
@@ -130,7 +130,7 @@ void pumpRxQueueLocked() {
             s_stats.rx_success++;
         } else {
             s_stats.rx_dropped++;
-            logger.log(LOG_WARN, "[CAN] Application RX queue full, dropping frame");
+            logger.log(LOG_WARNING, "[CAN] Application RX queue full, dropping frame");
             break;
         }
     }
@@ -240,7 +240,7 @@ bool CanDriver::send(const CanFrame& frame) {
     }
 
     s_stats.tx_errors++;
-    logger.log(LOG_WARN, String("[CAN] TX failed: ") + esp_err_to_name(err));
+    logger.log(LOG_WARNING, String("[CAN] TX failed: ") + esp_err_to_name(err));
 
     pollAlertsLocked();
     xSemaphoreGive(s_mutex);

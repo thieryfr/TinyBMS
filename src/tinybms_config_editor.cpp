@@ -114,7 +114,7 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
 
     int8_t idx = findRegisterIndex(address);
     if (idx < 0) {
-        CONFIG_LOG(LOG_WARN, "Register " + String(address) + " not found");
+        CONFIG_LOG(LOG_WARNING, "Register " + String(address) + " not found");
         xSemaphoreGive(uartMutex);
         return false;
     }
@@ -145,7 +145,7 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, uint16_t &value) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    CONFIG_LOG(LOG_WARN, "Timeout reading register " + String(address));
+    CONFIG_LOG(LOG_WARNING, "Timeout reading register " + String(address));
     xSemaphoreGive(uartMutex);
     return false;
 }
@@ -158,13 +158,13 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, uint16_t
 
     int8_t idx = findRegisterIndex(address);
     if (idx < 0) {
-        CONFIG_LOG(LOG_WARN, "Register " + String(address) + " not found");
+        CONFIG_LOG(LOG_WARNING, "Register " + String(address) + " not found");
         xSemaphoreGive(uartMutex);
         return TinyBMSConfigError::RegisterNotFound;
     }
 
     if (value < registers_[idx].min_value || value > registers_[idx].max_value) {
-        CONFIG_LOG(LOG_WARN, "Value " + String(value) + " out of range [" +
+        CONFIG_LOG(LOG_WARNING, "Value " + String(value) + " out of range [" +
                                String(registers_[idx].min_value) + "-" +
                                String(registers_[idx].max_value) + "]");
         xSemaphoreGive(uartMutex);
@@ -202,7 +202,7 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, uint16_t
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    CONFIG_LOG(LOG_WARN, "Write timeout for register " + String(address));
+    CONFIG_LOG(LOG_WARNING, "Write timeout for register " + String(address));
     xSemaphoreGive(uartMutex);
     return TinyBMSConfigError::Timeout;
 }
@@ -297,7 +297,7 @@ void TinyBMSConfigEditor::addRegister(uint16_t address,
                                       const String &comment,
                                       uint16_t default_value) {
     if (registers_count_ >= MAX_REGISTERS) {
-        CONFIG_LOG(LOG_WARN, "Register table full, skipping address " + String(address));
+        CONFIG_LOG(LOG_WARNING, "Register table full, skipping address " + String(address));
         return;
     }
 

@@ -43,6 +43,6 @@ void TinyBMS_Victron_Bridge::keepAliveProcessRX(uint32_t now_ms){
         victron_keepalive_ok_ = false;
         stats.victron_keepalive_ok = false;
         eventBus.publishAlarm(ALARM_CAN_KEEPALIVE_LOST, "VE.Can keepalive lost", ALARM_SEVERITY_WARNING, 0, SOURCE_ID_CAN);
-        BRIDGE_LOG(LOG_WARN, "VE.Can keepalive TIMEOUT");
+        BRIDGE_LOG(LOG_WARNING, "VE.Can keepalive TIMEOUT");
     }
 }

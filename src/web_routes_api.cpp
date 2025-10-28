@@ -426,7 +426,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
         logger.log(LOG_INFO, "[API] PUT /api/config/system");
 
         if (!request->hasArg("plain")) {
-            logger.log(LOG_WARN, "[API] Missing JSON body");
+            logger.log(LOG_WARNING, "[API] Missing JSON body");
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
         }
@@ -977,7 +977,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
         logger.log(LOG_INFO, "[API] PUT /api/watchdog");
 
         if (!request->hasArg("plain")) {
-            logger.log(LOG_WARN, "[API] Missing body in watchdog update");
+            logger.log(LOG_WARNING, "[API] Missing body in watchdog update");
             request->send(400, "application/json", "{\"error\":\"Missing body\"}");
             return;
         }
@@ -1017,7 +1017,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
                 logger.log(LOG_INFO, "[API] Watchdog timeout updated to " + String(timeout_ms) + " ms");
             } else {
                 xSemaphoreGive(feedMutex);
-                logger.log(LOG_WARN, "[API] Invalid timeout value for watchdog");
+                logger.log(LOG_WARNING, "[API] Invalid timeout value for watchdog");
                 request->send(400, "application/json", "{\"error\":\"Invalid timeout value\"}");
                 return;
             }
