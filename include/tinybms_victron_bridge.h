@@ -20,14 +20,14 @@ struct TinyBMS_Config {
     uint16_t fully_charged_voltage_mv = 0;
     uint16_t fully_discharged_voltage_mv = 0;
     uint16_t charge_finished_current_ma = 0;
-    float    battery_capacity_ah_scaled = 0.0f; // value ×100 (0.01 Ah resolution)
+    float    battery_capacity_ah = 0.0f;
     uint8_t  cell_count = 0;
     uint16_t overvoltage_cutoff_mv = 0;
     uint16_t undervoltage_cutoff_mv = 0;
     uint16_t discharge_overcurrent_a = 0;
     uint16_t charge_overcurrent_a = 0;
-    uint16_t overheat_cutoff_c = 0;          // 0.1 °C units
-    uint16_t low_temp_charge_cutoff_c = 0;   // 0.1 °C units
+    float    overheat_cutoff_c = 0.0f;
+    float    low_temp_charge_cutoff_c = 0.0f;
 };
 
 struct BridgeStats {

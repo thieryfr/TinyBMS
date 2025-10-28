@@ -292,328 +292,412 @@
     </div>
 
     <script>
-        let configRegisters = [];
-        
-        // Load configuration on page load
+        const registerMap = new Map();
+        let registerCatalog = [];
+
+        const GROUP_SECTIONS = {
+            battery: 'batteryParams',
+            charger: 'chargerParams',
+            safety: 'safetyParams',
+            advanced: 'advancedParams',
+            system: 'systemParams'
+        };
+
         window.addEventListener('load', async () => {
             await loadConfiguration();
         });
-        
-        // Load configuration from ESP32
+
         async function loadConfiguration() {
             showStatus('Loading configuration...', 'info');
-            
+
             try {
-                const response = await fetch('/api/tinybms/config');
+                const response = await fetch('/api/tinybms/registers');
                 const data = await response.json();
-                
-                configRegisters = data.registers;
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Request failed');
+                }
+
+                registerCatalog = data.registers || [];
+                registerMap.clear();
+                registerCatalog.forEach(reg => registerMap.set(reg.address, reg));
+
                 renderConfiguration();
-                
-                showStatus('Configuration loaded successfully', 'success');
+
+                showStatus(`Loaded ${data.count ?? registerCatalog.length} registers`, 'success');
                 setTimeout(() => hideStatus(), 3000);
             } catch (error) {
-                showStatus('Error loading configuration: ' + error.message, 'error');
+                console.error('[TinyBMS] loadConfiguration failed', error);
+                showStatus(`Error loading configuration: ${error.message}`, 'error');
             }
         }
-        
-        // Render configuration UI
+
         function renderConfiguration() {
-            const sections = {
-                batteryParams: [300, 301, 303, 304, 305, 306, 307, 308],
-                chargerParams: [310, 311],
-                safetyParams: [315, 316, 317, 318, 319, 320],
-                advancedParams: [321, 322, 323, 328, 332],
-                systemParams: [330, 333, 335, 338, 339, 340, 342, 343]
-            };
-            
-            for (const [sectionId, addresses] of Object.entries(sections)) {
+            Object.values(GROUP_SECTIONS).forEach(sectionId => {
                 const container = document.getElementById(sectionId);
-                container.innerHTML = '';
-                
-                addresses.forEach(addr => {
-                    const reg = configRegisters.find(r => r.address === addr);
-                    if (reg) {
-                        container.appendChild(createConfigItem(reg));
-                    }
-                });
-            }
+                if (container) {
+                    container.innerHTML = '';
+                }
+            });
+
+            registerCatalog.forEach(reg => {
+                const sectionId = GROUP_SECTIONS[reg.group] || 'advancedParams';
+                const container = document.getElementById(sectionId);
+                if (container) {
+                    container.appendChild(createConfigItem(reg));
+                }
+            });
         }
-        
-        // Create config item HTML
+
         function createConfigItem(reg) {
-            const div = document.createElement('div');
-            div.className = 'config-item';
-            div.id = `reg-${reg.address}`;
-            
-            // Label column
+            const wrapper = document.createElement('div');
+            wrapper.className = 'config-item';
+            wrapper.id = `reg-${reg.address}`;
+
             const labelDiv = document.createElement('div');
             labelDiv.className = 'config-label';
             labelDiv.innerHTML = `
-                <span class="config-label-main">${reg.description}</span>
+                <span class="config-label-main">${reg.label || reg.description}</span>
                 <span class="config-label-desc">Register ${reg.address} ${reg.unit ? '(' + reg.unit + ')' : ''}</span>
                 ${reg.comment ? '<span class="config-label-comment">' + reg.comment + '</span>' : ''}
             `;
-            
-            // Input column
+
             const inputDiv = document.createElement('div');
             inputDiv.className = 'config-input-wrapper';
-            
+
+            const value = typeof reg.value === 'number' ? reg.value : reg.default ?? 0;
+
             if (reg.is_enum) {
-                // Dropdown for enum values
                 const select = document.createElement('select');
                 select.className = 'config-input';
                 select.id = `input-${reg.address}`;
-                
-                reg.enum_values.forEach((enumVal, idx) => {
+
+                (reg.enum_values || []).forEach(optionInfo => {
                     const option = document.createElement('option');
-                    option.value = idx;
-                    option.textContent = enumVal;
-                    if (idx === reg.value) option.selected = true;
+                    option.value = String(optionInfo.value);
+                    option.textContent = optionInfo.label || optionInfo.value;
+                    if (String(optionInfo.value) === String(value)) {
+                        option.selected = true;
+                    }
                     select.appendChild(option);
                 });
-                
+
                 inputDiv.appendChild(select);
             } else {
-                // Number input for numeric values
                 const input = document.createElement('input');
                 input.type = 'number';
                 input.className = 'config-input';
                 input.id = `input-${reg.address}`;
-                input.value = reg.value;
-                input.min = reg.min;
-                input.max = reg.max;
-                
+                input.value = formatValue(value, reg.precision);
+                if (typeof reg.min !== 'undefined') input.min = reg.min;
+                if (typeof reg.max !== 'undefined') input.max = reg.max;
+                if (typeof reg.step !== 'undefined' && reg.step > 0) input.step = reg.step;
                 inputDiv.appendChild(input);
             }
-            
-            // Range column
+
             const rangeDiv = document.createElement('div');
             rangeDiv.className = 'config-range';
-            if (!reg.is_enum) {
-                rangeDiv.textContent = `[${reg.min} - ${reg.max}]`;
+            if (!reg.is_enum && (typeof reg.min !== 'undefined' || typeof reg.max !== 'undefined')) {
+                const minText = typeof reg.min !== 'undefined' ? formatValue(reg.min, reg.precision) : '-∞';
+                const maxText = typeof reg.max !== 'undefined' ? formatValue(reg.max, reg.precision) : '+∞';
+                rangeDiv.textContent = `[${minText} - ${maxText}]`;
             }
-            
-            // Current value column
+
             const currentDiv = document.createElement('div');
             currentDiv.className = 'config-current';
             currentDiv.id = `current-${reg.address}`;
-            currentDiv.textContent = reg.value;
-            
-            // Actions column
+            currentDiv.textContent = formatValue(value, reg.precision);
+
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'config-actions';
-            actionsDiv.innerHTML = `
-                <button class="btn-read" onclick="readRegister(${reg.address})">📖</button>
-                <button class="btn-write" onclick="writeRegister(${reg.address})">✍️</button>
-            `;
-            
-            div.appendChild(labelDiv);
-            div.appendChild(inputDiv);
-            div.appendChild(rangeDiv);
-            div.appendChild(actionsDiv);
-            
-            return div;
+
+            const readBtn = document.createElement('button');
+            readBtn.className = 'btn-read';
+            readBtn.id = `btn-read-${reg.address}`;
+            readBtn.textContent = '📖';
+            readBtn.addEventListener('click', () => readRegister(reg.address));
+
+            const writeBtn = document.createElement('button');
+            writeBtn.className = 'btn-write';
+            writeBtn.id = `btn-write-${reg.address}`;
+            writeBtn.textContent = '✍️';
+            writeBtn.addEventListener('click', () => writeRegister(reg.address));
+            if (reg.access === 'ro') {
+                writeBtn.disabled = true;
+            }
+
+            actionsDiv.appendChild(readBtn);
+            actionsDiv.appendChild(writeBtn);
+
+            wrapper.appendChild(labelDiv);
+            wrapper.appendChild(inputDiv);
+            wrapper.appendChild(rangeDiv);
+            wrapper.appendChild(actionsDiv);
+
+            return wrapper;
         }
-        
-        // Read single register from TinyBMS
-        async function readRegister(address) {
-            const btn = event.target;
-            const originalText = btn.textContent;
-            btn.innerHTML = '<div class="loading"></div>';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch(`/api/tinybms/config/read?address=${address}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Update UI
-                    document.getElementById(`input-${address}`).value = data.value;
-                    document.getElementById(`current-${address}`).textContent = data.value;
-                    
-                    // Update local data
-                    const reg = configRegisters.find(r => r.address === address);
-                    if (reg) reg.value = data.value;
-                    
-                    showStatus(`Register ${address} read: ${data.value}`, 'success');
-                    setTimeout(() => hideStatus(), 2000);
+
+        function formatValue(value, precision = 0) {
+            if (typeof value !== 'number' || Number.isNaN(value)) {
+                return '';
+            }
+            return precision > 0 ? value.toFixed(precision) : value.toString();
+        }
+
+        function updateRegisterUI(reg) {
+            const input = document.getElementById(`input-${reg.address}`);
+            const current = document.getElementById(`current-${reg.address}`);
+
+            if (input) {
+                if (reg.is_enum) {
+                    input.value = String(reg.value);
                 } else {
-                    showStatus(`Error reading register ${address}: ${data.message}`, 'error');
+                    input.value = formatValue(reg.value ?? reg.default ?? 0, reg.precision);
                 }
-            } catch (error) {
-                showStatus(`Error reading register ${address}: ${error.message}`, 'error');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
+            }
+
+            if (current) {
+                current.textContent = formatValue(reg.value ?? reg.default ?? 0, reg.precision);
             }
         }
-        
-        // Write single register to TinyBMS
-        async function writeRegister(address) {
-            const input = document.getElementById(`input-${address}`);
-            const value = parseInt(input.value);
-            
-            const reg = configRegisters.find(r => r.address === address);
-            
-            // Validate
-            if (!reg.is_enum && (value < reg.min || value > reg.max)) {
-                showStatus(`Value ${value} out of range [${reg.min}-${reg.max}]`, 'error');
+
+        function applyRegisterUpdate(address, update) {
+            const reg = registerMap.get(address);
+            if (!reg) {
                 return;
             }
-            
-            // Confirm for safety registers
-            if ([315, 316, 317, 318, 319, 320].includes(address)) {
-                if (!confirm(`⚠️ You are modifying a SAFETY parameter!\n\nRegister: ${reg.description}\nNew value: ${value}\n\nThis can damage your battery. Are you sure?`)) {
+
+            if (typeof update.value !== 'undefined') {
+                reg.value = update.value;
+            }
+            if (typeof update.raw_value !== 'undefined') {
+                reg.raw_value = update.raw_value;
+            }
+
+            updateRegisterUI(reg);
+        }
+
+        async function readRegister(address) {
+            const button = document.getElementById(`btn-read-${address}`);
+            if (button) {
+                button.disabled = true;
+            }
+
+            try {
+                const response = await fetch(`/api/tinybms/register?address=${address}`);
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Read failed');
+                }
+
+                applyRegisterUpdate(address, {
+                    value: data.value,
+                    raw_value: data.raw_value
+                });
+
+                showStatus(`Register ${address} → ${formatValue(data.value, (registerMap.get(address) || {}).precision)}`, 'success');
+                setTimeout(() => hideStatus(), 2000);
+            } catch (error) {
+                console.error('[TinyBMS] readRegister failed', error);
+                showStatus(`Error reading register ${address}: ${error.message}`, 'error');
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                }
+            }
+        }
+
+        async function writeRegister(address) {
+            const reg = registerMap.get(address);
+            if (!reg) {
+                showStatus(`Unknown register ${address}`, 'error');
+                return;
+            }
+
+            const input = document.getElementById(`input-${address}`);
+            if (!input) {
+                return;
+            }
+
+            const rawInput = input.value;
+            const newValue = reg.is_enum ? parseInt(rawInput, 10) : parseFloat(rawInput);
+
+            if (Number.isNaN(newValue)) {
+                showStatus('Invalid value', 'error');
+                return;
+            }
+
+            if (!reg.is_enum) {
+                if (typeof reg.min !== 'undefined' && newValue < reg.min) {
+                    showStatus(`Value ${newValue} below minimum ${reg.min}`, 'error');
+                    return;
+                }
+                if (typeof reg.max !== 'undefined' && newValue > reg.max) {
+                    showStatus(`Value ${newValue} above maximum ${reg.max}`, 'error');
                     return;
                 }
             }
-            
-            const btn = event.target;
-            const originalText = btn.textContent;
-            btn.innerHTML = '<div class="loading"></div>';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/tinybms/config/write', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ address, value })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Update current value display
-                    document.getElementById(`current-${address}`).textContent = value;
-                    
-                    // Update local data
-                    reg.value = value;
-                    
-                    showStatus(`Register ${address} written: ${value}`, 'success');
-                    setTimeout(() => hideStatus(), 2000);
-                } else {
-                    showStatus(`Error writing register ${address}: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`Error writing register ${address}: ${error.message}`, 'error');
-            } finally {
-                btn.textContent = originalText;
-                btn.disabled = false;
-            }
-        }
-        
-        // Read all registers
-        async function readAllRegisters() {
-            if (!confirm('Read all configuration registers from TinyBMS?\n\nThis will take about 30 seconds.')) {
+
+            if (['safety'].includes(reg.group) && !confirm(`⚠️ Modify safety register ${reg.address}?\n\n${reg.label || ''}`)) {
                 return;
             }
-            
-            showStatus('Reading all registers... Please wait.', 'info');
-            
+
+            const button = document.getElementById(`btn-write-${address}`);
+            if (button) {
+                button.disabled = true;
+            }
+
             try {
-                const response = await fetch('/api/tinybms/config/read-all');
+                const response = await fetch('/api/tinybms/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address, value: newValue })
+                });
+
                 const data = await response.json();
-                
-                if (data.success) {
-                    // Update all values
-                    data.registers.forEach(reg => {
-                        const input = document.getElementById(`input-${reg.address}`);
-                        const current = document.getElementById(`current-${reg.address}`);
-                        
-                        if (input) input.value = reg.value;
-                        if (current) current.textContent = reg.value;
-                        
-                        const localReg = configRegisters.find(r => r.address === reg.address);
-                        if (localReg) localReg.value = reg.value;
-                    });
-                    
-                    showStatus(`Read ${data.count} registers successfully`, 'success');
-                } else {
-                    showStatus(`Error reading registers: ${data.message}`, 'error');
+                if (!data.success) {
+                    throw new Error(data.message || 'Write failed');
                 }
+
+                applyRegisterUpdate(address, {
+                    value: data.value,
+                    raw_value: data.raw_value
+                });
+
+                showStatus(`Register ${address} updated`, 'success');
+                setTimeout(() => hideStatus(), 2000);
             } catch (error) {
+                console.error('[TinyBMS] writeRegister failed', error);
+                showStatus(`Error writing register ${address}: ${error.message}`, 'error');
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                }
+            }
+        }
+
+        async function readAllRegisters() {
+            if (!confirm('Read all configuration registers from TinyBMS?')) {
+                return;
+            }
+
+            showStatus('Reading all registers...', 'info');
+
+            try {
+                const response = await fetch('/api/tinybms/registers/read-all', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success === false) {
+                    throw new Error(data.message || 'Read failed');
+                }
+
+                const registers = data.registers || [];
+                registerCatalog = registers;
+                registerMap.clear();
+                registers.forEach(reg => {
+                    registerMap.set(reg.address, reg);
+                    updateRegisterUI(reg);
+                });
+
+                showStatus(`Read ${data.read_count ?? registers.length} registers`, 'success');
+                setTimeout(() => hideStatus(), 2000);
+            } catch (error) {
+                console.error('[TinyBMS] readAllRegisters failed', error);
                 showStatus(`Error reading registers: ${error.message}`, 'error');
             }
         }
-        
-        // Write all registers (confirmation required)
+
         async function writeAllRegisters() {
-            if (!confirm('⚠️ WARNING: Write ALL modified values to TinyBMS?\n\nThis will overwrite current TinyBMS configuration.\n\nAre you absolutely sure?')) {
+            if (!confirm('⚠️ Write all modified values to TinyBMS?')) {
                 return;
             }
-            
-            showStatus('Writing all registers... Please wait.', 'info');
-            
-            const modifiedRegisters = [];
-            
-            configRegisters.forEach(reg => {
-                const input = document.getElementById(`input-${reg.address}`);
-                const newValue = parseInt(input.value);
-                
-                if (newValue !== reg.value) {
-                    modifiedRegisters.push({ address: reg.address, value: newValue });
+
+            const payload = [];
+            registerMap.forEach((reg, address) => {
+                const input = document.getElementById(`input-${address}`);
+                if (!input) {
+                    return;
+                }
+
+                const rawValue = input.value;
+                const newValue = reg.is_enum ? parseInt(rawValue, 10) : parseFloat(rawValue);
+                if (Number.isNaN(newValue)) {
+                    return;
+                }
+
+                const currentValue = reg.value ?? reg.default ?? 0;
+                if (Math.abs(newValue - currentValue) > Math.pow(10, -(reg.precision ?? 0)) / 2) {
+                    payload.push({ address, value: newValue });
                 }
             });
-            
-            if (modifiedRegisters.length === 0) {
+
+            if (payload.length === 0) {
                 showStatus('No changes to write', 'info');
                 return;
             }
-            
+
+            showStatus(`Writing ${payload.length} registers...`, 'info');
+
             try {
-                const response = await fetch('/api/tinybms/config/write-all', {
+                const response = await fetch('/api/tinybms/registers/batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ registers: modifiedRegisters })
+                    body: JSON.stringify({ registers: payload })
                 });
-                
+
                 const data = await response.json();
-                
-                if (data.success) {
-                    // Update current values
-                    modifiedRegisters.forEach(reg => {
-                        document.getElementById(`current-${reg.address}`).textContent = reg.value;
-                        const localReg = configRegisters.find(r => r.address === reg.address);
-                        if (localReg) localReg.value = reg.value;
-                    });
-                    
-                    showStatus(`Wrote ${modifiedRegisters.length} registers successfully`, 'success');
-                } else {
-                    showStatus(`Error writing registers: ${data.message}`, 'error');
+                if (data.success === false && !data.results) {
+                    throw new Error(data.message || 'Write failed');
                 }
+
+                (data.results || []).forEach(result => {
+                    if (result.success) {
+                        applyRegisterUpdate(result.address, {
+                            value: result.value,
+                            raw_value: result.raw_value
+                        });
+                    }
+                });
+
+                if (data.success) {
+                    showStatus(`Successfully wrote ${data.written ?? payload.length} registers`, 'success');
+                } else {
+                    showStatus(`Completed with ${data.failed ?? 0} errors`, 'warning');
+                }
+                setTimeout(() => hideStatus(), 3000);
             } catch (error) {
+                console.error('[TinyBMS] writeAllRegisters failed', error);
                 showStatus(`Error writing registers: ${error.message}`, 'error');
             }
         }
-        
-        // Reset to defaults
+
         function resetToDefaults() {
-            if (!confirm('Reset all values to defaults?\n\nThis will NOT write to TinyBMS until you click "Write All".')) {
+            if (!confirm('Reset all values to defaults (not written)?')) {
                 return;
             }
-            
-            // Reset inputs to default values from config
-            configRegisters.forEach(reg => {
-                const input = document.getElementById(`input-${reg.address}`);
+
+            registerMap.forEach((reg, address) => {
+                const input = document.getElementById(`input-${address}`);
                 if (input) {
-                    // Reset to value from server (which has defaults)
-                    input.value = reg.value;
+                    if (reg.is_enum) {
+                        input.value = String(reg.default ?? reg.value ?? 0);
+                    } else {
+                        input.value = formatValue(reg.default ?? reg.value ?? 0, reg.precision);
+                    }
                 }
             });
-            
-            showStatus('Values reset to defaults (not written to TinyBMS yet)', 'info');
+
+            showStatus('Inputs reset to defaults (not written)', 'info');
         }
-        
-        // Show status message
+
         function showStatus(message, type) {
             const statusEl = document.getElementById('statusMessage');
             statusEl.textContent = message;
             statusEl.className = `status-message ${type}`;
             statusEl.style.display = 'block';
         }
-        
-        // Hide status message
+
         function hideStatus() {
             const statusEl = document.getElementById('statusMessage');
             statusEl.style.display = 'none';

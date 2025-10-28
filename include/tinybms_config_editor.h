@@ -12,6 +12,7 @@
 #include <Freertos.h>
 #include "watchdog_manager.h"
 #include "rtos_tasks.h"
+#include "tiny_rw_mapping.h"
 #include "tinybms_victron_bridge.h"
 
 extern WatchdogManager Watchdog;
@@ -55,15 +56,32 @@ const char* tinybmsConfigErrorToString(TinyBMSConfigError error);
  */
 struct TinyBMSConfigRegister {
     uint16_t address;
+    String key;
     String description;
+    String group;
     String unit;
-    uint16_t min_value;
-    uint16_t max_value;
-    uint16_t current_value;
     String type;
     String comment;
+    TinyRegisterAccess access;
+    TinyRegisterValueClass value_class;
+    bool has_min;
+    float min_value;
+    bool has_max;
+    float max_value;
+    float scale;
+    float offset;
+    float step;
+    uint8_t precision;
+    uint16_t default_raw_value;
+    float default_user_value;
+    uint16_t current_raw_value;
+    float current_user_value;
     bool is_enum;
-    String enum_values[10];
+    struct EnumOption {
+        uint16_t value;
+        String label;
+    };
+    EnumOption enum_values[16];
     uint8_t enum_count;
 };
 
@@ -76,37 +94,25 @@ public:
 
     void begin();
     String getRegistersJSON();
-    bool readRegister(uint16_t address, uint16_t &value);
-    TinyBMSConfigError writeRegister(uint16_t address, uint16_t value);
+    bool readRegister(uint16_t address, float &value);
+    bool readRegisterRaw(uint16_t address, uint16_t &value);
+    TinyBMSConfigError writeRegister(uint16_t address, float value);
+    TinyBMSConfigError writeRegisterRaw(uint16_t address, uint16_t value);
     uint8_t readAllRegisters();
     const TinyBMSConfigRegister *getRegister(uint16_t address) const;
     TinyBMSConfigResult writeConfig(const TinyBMS_Config &cfg);
 
 private:
-    static const uint8_t MAX_REGISTERS = 40;
+    static const uint8_t MAX_REGISTERS = 64;
     TinyBMSConfigRegister registers_[MAX_REGISTERS];
     uint8_t registers_count_;
 
     int8_t findRegisterIndex(uint16_t address) const;
-    void addRegister(uint16_t address,
-                     const String &description,
-                     const String &unit,
-                     uint16_t min_value,
-                     uint16_t max_value,
-                     const String &type,
-                     const String &comment,
-                     uint16_t default_value = 0);
-    void addEnumRegister(uint16_t address,
-                         const String &description,
-                         const String &unit,
-                         uint16_t min_value,
-                         uint16_t max_value,
-                         const String &type,
-                         const String &comment,
-                         const String enum_values[],
-                         uint8_t enum_count,
-                         uint16_t default_value = 0);
+    int8_t findRegisterIndexByKey(const String &key) const;
     void initializeRegisters();
+    bool convertUserToRaw(const TinyBMSConfigRegister &reg, float user_value, uint16_t &raw) const;
+    float convertRawToUser(const TinyBMSConfigRegister &reg, uint16_t raw) const;
+    TinyBMSConfigError validateValue(const TinyBMSConfigRegister &reg, float user_value) const;
 };
 
 #endif // TINYBMS_CONFIG_EDITOR_H
