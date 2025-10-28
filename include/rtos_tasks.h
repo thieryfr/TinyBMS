@@ -45,8 +45,8 @@ void webServerTask(void *pvParameters);
 void websocketTask(void *pvParameters);
 
 /**
- * @brief Setup web server and routes
+ * @brief Initialize the dedicated web server task
  */
-void setupWebServer();
+bool initWebServerTask();
 
 #endif // RTOS_TASKS_H

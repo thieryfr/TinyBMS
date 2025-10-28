@@ -33,9 +33,6 @@ extern TaskHandle_t webServerTaskHandle;
 extern TaskHandle_t websocketTaskHandle;
 extern TaskHandle_t watchdogTaskHandle;
 
-// External functions
-extern bool initWebServerTask();
-
 namespace {
 
 void feedWatchdogSafely() {
@@ -298,7 +295,11 @@ bool initializeSystem() {
     overall_ok &= config_editor_ok;
 
     const bool web_task_ok = initWebServerTask();
-    overall_ok &= web_task_ok;
+    const bool web_task_handle_ok = web_task_ok && (webServerTaskHandle != nullptr);
+    if (web_task_ok && !web_task_handle_ok) {
+        logger.log(LOG_ERROR, "[WEB] Web server task handle was not created");
+    }
+    overall_ok &= web_task_handle_ok;
 
     bool websocket_task_ok = createTask(
         "WebSocket",
@@ -324,8 +325,8 @@ bool initializeSystem() {
 
     if (event_bus_ok) {
         publishStatusIfPossible(
-            web_task_ok ? "Web server task running" : "Web server task failed",
-            web_task_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR
+            web_task_handle_ok ? "Web server task running" : "Web server task failed",
+            web_task_handle_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR
         );
         publishStatusIfPossible(
             websocket_task_ok ? "WebSocket task running" : "WebSocket task failed",
