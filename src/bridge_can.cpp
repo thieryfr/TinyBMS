@@ -69,9 +69,13 @@ void TinyBMS_Victron_Bridge::buildPGN_0x355(uint8_t* d){
 
 void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
     const auto& ld = live_data_;
-    uint16_t cvl_001V = clamp_u16(round_i(ld.voltage * 100.0f));
-    uint16_t ccl_01A  = clamp_u16((int)ld.max_charge_current);
-    uint16_t dcl_01A  = clamp_u16((int)ld.max_discharge_current);
+    float cvl_target_v = stats.cvl_current_v > 0.0f ? stats.cvl_current_v : ld.voltage;
+    float ccl_limit_a = stats.ccl_limit_a > 0.0f ? stats.ccl_limit_a : (ld.max_charge_current / 10.0f);
+    float dcl_limit_a = stats.dcl_limit_a > 0.0f ? stats.dcl_limit_a : (ld.max_discharge_current / 10.0f);
+
+    uint16_t cvl_001V = clamp_u16(round_i(cvl_target_v * 100.0f));
+    uint16_t ccl_01A  = clamp_u16(round_i(ccl_limit_a * 10.0f));
+    uint16_t dcl_01A  = clamp_u16(round_i(dcl_limit_a * 10.0f));
     put_u16_le(&d[0], cvl_001V);
     put_u16_le(&d[2], ccl_01A);
     put_u16_le(&d[4], dcl_01A);

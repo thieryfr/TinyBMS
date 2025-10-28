@@ -73,6 +73,8 @@ String getStatusJSON() {
     stats["uart_crc_errors"] = bridge.stats.uart_crc_errors;
     stats["uart_retry_count"] = bridge.stats.uart_retry_count;
     stats["victron_keepalive_ok"] = bridge.stats.victron_keepalive_ok;
+    stats["ccl_limit_a"] = round(bridge.stats.ccl_limit_a * 10) / 10.0;
+    stats["dcl_limit_a"] = round(bridge.stats.dcl_limit_a * 10) / 10.0;
 
     // Watchdog info
     JsonObject wdt = doc.createNestedObject("watchdog");
