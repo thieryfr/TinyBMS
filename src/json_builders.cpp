@@ -47,6 +47,8 @@ String getStatusJSON() {
     live["soc_percent"] = round(data.soc_percent * 10) / 10.0;
     live["soh_percent"] = round(data.soh_percent * 10) / 10.0;
     live["temperature"] = data.temperature;
+    live["pack_temp_min"] = data.pack_temp_min;
+    live["pack_temp_max"] = data.pack_temp_max;
     live["min_cell_mv"] = data.min_cell_mv;
     live["max_cell_mv"] = data.max_cell_mv;
     live["cell_imbalance_mv"] = data.cell_imbalance_mv;

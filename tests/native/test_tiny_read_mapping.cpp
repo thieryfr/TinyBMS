@@ -50,5 +50,13 @@ int main() {
     assert(!invalid);
     assert(getTinyRegisterMetadata().size() == previous);
 
+    const TinyRegisterRuntimeBinding* pack_min = findTinyRegisterBinding(113);
+    assert(pack_min != nullptr);
+    assert(pack_min->data_slice == TinyRegisterDataSlice::LowByte);
+
+    const TinyRegisterRuntimeBinding* pack_max = findTinyRegisterBinding(1131);
+    assert(pack_max != nullptr);
+    assert(pack_max->data_slice == TinyRegisterDataSlice::HighByte);
+
     return 0;
 }
