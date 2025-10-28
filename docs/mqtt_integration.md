@@ -2,6 +2,8 @@
 
 Cette note décrit les nouveaux points d'extension autour de la lecture/écriture des registres TinyBMS et la stratégie retenue pour publier ces valeurs via MQTT.
 
+Comme les autres modules, MQTT module doit impérativement publier et consommer via ce bus interne d'evenements event_bus afin de préserver l'architecture découplée existante et éviter les accès directs concurrents aux registres TinyBMS.
+
 ## Points d'extension autour des registres
 
 * `TinyBMS_LiveData::appendSnapshot` continue de stocker toutes les mesures décodées depuis les trames Modbus TinyBMS. Chaque instantané contient la valeur brute (`raw_words`), la valeur numérique décodée et, le cas échéant, une chaîne.
