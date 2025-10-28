@@ -15,6 +15,7 @@
 #include "tinybms_config_editor.h"
 #include "event_bus.h"
 #include "bridge_core.h"
+#include "tiny_read_mapping.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -261,6 +262,19 @@ bool initializeSystem() {
 
     const bool spiffs_ok = initializeSPIFFS();
     overall_ok &= spiffs_ok;
+
+    bool mapping_ok = false;
+    if (spiffs_ok) {
+        mapping_ok = initializeTinyReadMapping(SPIFFS, "/tiny_read.json", &logger);
+        if (mapping_ok) {
+            publishStatusIfPossible("tiny_read mapping loaded", STATUS_LEVEL_NOTICE);
+        } else {
+            logger.log(LOG_WARN, "[MAPPING] Failed to load /tiny_read.json");
+            publishStatusIfPossible("tiny_read mapping unavailable", STATUS_LEVEL_WARNING);
+        }
+    } else {
+        logger.log(LOG_WARN, "[MAPPING] Skipping tiny_read mapping (SPIFFS unavailable)");
+    }
 
     const bool event_bus_ok = eventBus.begin(EVENT_BUS_QUEUE_SIZE);
     if (!event_bus_ok) {

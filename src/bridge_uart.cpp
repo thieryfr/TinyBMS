@@ -11,6 +11,7 @@
 #include "watchdog_manager.h"
 #include "rtos_config.h"
 #include "uart/tinybms_uart_client.h"
+#include "tiny_read_mapping.h"
 
 extern Logger logger;
 extern EventBus& eventBus;
@@ -21,6 +22,11 @@ extern WatchdogManager Watchdog;
 extern SemaphoreHandle_t configMutex;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[UART] ") + (msg)); } while(0)
+
+namespace {
+constexpr uint16_t TINY_REG_VOLTAGE = 36;
+constexpr uint16_t TINY_READ_COUNT = 17;
+}
 
 bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
     if (output == nullptr || count == 0) {
@@ -99,21 +105,28 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now - bridge->last_uart_poll_ms_ >= bridge->uart_poll_interval_ms_) {
             TinyBMS_LiveData d{};
-            uint16_t regs[24];
+            d.resetSnapshots();
+            uint16_t regs[TINY_READ_COUNT] = {0};
 
-            if (bridge->readTinyRegisters(TINY_REG_VOLTAGE, 17, regs)) {
-                d.voltage            = regs[0] / 100.0f;
-                d.current            = ((int16_t)regs[1]) / 10.0f;
-                d.soc_percent        = regs[2] / 10.0f;
-                d.soh_percent        = regs[3] / 10.0f;
-                d.temperature        = regs[4];
-                d.min_cell_mv        = regs[5];
-                d.max_cell_mv        = regs[6];
-                d.cell_imbalance_mv  = d.max_cell_mv - d.min_cell_mv;
-                d.balancing_bits     = regs[7];
-                d.max_charge_current = regs[8];
-                d.max_discharge_current = regs[9];
-                d.online_status      = 0x91;
+            if (bridge->readTinyRegisters(TINY_REG_VOLTAGE, TINY_READ_COUNT, regs)) {
+                const auto& bindings = getTinyRegisterBindings();
+                for (const auto& binding : bindings) {
+                    if (binding.raw_index >= TINY_READ_COUNT) {
+                        continue;
+                    }
+
+                    int32_t raw_value = binding.is_signed
+                        ? static_cast<int16_t>(regs[binding.raw_index])
+                        : static_cast<int32_t>(regs[binding.raw_index]);
+                    float scaled_value = static_cast<float>(raw_value) * binding.scale;
+                    d.applyBinding(binding, raw_value, scaled_value);
+                }
+
+                d.cell_imbalance_mv = (d.max_cell_mv > d.min_cell_mv)
+                    ? static_cast<uint16_t>(d.max_cell_mv - d.min_cell_mv)
+                    : 0;
+
+                d.online_status = 0x91;
 
                 bridge->live_data_ = d;
                 eventBus.publishLiveData(d, SOURCE_ID_UART);
