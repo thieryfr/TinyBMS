@@ -116,6 +116,8 @@ bool ConfigManager::save() {
 
     DynamicJsonDocument doc(6144);
 
+    hal::IHalStorage& storage = hal::HalManager::instance().storage();
+
     saveWiFiConfig(doc);
     saveHardwareConfig(doc);
     saveTinyBMSConfig(doc);
