@@ -11,8 +11,8 @@
 #define LOGGER_H
 
 #include <Arduino.h>
-#include <FS.h>
-#include <SPIFFS.h>
+#include <memory>
+#include "hal/interfaces/ihal_storage.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -71,7 +71,7 @@ public:
 
 private:
     LogLevel current_level_;      // Niveau de journalisation actuel
-    File log_file_;               // Fichier de logs sur SPIFFS
+    std::unique_ptr<hal::IHalStorageFile> log_file_; // Fichier de logs via HAL
     SemaphoreHandle_t log_mutex_; // Mutex pour protéger l'accès au fichier
     bool initialized_;            // État de l'initialisation
 
@@ -87,4 +87,4 @@ private:
     void rotateLogFile();
 };
 
-#endif
+#endif // LOGGER_H

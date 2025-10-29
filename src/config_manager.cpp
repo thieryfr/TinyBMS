@@ -1,8 +1,12 @@
 #include "config_manager.h"
 #include <ArduinoJson.h>
-#include <SPIFFS.h>
 #include "logger.h"
 #include "event_bus.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_storage.h"
+
+#include <string>
+#include <vector>
 
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
@@ -19,31 +23,34 @@ bool ConfigManager::begin(const char* filename) {
         return false;
     }
 
-    // Phase 3: SPIFFS should already be mounted by system_init
-    // Just verify it's available
-    if (!SPIFFS.begin(false)) { // false = don't format, just check if mounted
-        logger.log(LOG_ERROR, "SPIFFS not mounted (should be mounted by system_init)");
-        xSemaphoreGive(configMutex);
-        return false;
-    }
+    hal::IHalStorage& storage = hal::HalManager::instance().storage();
 
-    if (!SPIFFS.exists(filename_)) {
+    if (!storage.exists(filename_)) {
         logger.log(LOG_WARNING, String("Config file not found (") + filename_ + "), using defaults");
         loaded_ = false;
         xSemaphoreGive(configMutex);
         return false;
     }
 
-    File file = SPIFFS.open(filename_, "r");
-    if (!file) {
+    auto file = storage.open(filename_, hal::StorageOpenMode::Read);
+    if (!file || !file->isOpen()) {
         logger.log(LOG_ERROR, String("Failed to open config file: ") + filename_);
         xSemaphoreGive(configMutex);
         return false;
     }
 
     DynamicJsonDocument doc(6144);
-    DeserializationError error = deserializeJson(doc, file);
-    file.close();
+    std::vector<uint8_t> buffer(file->size());
+    size_t read = buffer.empty() ? 0 : file->read(buffer.data(), buffer.size());
+    file->close();
+
+    if (read == 0) {
+        logger.log(LOG_ERROR, String("Config file empty: ") + filename_);
+        xSemaphoreGive(configMutex);
+        return false;
+    }
+
+    DeserializationError error = deserializeJson(doc, buffer.data(), read);
 
     if (error) {
         logger.log(LOG_ERROR, String("JSON parse error: ") + error.c_str());
@@ -90,21 +97,17 @@ bool ConfigManager::save() {
     saveLoggingConfig(doc);
     saveAdvancedConfig(doc);
 
-    File file = SPIFFS.open(filename_, "w");
-    if (!file) {
+    auto file = storage.open(filename_, hal::StorageOpenMode::Write);
+    if (!file || !file->isOpen()) {
         logger.log(LOG_ERROR, String("Failed to open config file for writing: ") + filename_);
         xSemaphoreGive(configMutex);
         return false;
     }
 
-    if (serializeJson(doc, file) == 0) {
-        logger.log(LOG_ERROR, "Failed to write configuration to file");
-        file.close();
-        xSemaphoreGive(configMutex);
-        return false;
-    }
-
-    file.close();
+    std::string output;
+    serializeJson(doc, output);
+    file->write(reinterpret_cast<const uint8_t*>(output.data()), output.size());
+    file->close();
     logger.log(LOG_INFO, "Configuration saved successfully");
 
     eventBus.publishConfigChange("*", "", "", SOURCE_ID_CONFIG_MANAGER);

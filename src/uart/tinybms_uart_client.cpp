@@ -33,7 +33,7 @@ void performDelay(const tinybms::DelayConfig& delay, uint32_t delay_ms) {
 
 namespace tinybms {
 
-TransactionResult readHoldingRegisters(IUartChannel& uart,
+TransactionResult readHoldingRegisters(hal::IHalUart& uart,
                                        uint16_t start_addr,
                                        uint16_t count,
                                        uint16_t* output,

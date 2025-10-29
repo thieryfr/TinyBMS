@@ -29,6 +29,7 @@ const char* toStringInternal(TinyBMSConfigError error) {
         case TinyBMSConfigError::Timeout:          return "timeout";
         case TinyBMSConfigError::WriteFailed:      return "write_failed";
         case TinyBMSConfigError::BridgeUnavailable:return "bridge_unavailable";
+        case TinyBMSConfigError::HardwareError:    return "hardware_error";
         default:                                   return "unknown";
     }
 }
@@ -150,14 +151,20 @@ bool TinyBMSConfigEditor::readRegisterRaw(uint16_t address, uint16_t &value) {
 
     char cmd[16];
     snprintf(cmd, sizeof(cmd), ":0001%02X\r\n", address % 256);
-    bridge.tiny_uart_.write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
+    if (bridge.tiny_uart_ == nullptr) {
+        CONFIG_LOG(LOG_ERROR, "UART HAL not available");
+        xSemaphoreGive(uartMutex);
+        return false;
+    }
+
+    bridge.tiny_uart_->write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
     CONFIG_LOG(LOG_DEBUG, "Read request sent for register " + String(address));
 
     uint32_t start = millis();
     String response;
     while (millis() - start < 1000) {
-        if (bridge.tiny_uart_.available()) {
-            char c = bridge.tiny_uart_.read();
+        if (bridge.tiny_uart_->available()) {
+            char c = static_cast<char>(bridge.tiny_uart_->read());
             response += c;
 
             if (c == '\n' && response.startsWith(":") && response.length() >= 8) {
@@ -223,15 +230,21 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegisterRaw(uint16_t address, uint1
 
     char cmd[20];
     snprintf(cmd, sizeof(cmd), ":0101%02X%04X\r\n", address % 256, value);
-    bridge.tiny_uart_.write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
+    if (bridge.tiny_uart_ == nullptr) {
+        CONFIG_LOG(LOG_ERROR, "UART HAL not available");
+        xSemaphoreGive(uartMutex);
+        return TinyBMSConfigError::HardwareError;
+    }
+
+    bridge.tiny_uart_->write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
     CONFIG_LOG(LOG_DEBUG, "Write request " + String(address) + " = " + String(value));
 
     uint32_t start = millis();
     String response;
 
     while (millis() - start < 1000) {
-        if (bridge.tiny_uart_.available()) {
-            char c = bridge.tiny_uart_.read();
+        if (bridge.tiny_uart_->available()) {
+            char c = static_cast<char>(bridge.tiny_uart_->read());
             response += c;
 
             if (c == '\n') {

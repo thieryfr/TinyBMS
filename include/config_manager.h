@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <SPIFFS.h>
 
 enum LogLevel {
     LOG_ERROR = 0,

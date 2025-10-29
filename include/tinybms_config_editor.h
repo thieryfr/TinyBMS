@@ -36,7 +36,8 @@ enum class TinyBMSConfigError : uint8_t {
     OutOfRange,
     Timeout,
     WriteFailed,
-    BridgeUnavailable
+    BridgeUnavailable,
+    HardwareError
 };
 
 /**
