@@ -14,7 +14,9 @@
 #include "watchdog_manager.h"
 #include "rtos_tasks.h"
 #include "rtos_config.h"
-#include "can_driver.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_can.h"
+#include "hal/interfaces/ihal_uart.h"
 
 extern Logger logger;
 extern ConfigManager config;
@@ -25,8 +27,8 @@ extern WatchdogManager Watchdog;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[BRIDGE] ") + (msg)); } while(0)
 
-TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge(IUartChannel& uart)
-    : tiny_uart_(uart),
+TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge()
+    : tiny_uart_(nullptr),
       event_sink_(nullptr),
       initialized_(false),
       victron_keepalive_ok_(false) {
@@ -50,6 +52,12 @@ bool TinyBMS_Victron_Bridge::begin() {
         return false;
     }
 
+    hal::HalManager& hal_manager = hal::HalManager::instance();
+    if (!hal_manager.isInitialized()) {
+        BRIDGE_LOG(LOG_ERROR, "HAL manager not initialized");
+        return false;
+    }
+
     ConfigManager::HardwareConfig::UART uart_cfg{};
     ConfigManager::HardwareConfig::CAN can_cfg{};
     ConfigManager::TinyBMSConfig tinybms_cfg{};
@@ -65,21 +73,39 @@ bool TinyBMS_Victron_Bridge::begin() {
         BRIDGE_LOG(LOG_WARN, "Using default configuration values (config mutex unavailable)");
     }
 
+    hal::UartConfig hal_uart_config{};
+    hal_uart_config.rx_pin = uart_cfg.rx_pin;
+    hal_uart_config.tx_pin = uart_cfg.tx_pin;
+    hal_uart_config.baudrate = uart_cfg.baudrate;
+    hal_uart_config.timeout_ms = uart_cfg.timeout_ms;
+    hal_uart_config.use_dma = true;
+
+    hal::CanConfig hal_can_config{};
+    hal_can_config.tx_pin = can_cfg.tx_pin;
+    hal_can_config.rx_pin = can_cfg.rx_pin;
+    hal_can_config.bitrate = can_cfg.bitrate;
+    hal_can_config.enable_termination = can_cfg.termination;
+
+    tiny_uart_ = &hal_manager.uart();
+
     if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
-        tiny_uart_.begin(uart_cfg.baudrate, SERIAL_8N1,
-                         uart_cfg.rx_pin, uart_cfg.tx_pin);
+        if (tiny_uart_->initialize(hal_uart_config) != hal::Status::Ok) {
+            xSemaphoreGive(uartMutex);
+            BRIDGE_LOG(LOG_ERROR, "UART HAL initialization failed");
+            return false;
+        }
+        tiny_uart_->setTimeout(hal_uart_config.timeout_ms);
         xSemaphoreGive(uartMutex);
-        BRIDGE_LOG(LOG_INFO, "UART initialized");
+        BRIDGE_LOG(LOG_INFO, "UART initialized via HAL");
     } else {
         BRIDGE_LOG(LOG_ERROR, "UART mutex not available during init");
         return false;
     }
 
-    BRIDGE_LOG(LOG_INFO, "Initializing CAN...");
-    if (!CanDriver::begin(can_cfg.tx_pin,
-                          can_cfg.rx_pin,
-                          can_cfg.bitrate)) {
-        BRIDGE_LOG(LOG_ERROR, "CAN init failed");
+    BRIDGE_LOG(LOG_INFO, "Initializing CAN via HAL...");
+    hal::IHalCan& can_hal = hal_manager.can();
+    if (can_hal.initialize(hal_can_config) != hal::Status::Ok) {
+        BRIDGE_LOG(LOG_ERROR, "CAN HAL init failed");
         return false;
     }
     BRIDGE_LOG(LOG_INFO, "CAN initialized OK");
@@ -111,6 +137,10 @@ void TinyBMS_Victron_Bridge::setMqttPublisher(mqtt::Publisher* publisher) {
 
 void TinyBMS_Victron_Bridge::setEventSink(BridgeEventSink* sink) {
     event_sink_ = sink;
+}
+
+void TinyBMS_Victron_Bridge::setUart(hal::IHalUart* uart) {
+    tiny_uart_ = uart;
 }
 
 BridgeEventSink& TinyBMS_Victron_Bridge::eventSink() const {

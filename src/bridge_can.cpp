@@ -14,7 +14,8 @@
 #include "victron_can_mapping.h"
 #include "watchdog_manager.h"
 #include "rtos_config.h"
-#include "can_driver.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_can.h"
 
 extern Logger logger;
 extern ConfigManager config;
@@ -409,9 +410,15 @@ bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uin
 } // namespace
 
 bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data, uint8_t dlc) {
-    CanFrame f; f.id = pgn_id; f.dlc = dlc; f.extended = false; memcpy(f.data, data, dlc);
-    bool ok = CanDriver::send(f);
-    CanDriverStats driverStats = CanDriver::getStats();
+    hal::IHalCan& can_hal = hal::HalManager::instance().can();
+    hal::CanFrame frame{};
+    frame.id = pgn_id;
+    frame.dlc = dlc;
+    frame.extended = false;
+    memcpy(frame.data.data(), data, dlc);
+
+    bool ok = can_hal.transmit(frame) == hal::Status::Ok;
+    hal::CanStats driverStats = can_hal.getStats();
     stats.can_tx_count = driverStats.tx_success;
     stats.can_tx_errors = driverStats.tx_errors;
     stats.can_rx_errors = driverStats.rx_errors;
@@ -708,7 +715,7 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
         }
 
         // Phase 1: Protect stats writes with statsMutex
-        CanDriverStats driverStats = CanDriver::getStats();
+        hal::CanStats driverStats = hal::HalManager::instance().can().getStats();
         if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             bridge->stats.can_tx_count = driverStats.tx_success;
             bridge->stats.can_tx_errors = driverStats.tx_errors;

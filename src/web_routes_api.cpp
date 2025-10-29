@@ -17,7 +17,8 @@
 #include "watchdog_manager.h"
 #include "web_routes.h"
 #include "event_bus.h"
-#include "can_driver.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_can.h"
 #include "tinybms_victron_bridge.h"
 #include "victron_can_mapping.h"
 
@@ -666,7 +667,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // GET /api/hardware/test/can
     // ===========================================
     server.on("/api/hardware/test/can", HTTP_GET, [](AsyncWebServerRequest *request) {
-        CanDriverStats stats = CanDriver::getStats();
+        hal::CanStats stats = hal::HalManager::instance().can().getStats();
         bool ok = (stats.tx_success + stats.rx_success) > 0 && stats.bus_off_events == 0;
         StaticJsonDocument<256> resp;
         resp["success"] = ok;

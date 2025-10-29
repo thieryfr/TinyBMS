@@ -50,6 +50,11 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
         return false;
     }
 
+    if (tiny_uart_ == nullptr) {
+        BRIDGE_LOG(LOG_ERROR, "UART HAL not available");
+        return false;
+    }
+
     const TickType_t mutex_timeout = pdMS_TO_TICKS(100);
     if (xSemaphoreTake(uartMutex, mutex_timeout) != pdTRUE) {
         BRIDGE_LOG(LOG_ERROR, "UART mutex unavailable for read");
@@ -81,7 +86,7 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
 
     tinybms::DelayConfig delay_config{delay_adapter, nullptr};
     tinybms::TransactionResult result = tinybms::readHoldingRegisters(
-        tiny_uart_, start_addr, count, output, options, delay_config);
+        *tiny_uart_, start_addr, count, output, options, delay_config);
 
     stats.uart_retry_count += result.retries_performed;
     stats.uart_timeouts += result.timeout_count;

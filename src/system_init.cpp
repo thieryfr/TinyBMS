@@ -18,6 +18,10 @@
 #include "tiny_read_mapping.h"
 #include "victron_can_mapping.h"
 #include "mqtt/victron_mqtt_bridge.h"
+#include "hal/hal_manager.h"
+#include "hal/hal_config.h"
+#include "hal/hal_factory.h"
+#include "hal/esp32_factory.h"
 
 // Watchdog integration
 #include "watchdog_manager.h"
@@ -39,6 +43,27 @@ extern TaskHandle_t watchdogTaskHandle;
 extern TaskHandle_t mqttTaskHandle;
 
 namespace {
+
+hal::HalConfig buildHalConfig(const ConfigManager& cfg) {
+    hal::HalConfig hal_cfg{};
+    hal_cfg.uart.rx_pin = cfg.hardware.uart.rx_pin;
+    hal_cfg.uart.tx_pin = cfg.hardware.uart.tx_pin;
+    hal_cfg.uart.baudrate = cfg.hardware.uart.baudrate;
+    hal_cfg.uart.timeout_ms = cfg.hardware.uart.timeout_ms;
+    hal_cfg.uart.use_dma = true;
+
+    hal_cfg.can.tx_pin = cfg.hardware.can.tx_pin;
+    hal_cfg.can.rx_pin = cfg.hardware.can.rx_pin;
+    hal_cfg.can.bitrate = cfg.hardware.can.bitrate;
+    hal_cfg.can.enable_termination = cfg.hardware.can.termination;
+
+    hal_cfg.storage.type = cfg.advanced.enable_spiffs ? hal::StorageType::SPIFFS : hal::StorageType::NVS;
+    hal_cfg.storage.format_on_fail = true;
+
+    hal_cfg.watchdog.timeout_ms = cfg.advanced.watchdog_timeout_s * 1000;
+
+    return hal_cfg;
+}
 
 void feedWatchdogSafely() {
     if (xSemaphoreTake(feedMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -156,34 +181,17 @@ bool initializeWiFi() {
 // ===================================================================================
 bool initializeSPIFFS() {
     logger.log(LOG_INFO, "========================================");
-    logger.log(LOG_INFO, "   SPIFFS Filesystem");
+    logger.log(LOG_INFO, "   Storage");
     logger.log(LOG_INFO, "========================================");
 
-    logger.log(LOG_INFO, "[SPIFFS] Mounting filesystem...");
-
     feedWatchdogSafely();
-
-    if (!SPIFFS.begin(true)) {
-        logger.log(LOG_ERROR, "[SPIFFS] Mount failed! Attempting format...");
-
-        feedWatchdogSafely();
-
-        if (!SPIFFS.format()) {
-            logger.log(LOG_ERROR, "[SPIFFS] Format failed! Continuing without filesystem...");
-            publishStatusIfPossible("SPIFFS unavailable", STATUS_LEVEL_ERROR);
-            return false;
-        }
-
-        logger.log(LOG_INFO, "[SPIFFS] Formatted successfully");
-
-        if (!SPIFFS.begin()) {
-            logger.log(LOG_ERROR, "[SPIFFS] Mount failed even after format!");
-            publishStatusIfPossible("SPIFFS mount failed after format", STATUS_LEVEL_ERROR);
-            return false;
-        }
+    if (!config.advanced.enable_spiffs) {
+        logger.log(LOG_INFO, "[Storage] SPIFFS disabled via configuration");
+        publishStatusIfPossible("SPIFFS disabled", STATUS_LEVEL_NOTICE);
+        return true;
     }
 
-    logger.log(LOG_INFO, "[SPIFFS] Mounted successfully");
+    logger.log(LOG_INFO, "[SPIFFS] Filesystem ready via HAL");
     logger.log(LOG_DEBUG, "[SPIFFS] Total space: " + String(SPIFFS.totalBytes()) + " bytes");
     logger.log(LOG_DEBUG, "[SPIFFS] Used space: " + String(SPIFFS.usedBytes()) + " bytes");
 

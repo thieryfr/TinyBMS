@@ -9,6 +9,10 @@
 
 #include "logger.h"
 #include "config_manager.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_storage.h"
+
+#include <vector>
 
 extern SemaphoreHandle_t configMutex;
 extern ConfigManager config;
@@ -22,7 +26,7 @@ Logger::Logger() : current_level_(LOG_INFO), initialized_(false) {
 
 Logger::~Logger() {
     if (log_file_) {
-        log_file_.close();
+        log_file_->close();
     }
     if (log_mutex_ != NULL) {
         vSemaphoreDelete(log_mutex_);
@@ -38,21 +42,15 @@ bool Logger::begin(const ConfigManager& config) {
         return false;
     }
 
-    // Phase 3: SPIFFS should already be mounted by system_init
-    // Just verify it's available
-    if (!SPIFFS.begin(false)) { // false = don't format, just check if mounted
-        Serial.println("[LOGGER] ❌ SPIFFS not mounted (should be mounted by system_init)");
-        return false;
-    }
-
     initialized_ = true;
     return openLogFile();
 }
 
 bool Logger::openLogFile() {
     if (xSemaphoreTake(log_mutex_, pdMS_TO_TICKS(100)) == pdTRUE) {
-        log_file_ = SPIFFS.open("/logs.txt", FILE_APPEND);
-        if (!log_file_) {
+        hal::IHalStorage& storage = hal::HalManager::instance().storage();
+        log_file_ = storage.open("/logs.txt", hal::StorageOpenMode::Append);
+        if (!log_file_ || !log_file_->isOpen()) {
             Serial.println("[LOGGER] ❌ Échec ouverture fichier logs");
             xSemaphoreGive(log_mutex_);
             return false;
@@ -65,11 +63,12 @@ bool Logger::openLogFile() {
 
 void Logger::rotateLogFile() {
     if (xSemaphoreTake(log_mutex_, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (SPIFFS.exists("/logs.txt") && log_file_.size() > 100000) { // 100 Ko max
-            log_file_.close();
-            SPIFFS.remove("/logs.txt");
-            log_file_ = SPIFFS.open("/logs.txt", FILE_APPEND);
-            if (!log_file_) {
+        if (log_file_ && log_file_->isOpen() && log_file_->size() > 100000) { // 100 Ko max
+            log_file_->close();
+            hal::IHalStorage& storage = hal::HalManager::instance().storage();
+            storage.remove("/logs.txt");
+            log_file_ = storage.open("/logs.txt", hal::StorageOpenMode::Append);
+            if (!log_file_ || !log_file_->isOpen()) {
                 Serial.println("[LOGGER] ❌ Échec réouverture fichier logs après rotation");
             }
         }
@@ -95,9 +94,10 @@ void Logger::log(LogLevel level, const String& message) {
 
     // Log vers fichier
     if (xSemaphoreTake(log_mutex_, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (log_file_) {
-            log_file_.println(log_entry);
-            log_file_.flush();
+        if (log_file_ && log_file_->isOpen()) {
+            log_file_->write(reinterpret_cast<const uint8_t*>(log_entry.c_str()), log_entry.length());
+            const char newline = '\n';
+            log_file_->write(reinterpret_cast<const uint8_t*>(&newline), 1);
             rotateLogFile();
         }
         xSemaphoreGive(log_mutex_);
@@ -114,14 +114,14 @@ void Logger::setLogLevel(LogLevel level) {
 String Logger::getLogs() {
     String logs;
     if (xSemaphoreTake(log_mutex_, pdMS_TO_TICKS(100)) == pdTRUE) {
-        File file = SPIFFS.open("/logs.txt", FILE_READ);
-        if (file) {
-            while (file.available()) {
-                logs += file.readStringUntil('\n') + "\n";
-            }
-            file.close();
-        } else {
-            Serial.println("[LOGGER] ❌ Échec lecture fichier logs");
+        hal::IHalStorage& storage = hal::HalManager::instance().storage();
+        auto file = storage.open("/logs.txt", hal::StorageOpenMode::Read);
+        if (file && file->isOpen()) {
+            std::vector<uint8_t> buffer(file->size());
+            size_t read = buffer.empty() ? 0 : file->read(buffer.data(), buffer.size());
+            logs.reserve(read + 1);
+            logs += String(reinterpret_cast<const char*>(buffer.data()), read);
+            file->close();
         }
         xSemaphoreGive(log_mutex_);
     }
@@ -133,16 +133,15 @@ bool Logger::clearLogs() {
         return false;
     }
 
+    hal::IHalStorage& storage = hal::HalManager::instance().storage();
     if (log_file_) {
-        log_file_.close();
+        log_file_->close();
     }
 
-    if (SPIFFS.exists("/logs.txt")) {
-        SPIFFS.remove("/logs.txt");
-    }
+    storage.remove("/logs.txt");
 
-    log_file_ = SPIFFS.open("/logs.txt", FILE_APPEND);
-    bool ok = log_file_;
+    log_file_ = storage.open("/logs.txt", hal::StorageOpenMode::Write);
+    bool ok = log_file_ && log_file_->isOpen();
     xSemaphoreGive(log_mutex_);
     return ok;
 }

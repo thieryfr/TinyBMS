@@ -15,6 +15,11 @@
 #include "event_bus.h"
 #include "mqtt/victron_mqtt_bridge.h"
 #include "tinybms_config_editor.h"
+#include "hal/hal_manager.h"
+#include "hal/hal_config.h"
+#include "hal/esp32_factory.h"
+
+#include <exception>
 
 // Global resources
 SemaphoreHandle_t uartMutex;
@@ -60,24 +65,41 @@ void setup() {
 
     Serial.println("[INIT] All mutexes created (uart, feed, config, live, stats)");
 
-    // Phase 3: Mount SPIFFS once before config and logger
-    Serial.println("[INIT] Mounting SPIFFS...");
-    if (!SPIFFS.begin(true)) {
-        Serial.println("[INIT] ❌ SPIFFS mount failed! Attempting format...");
-        if (!SPIFFS.format() || !SPIFFS.begin()) {
-            Serial.println("[INIT] ❌ SPIFFS unavailable, continuing with limited functionality");
-        } else {
-            Serial.println("[INIT] SPIFFS mounted after format");
+    // Initialize HAL factory and hardware interfaces
+    hal::setFactory(hal::createEsp32Factory());
+
+    auto applyHalConfig = [&]() {
+        hal::HalConfig hal_cfg{};
+        hal_cfg.uart.rx_pin = config.hardware.uart.rx_pin;
+        hal_cfg.uart.tx_pin = config.hardware.uart.tx_pin;
+        hal_cfg.uart.baudrate = config.hardware.uart.baudrate;
+        hal_cfg.uart.timeout_ms = config.hardware.uart.timeout_ms;
+        hal_cfg.uart.use_dma = true;
+
+        hal_cfg.can.tx_pin = config.hardware.can.tx_pin;
+        hal_cfg.can.rx_pin = config.hardware.can.rx_pin;
+        hal_cfg.can.bitrate = config.hardware.can.bitrate;
+        hal_cfg.can.enable_termination = config.hardware.can.termination;
+
+        hal_cfg.storage.type = config.advanced.enable_spiffs ? hal::StorageType::SPIFFS : hal::StorageType::NVS;
+        hal_cfg.storage.format_on_fail = true;
+        hal_cfg.watchdog.timeout_ms = config.advanced.watchdog_timeout_s * 1000;
+
+        try {
+            hal::HalManager::instance().initialize(hal_cfg);
+        } catch (const std::exception& ex) {
+            Serial.println(String("[HAL] ❌ Initialization failed: ") + ex.what());
         }
-    } else {
-        Serial.println("[INIT] SPIFFS mounted successfully");
-    }
+    };
+
+    applyHalConfig();
 
     // Load configuration (uses configMutex internally)
     if (!config.begin()) {
         Serial.println("[CONFIG] ⚠ Using default configuration");
     } else {
         Serial.println("[CONFIG] Configuration loaded");
+        applyHalConfig();
     }
 
     const uint32_t desired_baud = config.logging.serial_baudrate > 0 ?

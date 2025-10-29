@@ -6,7 +6,8 @@
 #include "bridge_keepalive.h"
 #include "logger.h"
 #include "config_manager.h"
-#include "can_driver.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_can.h"
 
 extern Logger logger;
 extern ConfigManager config;
@@ -22,8 +23,8 @@ void TinyBMS_Victron_Bridge::keepAliveSend(){
 }
 
 void TinyBMS_Victron_Bridge::keepAliveProcessRX(uint32_t now_ms){
-    CanFrame f;
-    while (CanDriver::receive(f)) {
+    hal::CanFrame f;
+    while (hal::HalManager::instance().can().receive(f, 0) == hal::Status::Ok) {
         stats.can_rx_count++;
         if (!f.extended && f.id == VICTRON_PGN_KEEPALIVE) {
             last_keepalive_rx_ms_ = now_ms;

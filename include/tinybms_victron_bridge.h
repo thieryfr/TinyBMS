@@ -9,7 +9,7 @@
 #include "shared_data.h"
 #include "bridge_event_sink.h"
 #include "cvl_types.h"
-#include "uart/uart_channel.h"
+#include "hal/interfaces/ihal_uart.h"
 
 class HardwareSerial;
 class WatchdogManager;
@@ -59,12 +59,13 @@ class Publisher;
 
 class TinyBMS_Victron_Bridge {
 public:
-    explicit TinyBMS_Victron_Bridge(IUartChannel& uart = defaultTinyBmsUart());
+    TinyBMS_Victron_Bridge();
 
     bool begin();
 
     void setMqttPublisher(mqtt::Publisher* publisher);
     void setEventSink(BridgeEventSink* sink);
+    void setUart(hal::IHalUart* uart);
 
     BridgeEventSink& eventSink() const;
 
@@ -94,7 +95,7 @@ public:
     TinyBMS_Config   getConfig() const;
 
 public:
-    IUartChannel& tiny_uart_;
+    hal::IHalUart* tiny_uart_;
 
     TinyBMS_LiveData live_data_{};
     TinyBMS_Config   config_{};

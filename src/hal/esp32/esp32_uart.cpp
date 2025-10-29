@@ -1,22 +1,25 @@
-#include <Arduino.h>
-#include "uart/uart_channel.h"
+#include "hal/interfaces/ihal_uart.h"
+
+#include <HardwareSerial.h>
+
+namespace hal {
 
 namespace {
 
-class HardwareSerialChannel : public IUartChannel {
+class Esp32Uart : public IHalUart {
 public:
-    explicit HardwareSerialChannel(HardwareSerial& serial) : serial_(serial), timeout_ms_(1000) {}
+    Esp32Uart() : serial_(Serial1) {}
 
-    void begin(unsigned long baudrate,
-               uint32_t config,
-               int8_t rx_pin,
-               int8_t tx_pin) override {
-        serial_.begin(baudrate, config, rx_pin, tx_pin);
+    Status initialize(const UartConfig& config) override {
+        serial_.begin(config.baudrate, SERIAL_8N1, config.rx_pin, config.tx_pin, config.use_dma);
+        timeout_ms_ = config.timeout_ms;
+        serial_.setTimeout(timeout_ms_);
+        return Status::Ok;
     }
 
     void setTimeout(uint32_t timeout_ms) override {
         timeout_ms_ = timeout_ms;
-        serial_.setTimeout(timeout_ms);
+        serial_.setTimeout(timeout_ms_);
     }
 
     uint32_t getTimeout() const override {
@@ -45,12 +48,13 @@ public:
 
 private:
     HardwareSerial& serial_;
-    uint32_t timeout_ms_;
+    uint32_t timeout_ms_ = 1000;
 };
 
 } // namespace
 
-IUartChannel& defaultTinyBmsUart() {
-    static HardwareSerialChannel instance(Serial1);
-    return instance;
+std::unique_ptr<IHalUart> createEsp32Uart() {
+    return std::make_unique<Esp32Uart>();
 }
+
+} // namespace hal

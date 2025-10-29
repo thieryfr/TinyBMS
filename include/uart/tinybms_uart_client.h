@@ -1,7 +1,11 @@
 #pragma once
 
 #include <cstdint>
-#include "uart/uart_channel.h"
+#include "hal/interfaces/ihal_uart.h"
+
+namespace hal {
+class IHalUart;
+}
 
 namespace tinybms {
 
@@ -33,7 +37,7 @@ struct TransactionResult {
     uint32_t write_error_count = 0;
 };
 
-TransactionResult readHoldingRegisters(IUartChannel& uart,
+TransactionResult readHoldingRegisters(hal::IHalUart& uart,
                                        uint16_t start_addr,
                                        uint16_t count,
                                        uint16_t* output,

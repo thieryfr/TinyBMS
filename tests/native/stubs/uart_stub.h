@@ -5,9 +5,9 @@
 #include <cstdint>
 #include <queue>
 #include <vector>
-#include "uart/uart_channel.h"
+#include "hal/interfaces/ihal_uart.h"
 
-class TinyBmsUartStub : public IUartChannel {
+class TinyBmsUartStub : public hal::IHalUart {
 public:
     struct Exchange {
         std::vector<uint8_t> expected_request;
@@ -17,10 +17,10 @@ public:
 
     TinyBmsUartStub() : timeout_ms_(100), available_bytes_(0), read_index_(0) {}
 
-    void begin(unsigned long,
-               uint32_t,
-               int8_t,
-               int8_t) override {}
+    hal::Status initialize(const hal::UartConfig& config) override {
+        timeout_ms_ = config.timeout_ms;
+        return hal::Status::Ok;
+    }
 
     void setTimeout(uint32_t timeout_ms) override { timeout_ms_ = timeout_ms; }
     uint32_t getTimeout() const override { return timeout_ms_; }

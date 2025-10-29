@@ -5,11 +5,12 @@
 
 #include "watchdog_manager.h"
 #include <Arduino.h>
-#include "esp_task_wdt.h"
 #include "rtos_tasks.h"
 #include "rtos_config.h"
 #include "logger.h"
 #include "config_manager.h"
+#include "hal/hal_manager.h"
+#include "hal/interfaces/ihal_watchdog.h"
 
 extern Logger logger;
 extern ConfigManager config;
@@ -59,22 +60,19 @@ bool WatchdogManager::begin(uint32_t timeout_ms) {
 }
 
 bool WatchdogManager::configureHardware() {
-    esp_task_wdt_config_t wdt_config = {
-        .timeout_ms = timeout_ms_,
-        .idle_core_mask = 0,
-        .trigger_panic = true
-    };
-
-    if (esp_task_wdt_init(&wdt_config) != ESP_OK) return false;
-    if (esp_task_wdt_add(NULL) != ESP_OK) return false;
-
-    return true;
+    hal::WatchdogConfig config{};
+    config.timeout_ms = timeout_ms_;
+    hal::IHalWatchdog& watchdog = hal::HalManager::instance().watchdog();
+    if (watchdog.configure(config) != hal::Status::Ok) {
+        return false;
+    }
+    return watchdog.enable() == hal::Status::Ok;
 }
 
 bool WatchdogManager::disable() {
     if (!initialized_) return false;
 
-    if (esp_task_wdt_delete(NULL) != ESP_OK) {
+    if (hal::HalManager::instance().watchdog().disable() != hal::Status::Ok) {
         logger.log(LOG_WARNING, "Failed to remove watchdog");
         return false;
     }
@@ -87,13 +85,13 @@ bool WatchdogManager::disable() {
 bool WatchdogManager::enable() {
     if (!initialized_) return false;
 
-    if (esp_task_wdt_add(NULL) != ESP_OK) {
+    if (hal::HalManager::instance().watchdog().enable() != hal::Status::Ok) {
         logger.log(LOG_WARNING, "Failed to re-enable watchdog");
         return false;
     }
 
     enabled_ = true;
-    esp_task_wdt_reset();
+    hal::HalManager::instance().watchdog().feed();
     last_feed_time_ = millis();
     logger.log(LOG_INFO, "Watchdog re-enabled");
     return true;
@@ -110,7 +108,7 @@ bool WatchdogManager::feed() {
     unsigned long now = millis();
     uint32_t interval = now - last_feed_time_;
 
-    if (esp_task_wdt_reset() != ESP_OK) {
+    if (hal::HalManager::instance().watchdog().feed() != hal::Status::Ok) {
         logger.log(LOG_ERROR, "Watchdog feed failed");
         return false;
     }
@@ -131,7 +129,7 @@ bool WatchdogManager::forceFeed() {
     unsigned long now = millis();
     uint32_t interval = now - last_feed_time_;
 
-    if (esp_task_wdt_reset() != ESP_OK) {
+    if (hal::HalManager::instance().watchdog().feed() != hal::Status::Ok) {
         logger.log(LOG_ERROR, "Forced watchdog feed failed");
         return false;
     }
