@@ -10,7 +10,6 @@
 #include "bridge_can.h"
 #include "bridge_keepalive.h"
 #include "logger.h"
-#include "event_bus.h"
 #include "config_manager.h"
 #include "victron_can_mapping.h"
 #include "watchdog_manager.h"
@@ -18,7 +17,6 @@
 #include "can_driver.h"
 
 extern Logger logger;
-extern EventBus& eventBus;
 extern ConfigManager config;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
@@ -429,7 +427,7 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     if (ok) {
         if (log_can_traffic) BRIDGE_LOG(LOG_DEBUG, String("TX PGN 0x") + String(pgn_id, HEX));
     } else {
-        eventBus.publishAlarm(ALARM_CAN_TX_ERROR, "CAN TX failed", ALARM_SEVERITY_WARNING, pgn_id, SOURCE_ID_CAN);
+        eventSink().publishAlarm(ALARM_CAN_TX_ERROR, "CAN TX failed", ALARM_SEVERITY_WARNING, pgn_id, SOURCE_ID_CAN);
         BRIDGE_LOG(LOG_WARN, String("TX failed PGN 0x") + String(pgn_id, HEX));
     }
     return ok;
@@ -669,6 +667,7 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
     BRIDGE_LOG(LOG_INFO, "canTask started");
 
     while (true) {
+        BridgeEventSink& event_sink = bridge->eventSink();
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
         bridge->keepAliveProcessRX(now);
@@ -676,7 +675,7 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
         if (now - bridge->last_pgn_update_ms_ >= bridge->pgn_update_interval_ms_) {
             TinyBMS_LiveData d;
             // Phase 1: Protect live_data_ write with liveMutex
-            if (eventBus.getLatestLiveData(d)) {
+            if (event_sink.getLatestLiveData(d)) {
                 if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     bridge->live_data_ = d;
                     xSemaphoreGive(liveMutex);

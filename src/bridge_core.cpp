@@ -10,7 +10,6 @@
 #include "bridge_cvl.h"
 #include "bridge_keepalive.h"
 #include "logger.h"
-#include "event_bus.h"
 #include "config_manager.h"
 #include "watchdog_manager.h"
 #include "rtos_tasks.h"
@@ -18,7 +17,6 @@
 #include "can_driver.h"
 
 extern Logger logger;
-extern EventBus& eventBus;
 extern ConfigManager config;
 extern SemaphoreHandle_t uartMutex;
 extern SemaphoreHandle_t feedMutex;
@@ -29,6 +27,7 @@ extern WatchdogManager Watchdog;
 
 TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge(IUartChannel& uart)
     : tiny_uart_(uart),
+      event_sink_(&defaultBridgeEventSink()),
       initialized_(false),
       victron_keepalive_ok_(false) {
     memset(&live_data_, 0, sizeof(live_data_));
@@ -103,6 +102,14 @@ bool TinyBMS_Victron_Bridge::begin() {
 
 void TinyBMS_Victron_Bridge::setMqttPublisher(mqtt::Publisher* publisher) {
     mqtt_publisher_ = publisher;
+}
+
+void TinyBMS_Victron_Bridge::setEventSink(BridgeEventSink* sink) {
+    event_sink_ = sink != nullptr ? sink : &defaultBridgeEventSink();
+}
+
+BridgeEventSink& TinyBMS_Victron_Bridge::eventSink() const {
+    return event_sink_ != nullptr ? *event_sink_ : defaultBridgeEventSink();
 }
 
 bool Bridge_CreateTasks(TinyBMS_Victron_Bridge* bridge) {
