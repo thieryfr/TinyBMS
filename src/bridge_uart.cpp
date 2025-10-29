@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <vector>
 #include "bridge_uart.h"
 #include "logger.h"
 #include "event_bus.h"
@@ -143,6 +144,10 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
             }
 
             if (read_success) {
+                // Phase 3: Collect MQTT register events to publish AFTER live_data
+                std::vector<MqttRegisterEvent> deferred_mqtt_events;
+                deferred_mqtt_events.reserve(32); // Reserve space for ~32 typical registers
+
                 const auto& bindings = getTinyRegisterBindings();
                 for (const auto& binding : bindings) {
                     if (binding.register_count == 0) {
@@ -211,6 +216,7 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     const String* text_ptr = text_value.length() > 0 ? &text_value : nullptr;
                     d.applyBinding(binding, raw_value, scaled_value, text_ptr, raw_words);
 
+                    // Phase 3: Defer MQTT register events - collect now, publish after live_data
                     if (eventBus.isInitialized()) {
                         MqttRegisterEvent mqtt_event{};
                         mqtt_event.address =
@@ -240,7 +246,7 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                             mqtt_event.text_value[0] = '\0';
                         }
 
-                        eventBus.publishMqttRegister(mqtt_event, SOURCE_ID_UART);
+                        deferred_mqtt_events.push_back(mqtt_event);
                     }
                 }
 
@@ -282,7 +288,14 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 } else {
                     logger.log(LOG_WARN, "[UART] Failed to acquire liveMutex for live_data_ write");
                 }
+
+                // Phase 3: Publish live_data FIRST to ensure consumers see complete snapshot
                 eventBus.publishLiveData(d, SOURCE_ID_UART);
+
+                // Phase 3: Now publish deferred MQTT register events
+                for (const auto& mqtt_event : deferred_mqtt_events) {
+                    eventBus.publishMqttRegister(mqtt_event, SOURCE_ID_UART);
+                }
 
                 // Phase 2: Protect config.victron.thresholds read
                 VictronConfig::Thresholds th;

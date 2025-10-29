@@ -19,8 +19,10 @@ bool ConfigManager::begin(const char* filename) {
         return false;
     }
 
-    if (!SPIFFS.begin(true)) {
-        logger.log(LOG_ERROR, "SPIFFS mount failed");
+    // Phase 3: SPIFFS should already be mounted by system_init
+    // Just verify it's available
+    if (!SPIFFS.begin(false)) { // false = don't format, just check if mounted
+        logger.log(LOG_ERROR, "SPIFFS not mounted (should be mounted by system_init)");
         xSemaphoreGive(configMutex);
         return false;
     }

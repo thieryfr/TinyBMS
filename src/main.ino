@@ -60,6 +60,19 @@ void setup() {
 
     Serial.println("[INIT] All mutexes created (uart, feed, config, live, stats)");
 
+    // Phase 3: Mount SPIFFS once before config and logger
+    Serial.println("[INIT] Mounting SPIFFS...");
+    if (!SPIFFS.begin(true)) {
+        Serial.println("[INIT] ❌ SPIFFS mount failed! Attempting format...");
+        if (!SPIFFS.format() || !SPIFFS.begin()) {
+            Serial.println("[INIT] ❌ SPIFFS unavailable, continuing with limited functionality");
+        } else {
+            Serial.println("[INIT] SPIFFS mounted after format");
+        }
+    } else {
+        Serial.println("[INIT] SPIFFS mounted successfully");
+    }
+
     // Load configuration (uses configMutex internally)
     if (!config.begin()) {
         Serial.println("[CONFIG] ⚠ Using default configuration");

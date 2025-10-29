@@ -38,8 +38,10 @@ bool Logger::begin(const ConfigManager& config) {
         return false;
     }
 
-    if (!SPIFFS.begin(true)) {
-        Serial.println("[LOGGER] ❌ Échec initialisation SPIFFS");
+    // Phase 3: SPIFFS should already be mounted by system_init
+    // Just verify it's available
+    if (!SPIFFS.begin(false)) { // false = don't format, just check if mounted
+        Serial.println("[LOGGER] ❌ SPIFFS not mounted (should be mounted by system_init)");
         return false;
     }
 
