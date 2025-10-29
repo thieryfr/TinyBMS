@@ -17,6 +17,7 @@
 #include "rtos_config.h"
 #include "hal/hal_manager.h"
 #include "hal/interfaces/ihal_can.h"
+#include "event/event_bus_v2.h"
 #include "event/event_types_v2.h"
 
 using tinybms::events::AlarmCode;
@@ -29,6 +30,7 @@ extern Logger logger;
 extern ConfigManager config;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
+extern SemaphoreHandle_t statsMutex;
 extern WatchdogManager Watchdog;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[CAN] ") + (msg)); } while(0)
@@ -93,16 +95,10 @@ void copyAsciiPadded(uint8_t* dest, size_t length, const String& source, size_t 
     }
 }
 
-String resolveManufacturerName(const TinyBMS_Victron_Bridge& bridge) {
-    String manufacturer;
-    // Phase 1: Protect live_data_ read with liveMutex
-    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        manufacturer = getRegisterString(bridge.live_data_, 500);
-        xSemaphoreGive(liveMutex);
-    }
+String resolveManufacturerName(const TinyBMS_LiveData& live) {
+    String manufacturer = getRegisterString(live, 500);
     if (manufacturer.length() == 0) {
         manufacturer = "TinyBMS";
-        // Phase 2: Increase configMutex timeout to 100ms
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             manufacturer = config.victron.manufacturer_name;
             xSemaphoreGive(configMutex);
@@ -114,19 +110,14 @@ String resolveManufacturerName(const TinyBMS_Victron_Bridge& bridge) {
     return manufacturer;
 }
 
-String resolveBatteryName(const TinyBMS_Victron_Bridge& bridge) {
+String resolveBatteryName(const TinyBMS_LiveData& live) {
     String name;
-    // Phase 2: Increase configMutex timeout to 100ms
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         name = config.victron.battery_name;
         xSemaphoreGive(configMutex);
     }
     if (name.length() == 0) {
-        // Phase 1: Protect live_data_ read with liveMutex
-        if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            name = getRegisterString(bridge.live_data_, 502);
-            xSemaphoreGive(liveMutex);
-        }
+        name = getRegisterString(live, 502);
     }
     if (name.length() == 0) {
         name = "Lithium Battery";
@@ -134,15 +125,10 @@ String resolveBatteryName(const TinyBMS_Victron_Bridge& bridge) {
     return name;
 }
 
-String resolveBatteryFamily(const TinyBMS_Victron_Bridge& bridge) {
-    String family;
-    // Phase 1: Protect live_data_ read with liveMutex
-    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        family = getRegisterString(bridge.live_data_, 502);
-        xSemaphoreGive(liveMutex);
-    }
+String resolveBatteryFamily(const TinyBMS_LiveData& live) {
+    String family = getRegisterString(live, 502);
     if (family.length() == 0) {
-        family = resolveBatteryName(bridge);
+        family = resolveBatteryName(live);
     }
     return family;
 }
@@ -376,21 +362,13 @@ bool writeFieldValue(uint8_t* data, const VictronCanFieldDefinition& field, floa
     return true;
 }
 
-bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uint8_t* data) {
+bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, const TinyBMS_LiveData& live, uint16_t pgn, uint8_t* data) {
     const VictronPgnDefinition* def = findVictronPgnDefinition(pgn);
     if (!def) {
         return false;
     }
 
-    // Phase 1: Copy live_data_ and stats locally with mutex protection
-    TinyBMS_LiveData local_data;
     BridgeStats local_stats;
-    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-        local_data = bridge.live_data_;
-        xSemaphoreGive(liveMutex);
-    } else {
-        return false; // Cannot proceed without data
-    }
     if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         local_stats = bridge.stats;
         xSemaphoreGive(statsMutex);
@@ -398,7 +376,7 @@ bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uin
         return false; // Cannot proceed without stats
     }
 
-    VictronMappingContext ctx{local_data, local_stats};
+    VictronMappingContext ctx{live, local_stats};
     bool wrote_any = false;
 
     for (const auto& field : def->fields) {
@@ -407,7 +385,7 @@ bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uin
 
         switch (field.source.type) {
             case VictronValueSourceType::LiveData:
-                has_value = getLiveDataValue(field.source.live_field, local_data, source_value);
+                has_value = getLiveDataValue(field.source.live_field, live, source_value);
                 break;
             case VictronValueSourceType::Function:
                 has_value = computeFunctionValue(field, bridge, ctx, source_value);
@@ -470,7 +448,7 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     return ok;
 }
 
-void TinyBMS_Victron_Bridge::updateEnergyCounters(uint32_t now_ms) {
+void TinyBMS_Victron_Bridge::updateEnergyCounters(uint32_t now_ms, const TinyBMS_LiveData& live) {
     if (last_energy_update_ms_ == 0) {
         last_energy_update_ms_ = now_ms;
         return;
@@ -483,8 +461,8 @@ void TinyBMS_Victron_Bridge::updateEnergyCounters(uint32_t now_ms) {
         return;
     }
 
-    float voltage = live_data_.voltage;
-    float current = live_data_.current;
+    float voltage = live.voltage;
+    float current = live.current;
     if (!std::isfinite(voltage) || !std::isfinite(current)) {
         return;
     }
@@ -508,13 +486,13 @@ void TinyBMS_Victron_Bridge::updateEnergyCounters(uint32_t now_ms) {
     }
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x356(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x356(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_VOLTAGE_CURRENT, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_VOLTAGE_CURRENT, d)) {
         return;
     }
 
-    const auto& ld = live_data_;
+    const auto& ld = live;
     uint16_t u_001V = clamp_u16(round_i(ld.voltage * 100.0f));
     int16_t  i_01A  = clamp_s16(round_i(ld.current * 10.0f));
     int16_t  t_01C  = clamp_s16((int)ld.temperature); // already in 0.1 C
@@ -523,26 +501,26 @@ void TinyBMS_Victron_Bridge::buildPGN_0x356(uint8_t* d){
     put_s16_le(&d[4], t_01C);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x355(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x355(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_SOC_SOH, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_SOC_SOH, d)) {
         return;
     }
 
-    const auto& ld = live_data_;
+    const auto& ld = live;
     uint16_t soc_01 = clamp_u16(round_i(ld.soc_percent * 10.0f));
     uint16_t soh_01 = clamp_u16(round_i(ld.soh_percent * 10.0f));
     put_u16_le(&d[0], soc_01);
     put_u16_le(&d[2], soh_01);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x351(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_CVL_CCL_DCL, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_CVL_CCL_DCL, d)) {
         return;
     }
 
-    const auto& ld = live_data_;
+    const auto& ld = live;
     float cvl_target_v = stats.cvl_current_v > 0.0f ? stats.cvl_current_v : ld.voltage;
     float ccl_limit_a = stats.ccl_limit_a > 0.0f ? stats.ccl_limit_a : (ld.max_charge_current / 10.0f);
     float dcl_limit_a = stats.dcl_limit_a > 0.0f ? stats.dcl_limit_a : (ld.max_discharge_current / 10.0f);
@@ -556,13 +534,13 @@ void TinyBMS_Victron_Bridge::buildPGN_0x351(uint8_t* d){
     d[6]=d[7]=0;
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x35A(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_ALARMS, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_ALARMS, d)) {
         return;
     }
 
-    const auto& ld = live_data_;
+    const auto& ld = live;
     ConfigManager::VictronConfig::Thresholds th{};
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         th = config.victron.thresholds;
@@ -629,33 +607,33 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
     d[7] = encode2bit(d[7], 0, global_alarm ? 2 : 1);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x35E(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x35E(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_MANUFACTURER, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_MANUFACTURER, d)) {
         return;
     }
-    copyAsciiPadded(d, 8, resolveManufacturerName(*this));
+    copyAsciiPadded(d, 8, resolveManufacturerName(live));
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x35F(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x35F(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_BATTERY_INFO, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_BATTERY_INFO, d)) {
         return;
     }
-    copyAsciiPadded(d, 8, resolveBatteryName(*this));
+    copyAsciiPadded(d, 8, resolveBatteryName(live));
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x371(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x371(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_BMS_NAME_PART2, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_BMS_NAME_PART2, d)) {
         return;
     }
-    copyAsciiPadded(d, 8, resolveBatteryName(*this), 8);
+    copyAsciiPadded(d, 8, resolveBatteryName(live), 8);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x378(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x378(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_ENERGY_COUNTERS, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_ENERGY_COUNTERS, d)) {
         return;
     }
 
@@ -666,14 +644,14 @@ void TinyBMS_Victron_Bridge::buildPGN_0x378(uint8_t* d){
     put_u32_le(&d[4], energy_out_raw);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x379(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x379(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_INSTALLED_CAP, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_INSTALLED_CAP, d)) {
         return;
     }
 
     double capacity_ah = 0.0;
-    const TinyRegisterSnapshot* cap_snapshot = live_data_.findSnapshot(306);
+    const TinyRegisterSnapshot* cap_snapshot = live.findSnapshot(306);
     if (cap_snapshot) {
         capacity_ah = static_cast<double>(cap_snapshot->raw_value) * 0.01;
     }
@@ -691,12 +669,12 @@ void TinyBMS_Victron_Bridge::buildPGN_0x379(uint8_t* d){
     put_u16_le(&d[0], raw_capacity);
 }
 
-void TinyBMS_Victron_Bridge::buildPGN_0x382(uint8_t* d){
+void TinyBMS_Victron_Bridge::buildPGN_0x382(const TinyBMS_LiveData& live, uint8_t* d){
     memset(d, 0, 8);
-    if (applyVictronMapping(*this, VICTRON_PGN_BATTERY_FAMILY, d)) {
+    if (applyVictronMapping(*this, live, VICTRON_PGN_BATTERY_FAMILY, d)) {
         return;
     }
-    copyAsciiPadded(d, 8, resolveBatteryFamily(*this));
+    copyAsciiPadded(d, 8, resolveBatteryFamily(live));
 }
 
 void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
@@ -711,29 +689,25 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
 
         if (now - bridge->last_pgn_update_ms_ >= bridge->pgn_update_interval_ms_) {
             LiveDataUpdate latest{};
-            // Phase 1: Protect live_data_ write with liveMutex
-            if (event_sink.latest(latest)) {
-                const TinyBMS_LiveData& d = latest.data;
-                if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                    bridge->live_data_ = d;
-                    xSemaphoreGive(liveMutex);
-                }
+            TinyBMS_LiveData live{};
+            const bool have_live = event_sink.latest(latest);
+            if (have_live) {
+                live = latest.data;
+                bridge->updateEnergyCounters(now, live);
+
+                uint8_t p[8];
+
+                memset(p, 0, 8); bridge->buildPGN_0x356(live, p); bridge->sendVictronPGN(VICTRON_PGN_VOLTAGE_CURRENT, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x355(live, p); bridge->sendVictronPGN(VICTRON_PGN_SOC_SOH, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x351(live, p); bridge->sendVictronPGN(VICTRON_PGN_CVL_CCL_DCL, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x35A(live, p); bridge->sendVictronPGN(VICTRON_PGN_ALARMS, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x35E(live, p); bridge->sendVictronPGN(VICTRON_PGN_MANUFACTURER, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x35F(live, p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_INFO, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x371(live, p); bridge->sendVictronPGN(VICTRON_PGN_BMS_NAME_PART2, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x378(live, p); bridge->sendVictronPGN(VICTRON_PGN_ENERGY_COUNTERS, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x379(live, p); bridge->sendVictronPGN(VICTRON_PGN_INSTALLED_CAP, p, 8);
+                memset(p, 0, 8); bridge->buildPGN_0x382(live, p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_FAMILY, p, 8);
             }
-
-            bridge->updateEnergyCounters(now);
-
-            uint8_t p[8];
-
-            memset(p,0,8); bridge->buildPGN_0x356(p); bridge->sendVictronPGN(VICTRON_PGN_VOLTAGE_CURRENT, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x355(p); bridge->sendVictronPGN(VICTRON_PGN_SOC_SOH, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x351(p); bridge->sendVictronPGN(VICTRON_PGN_CVL_CCL_DCL, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x35A(p); bridge->sendVictronPGN(VICTRON_PGN_ALARMS, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x35E(p); bridge->sendVictronPGN(VICTRON_PGN_MANUFACTURER, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x35F(p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_INFO, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x371(p); bridge->sendVictronPGN(VICTRON_PGN_BMS_NAME_PART2, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x378(p); bridge->sendVictronPGN(VICTRON_PGN_ENERGY_COUNTERS, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x379(p); bridge->sendVictronPGN(VICTRON_PGN_INSTALLED_CAP, p, 8);
-            memset(p,0,8); bridge->buildPGN_0x382(p); bridge->sendVictronPGN(VICTRON_PGN_BATTERY_FAMILY, p, 8);
 
             bridge->keepAliveSend();
 

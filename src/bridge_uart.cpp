@@ -408,14 +408,6 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     bridge->config_.overheat_cutoff_c = static_cast<float>(d.overheat_cutoff_c);
                 }
 
-                // Phase 1: Protect live_data_ write with liveMutex
-                if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                    bridge->live_data_ = d;
-                    xSemaphoreGive(liveMutex);
-                } else {
-                    logger.log(LOG_WARN, "[UART] Failed to acquire liveMutex for live_data_ write");
-                }
-
                 // Phase 3: Publish live_data FIRST to ensure consumers see complete snapshot
                 LiveDataUpdate live_event{};
                 live_event.metadata.source = EventSource::Uart;

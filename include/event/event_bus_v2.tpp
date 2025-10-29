@@ -87,6 +87,15 @@ bool EventBusV2::hasLatest() const {
     return ch.latest.has_value();
 }
 
+inline bool EventBusV2::getLatestLiveData(TinyBMS_LiveData& out) const {
+    tinybms::events::LiveDataUpdate event{};
+    if (!getLatest<tinybms::events::LiveDataUpdate>(event)) {
+        return false;
+    }
+    out = event.data;
+    return true;
+}
+
 template <typename Event>
 typename EventBusV2::Channel<Event>& EventBusV2::channel() const {
     static Channel<Event> instance;

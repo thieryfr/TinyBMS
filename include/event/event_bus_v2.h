@@ -47,6 +47,8 @@ public:
     template <typename Event>
     bool hasLatest() const;
 
+    bool getLatestLiveData(TinyBMS_LiveData& out) const;
+
     void resetStats();
     BusStatistics statistics() const;
     size_t subscriberCount() const { return subscriber_count_.load(std::memory_order_relaxed); }
