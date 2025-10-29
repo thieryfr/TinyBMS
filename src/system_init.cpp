@@ -48,8 +48,6 @@ extern TaskHandle_t websocketTaskHandle;
 extern TaskHandle_t watchdogTaskHandle;
 extern TaskHandle_t mqttTaskHandle;
 
-namespace {
-
 hal::HalConfig buildHalConfig(const ConfigManager& cfg) {
     hal::HalConfig hal_cfg{};
     hal_cfg.uart.rx_pin = cfg.hardware.uart.rx_pin;
@@ -70,6 +68,8 @@ hal::HalConfig buildHalConfig(const ConfigManager& cfg) {
 
     return hal_cfg;
 }
+
+namespace {
 
 void feedWatchdogSafely() {
     if (xSemaphoreTake(feedMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
