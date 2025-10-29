@@ -95,7 +95,12 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
     auto *bridge = static_cast<TinyBMS_Victron_Bridge*>(pvParameters);
     BRIDGE_LOG(LOG_INFO, "cvlTask started");
 
-    CVLState last_state = bridge->stats.cvl_state;
+    // Phase 1: Read initial CVL state with statsMutex protection
+    CVLState last_state = CVL_BULK;
+    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        last_state = bridge->stats.cvl_state;
+        xSemaphoreGive(statsMutex);
+    }
     uint32_t state_entry_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     while (true) {
@@ -117,18 +122,29 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
                     snapshot.bulk_target_voltage_v = std::max(inputs.pack_voltage_v, 0.0f);
                 }
 
+                // Phase 1: Read previous runtime state with statsMutex protection
                 CVLRuntimeState previous_runtime;
                 previous_runtime.state = last_state;
-                previous_runtime.cvl_voltage_v = bridge->stats.cvl_current_v;
-                previous_runtime.cell_protection_active = bridge->stats.cell_protection_active;
+                if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    previous_runtime.cvl_voltage_v = bridge->stats.cvl_current_v;
+                    previous_runtime.cell_protection_active = bridge->stats.cell_protection_active;
+                    xSemaphoreGive(statsMutex);
+                } else {
+                    previous_runtime.cvl_voltage_v = 0.0f;
+                    previous_runtime.cell_protection_active = false;
+                }
 
                 CVLComputationResult result = computeCvlLimits(inputs, snapshot, previous_runtime);
 
-                bridge->stats.cvl_state = result.state;
-                bridge->stats.cvl_current_v = result.cvl_voltage_v;
-                bridge->stats.ccl_limit_a = result.ccl_limit_a;
-                bridge->stats.dcl_limit_a = result.dcl_limit_a;
-                bridge->stats.cell_protection_active = result.cell_protection_active;
+                // Phase 1: Write new CVL state with statsMutex protection
+                if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                    bridge->stats.cvl_state = result.state;
+                    bridge->stats.cvl_current_v = result.cvl_voltage_v;
+                    bridge->stats.ccl_limit_a = result.ccl_limit_a;
+                    bridge->stats.dcl_limit_a = result.dcl_limit_a;
+                    bridge->stats.cell_protection_active = result.cell_protection_active;
+                    xSemaphoreGive(statsMutex);
+                }
 
                 if (result.state != last_state) {
                     uint32_t duration = now - state_entry_ms;
