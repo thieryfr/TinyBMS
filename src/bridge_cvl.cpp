@@ -35,7 +35,7 @@ namespace {
         snapshot.bulk_target_voltage_v = data.voltage;
         snapshot.series_cell_count = 16;
 
-        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             snapshot.enabled = config.cvl.enabled;
             snapshot.bulk_soc_threshold = config.cvl.bulk_soc_threshold;
             snapshot.transition_soc_threshold = config.cvl.transition_soc_threshold;
@@ -74,7 +74,7 @@ namespace {
 
 bool shouldLogChanges() {
     bool enabled = false;
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         enabled = config.logging.log_cvl_changes;
         xSemaphoreGive(configMutex);
     }
