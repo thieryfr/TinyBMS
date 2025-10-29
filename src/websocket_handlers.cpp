@@ -159,14 +159,14 @@ void websocketTask(void *pvParameters) {
 
         ConfigManager::WebServerConfig web_config{};
         ConfigManager::LoggingConfig logging_config{};
-        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             web_config = config.web_server;
             logging_config = config.logging;
             xSemaphoreGive(configMutex);
         }
 
         optimization::WebsocketThrottleConfig throttle_config{};
-        throttle_config.min_interval_ms = std::max<uint32_t>(50, web_config.websocket_min_interval_ms);
+        throttle_config.min_interval_ms = std::max<uint32_t>(100, web_config.websocket_min_interval_ms);
         throttle_config.burst_window_ms = std::max<uint32_t>(throttle_config.min_interval_ms, web_config.websocket_burst_window_ms);
         throttle_config.max_burst_count = std::max<uint32_t>(1, web_config.websocket_burst_max);
         throttle_config.max_payload_bytes = web_config.websocket_max_payload_bytes;
@@ -187,7 +187,7 @@ void websocketTask(void *pvParameters) {
         }
 
         const uint32_t interval_ms = std::max<uint32_t>(throttle_config.min_interval_ms,
-                                                         std::max<uint32_t>(50, web_config.websocket_update_interval_ms));
+                                                         std::max<uint32_t>(100, web_config.websocket_update_interval_ms));
 
         if (now - last_update_ms >= interval_ms) {
 

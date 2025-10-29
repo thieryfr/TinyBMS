@@ -177,7 +177,7 @@ bool ensureThresholds(VictronMappingContext& ctx) {
     if (ctx.thresholds_loaded) {
         return true;
     }
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         ctx.thresholds = config.victron.thresholds;
         ctx.thresholds_loaded = true;
         xSemaphoreGive(configMutex);
@@ -452,7 +452,7 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     stats.can_queue_overflows = driverStats.rx_dropped;
 
     bool log_can_traffic = false;
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         log_can_traffic = config.logging.log_can_traffic;
         xSemaphoreGive(configMutex);
     }
@@ -564,7 +564,7 @@ void TinyBMS_Victron_Bridge::buildPGN_0x35A(uint8_t* d){
 
     const auto& ld = live_data_;
     ConfigManager::VictronConfig::Thresholds th{};
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         th = config.victron.thresholds;
         xSemaphoreGive(configMutex);
     }
