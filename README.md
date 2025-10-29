@@ -65,6 +65,92 @@ TinyBMS/
    - vers les **journalisations SPIFFS** pour audit ultérieur.
 4. **Configuration** : les changements reçus via l'API REST sont validés, persistés dans SPIFFS et rediffusés sur l'Event Bus.
 
+### Diagramme de flux global
+```
+┌──────────────────┐
+│   Boot ESP32 &   │
+│  system_init.cpp │
+│  (SPIFFS, WiFi,  │
+│  tâches FreeRTOS)│
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Chargement JSON  │
+│  ConfigManager   │
+│  (SPIFFS → RAM)  │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  EventBus global │
+│ (init + queue    │
+│  FreeRTOS)       │
+└──────┬─┬─┬───────┘
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       │ │ │
+       ▼ ▼ ▼
+┌──────────────┐   ┌────────────────┐   ┌────────────────────┐
+│ bridge_uart  │   │  cvl_logic &   │   │  bridge_can +      │
+│ (TinyBMS →   │   │  bridge_cvl    │   │  bridge_keepalive  │
+│  LiveData)   │   │ (normalisation │   │  (PGN Victron)     │
+└──────┬───────┘   │  limites CVL)  │   └────────┬──────────┘
+       │           └──────┬─────────┘            │
+       │                  │                      │
+       │                  │                      ▼
+       │                  │            ┌────────────────────┐
+       │                  │            │  can_driver.cpp    │
+       │                  │            │  (bus CAN physique)│
+       │                  │            └────────────────────┘
+       │                  │
+       │                  │
+       ▼                  │
+┌──────────────┐          │
+│ json_builders│          │
+│ + web_server │          │
+│ (HTTP/WS UI) │          │
+└──────┬───────┘          │
+       │                  │
+       ▼                  │
+┌──────────────┐          │
+│ web_routes_* │          │
+│ + websocket  │          │
+│ (API REST &  │          │
+│ diffusion WS)│          │
+└──────────────┘          │
+       │                  │
+       ▼                  │
+┌──────────────┐          │
+│  logger &    │◄─────────┘
+│ watchdog_mgr │
+│ (surveillance│
+│  & journaux) │
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│ MQTT Bridge  │
+│ (optionnel)  │
+└──────────────┘
+```
+
+Ce schéma synthétise les flux majeurs : initialisation → acquisition → normalisation → diffusion multi-canaux, avec la configuration, la journalisation et le watchdog en soutien transversal.
+
 ## Modules
 - **Initialisation système** – Création des mutex, montage SPIFFS, Event Bus, WiFi, lancement des tâches FreeRTOS (bridge, web, watchdog). Voir `README_system_init.md`.
 - **Gestion de configuration** – Lecture/écriture JSON SPIFFS, notifications Event Bus, exposée via API REST. Voir `README_config_manager.md`.
