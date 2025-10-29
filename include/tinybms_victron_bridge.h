@@ -85,21 +85,20 @@ public:
 
     bool sendVictronPGN(uint16_t pgn_id, const uint8_t* data, uint8_t dlc);
 
-    void buildPGN_0x351(uint8_t* d);
-    void buildPGN_0x355(uint8_t* d);
-    void buildPGN_0x356(uint8_t* d);
-    void buildPGN_0x35A(uint8_t* d);
-    void buildPGN_0x35E(uint8_t* d);
-    void buildPGN_0x35F(uint8_t* d);
-    void buildPGN_0x371(uint8_t* d);
-    void buildPGN_0x378(uint8_t* d);
-    void buildPGN_0x379(uint8_t* d);
-    void buildPGN_0x382(uint8_t* d);
+    void buildPGN_0x351(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x355(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x356(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x35A(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x35E(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x35F(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x371(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x378(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x379(const TinyBMS_LiveData& live, uint8_t* d);
+    void buildPGN_0x382(const TinyBMS_LiveData& live, uint8_t* d);
 
     void keepAliveSend();
     void keepAliveProcessRX(uint32_t now);
 
-    TinyBMS_LiveData getLiveData() const;
     TinyBMS_Config   getConfig() const;
 
 public:
@@ -107,7 +106,6 @@ public:
     optimization::AdaptivePoller uart_poller_;
     optimization::ByteRingBuffer uart_rx_buffer_;
 
-    TinyBMS_LiveData live_data_{};
     TinyBMS_Config   config_{};
     BridgeStats      stats{};
 
@@ -130,7 +128,7 @@ public:
     uint32_t keepalive_timeout_ms_   = 10000;
 
 private:
-    void updateEnergyCounters(uint32_t now_ms);
+    void updateEnergyCounters(uint32_t now_ms, const TinyBMS_LiveData& live);
 
     uint32_t last_energy_update_ms_ = 0;
 };

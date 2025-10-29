@@ -39,11 +39,9 @@ extern mqtt::VictronMqttBridge mqttBridge;
 String getStatusJSON() {
     StaticJsonDocument<2048> doc;  // Expanded to include comms + alarm metadata
 
-    TinyBMS_LiveData data;
-    // Phase 6: Use Event Bus cache instead of legacy queue
+    TinyBMS_LiveData data{};
     if (!eventBus.getLatestLiveData(data)) {
-        logger.log(LOG_DEBUG, "[JSON] No cached data, using bridge.getLiveData()");
-        data = bridge.getLiveData();
+        logger.log(LOG_DEBUG, "[JSON] No cached data available for status JSON");
     }
 
     JsonObject live = doc.createNestedObject("live_data");
