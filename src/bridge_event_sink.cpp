@@ -5,7 +5,9 @@
 namespace {
 class EventBusBridgeEventSink final : public BridgeEventSink {
 public:
-    explicit EventBusBridgeEventSink(EventBus& bus) : bus_(&bus) {}
+    EventBusBridgeEventSink() : bus_(nullptr) {}
+
+    void setBus(EventBus& bus) { bus_ = &bus; }
 
     bool isReady() const override {
         return bus_ != nullptr && bus_->isInitialized();
@@ -56,7 +58,8 @@ private:
 };
 }  // namespace
 
-BridgeEventSink& defaultBridgeEventSink() {
-    static EventBusBridgeEventSink sink(EventBus::getInstance());
+BridgeEventSink& defaultBridgeEventSink(EventBus& bus) {
+    static EventBusBridgeEventSink sink;
+    sink.setBus(bus);
     return sink;
 }

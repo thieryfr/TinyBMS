@@ -2,6 +2,8 @@
 
 #include "event_types.h"
 
+class EventBus;
+
 class BridgeEventSink {
 public:
     virtual ~BridgeEventSink() = default;
@@ -27,4 +29,4 @@ public:
     virtual bool getLatestLiveData(TinyBMS_LiveData& data_out) const = 0;
 };
 
-BridgeEventSink& defaultBridgeEventSink();
+BridgeEventSink& defaultBridgeEventSink(EventBus& bus);

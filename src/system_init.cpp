@@ -215,7 +215,7 @@ bool initializeBridge() {
 
     feedWatchdogSafely();
 
-    BridgeEventSink& sink = defaultBridgeEventSink();
+    BridgeEventSink& sink = defaultBridgeEventSink(eventBus);
     bool success = Bridge_BuildAndBegin(bridge, sink);
 
     if (!success) {
