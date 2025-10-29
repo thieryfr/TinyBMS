@@ -215,7 +215,8 @@ bool initializeBridge() {
 
     feedWatchdogSafely();
 
-    bool success = bridge.begin();
+    BridgeEventSink& sink = defaultBridgeEventSink();
+    bool success = Bridge_BuildAndBegin(bridge, sink);
 
     if (!success) {
         logger.log(LOG_ERROR, "[BRIDGE] Initialization failed!");

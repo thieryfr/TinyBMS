@@ -27,7 +27,7 @@ extern WatchdogManager Watchdog;
 
 TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge(IUartChannel& uart)
     : tiny_uart_(uart),
-      event_sink_(&defaultBridgeEventSink()),
+      event_sink_(nullptr),
       initialized_(false),
       victron_keepalive_ok_(false) {
     memset(&live_data_, 0, sizeof(live_data_));
@@ -44,6 +44,11 @@ TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge(IUartChannel& uart)
 
 bool TinyBMS_Victron_Bridge::begin() {
     BRIDGE_LOG(LOG_INFO, "Initializing TinyBMS-Victron Bridge...");
+
+    if (event_sink_ == nullptr) {
+        BRIDGE_LOG(LOG_ERROR, "Event sink not configured");
+        return false;
+    }
 
     ConfigManager::HardwareConfig::UART uart_cfg{};
     ConfigManager::HardwareConfig::CAN can_cfg{};
@@ -105,11 +110,16 @@ void TinyBMS_Victron_Bridge::setMqttPublisher(mqtt::Publisher* publisher) {
 }
 
 void TinyBMS_Victron_Bridge::setEventSink(BridgeEventSink* sink) {
-    event_sink_ = sink != nullptr ? sink : &defaultBridgeEventSink();
+    event_sink_ = sink;
 }
 
 BridgeEventSink& TinyBMS_Victron_Bridge::eventSink() const {
-    return event_sink_ != nullptr ? *event_sink_ : defaultBridgeEventSink();
+    return *event_sink_;
+}
+
+bool Bridge_BuildAndBegin(TinyBMS_Victron_Bridge& bridge, BridgeEventSink& sink) {
+    bridge.setEventSink(&sink);
+    return bridge.begin();
 }
 
 bool Bridge_CreateTasks(TinyBMS_Victron_Bridge* bridge) {
