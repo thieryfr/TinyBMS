@@ -8,14 +8,12 @@
 
 #include "bridge_cvl.h"
 #include "logger.h"
-#include "event_bus.h"
 #include "watchdog_manager.h"
 #include "rtos_config.h"
 #include "config_manager.h"
 #include "cvl_logic.h"
 
 extern Logger logger;
-extern EventBus& eventBus;
 extern ConfigManager config;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
@@ -104,10 +102,11 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
     uint32_t state_entry_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     while (true) {
+        BridgeEventSink& event_sink = bridge->eventSink();
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now - bridge->last_cvl_update_ms_ >= bridge->cvl_update_interval_ms_) {
             TinyBMS_LiveData data;
-            if (eventBus.getLatestLiveData(data)) {
+            if (event_sink.getLatestLiveData(data)) {
                 CVLInputs inputs;
                 inputs.soc_percent = data.soc_percent;
                 inputs.cell_imbalance_mv = data.cell_imbalance_mv;
@@ -148,13 +147,13 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
 
                 if (result.state != last_state) {
                     uint32_t duration = now - state_entry_ms;
-                    eventBus.publishCVLStateChange(static_cast<uint8_t>(last_state),
-                                                   static_cast<uint8_t>(result.state),
-                                                   result.cvl_voltage_v,
-                                                   result.ccl_limit_a,
-                                                   result.dcl_limit_a,
-                                                   duration,
-                                                   SOURCE_ID_CVL);
+                    event_sink.publishCVLStateChange(static_cast<uint8_t>(last_state),
+                                                     static_cast<uint8_t>(result.state),
+                                                     result.cvl_voltage_v,
+                                                     result.ccl_limit_a,
+                                                     result.dcl_limit_a,
+                                                     duration,
+                                                     SOURCE_ID_CVL);
                     logChangeIfNeeded(result, last_state, data);
                     last_state = result.state;
                     state_entry_ms = now;

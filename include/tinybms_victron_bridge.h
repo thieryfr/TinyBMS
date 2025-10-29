@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include "shared_data.h"
+#include "bridge_event_sink.h"
 #include "cvl_types.h"
 #include "uart/uart_channel.h"
 
@@ -63,6 +64,9 @@ public:
     bool begin();
 
     void setMqttPublisher(mqtt::Publisher* publisher);
+    void setEventSink(BridgeEventSink* sink);
+
+    BridgeEventSink& eventSink() const;
 
     static void uartTask(void *pvParameters);
     static void canTask(void *pvParameters);
@@ -97,6 +101,7 @@ public:
     BridgeStats      stats{};
 
     mqtt::Publisher* mqtt_publisher_ = nullptr;
+    BridgeEventSink* event_sink_ = nullptr;
 
     bool initialized_ = false;
     bool victron_keepalive_ok_ = false;
