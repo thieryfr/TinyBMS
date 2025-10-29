@@ -15,7 +15,8 @@
 #include "watchdog_manager.h"
 #include "json_builders.h"
 #include "tinybms_victron_bridge.h"
-#include "event_bus.h"  // Phase 6: Event Bus integration
+#include "event/event_bus_v2.h"  // Phase 6: Event Bus integration
+#include "event/event_types_v2.h"
 #include "tiny_read_mapping.h"
 #include "mqtt/victron_mqtt_bridge.h"
 
@@ -25,7 +26,11 @@ extern ConfigManager config;
 extern WatchdogManager Watchdog;
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
-extern EventBus& eventBus;  // Phase 6: Event Bus instance
+using tinybms::event::eventBus;  // Phase 6: Event Bus instance
+using tinybms::events::AlarmCleared;
+using tinybms::events::AlarmRaised;
+using tinybms::events::StatusMessage;
+using tinybms::events::WarningRaised;
 extern mqtt::VictronMqttBridge mqttBridge;
 
 // ============================================================================
@@ -160,15 +165,14 @@ String getStatusJSON() {
     stats["energy_charged_wh"] = local_stats.energy_charged_wh;
     stats["energy_discharged_wh"] = local_stats.energy_discharged_wh;
 
-    EventBus::BusStats bus_stats{};
-    eventBus.getStats(bus_stats);
+    tinybms::event::BusStatistics bus_stats = eventBus.statistics();
     JsonObject bus = stats.createNestedObject("event_bus");
-    bus["total_events_published"] = bus_stats.total_events_published;
-    bus["total_events_dispatched"] = bus_stats.total_events_dispatched;
-    bus["queue_overruns"] = bus_stats.queue_overruns;
-    bus["dispatch_errors"] = bus_stats.dispatch_errors;
-    bus["total_subscribers"] = bus_stats.total_subscribers;
-    bus["current_queue_depth"] = bus_stats.current_queue_depth;
+    bus["total_events_published"] = bus_stats.total_published;
+    bus["total_events_dispatched"] = bus_stats.total_delivered;
+    bus["subscriber_count"] = bus_stats.subscriber_count;
+    bus["queue_overruns"] = 0;
+    bus["dispatch_errors"] = 0;
+    bus["current_queue_depth"] = 0;
 
     JsonObject mqtt_stats = stats.createNestedObject("mqtt");
     mqttBridge.appendStatus(mqtt_stats);
@@ -185,27 +189,28 @@ String getStatusJSON() {
 
     doc["uptime_ms"] = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
-    BusEvent status_event;
-    if (eventBus.getLatest(EVENT_STATUS_MESSAGE, status_event)) {
+    StatusMessage status_event{};
+    if (eventBus.getLatest(status_event)) {
         JsonObject status = doc.createNestedObject("status_message");
-        status["message"] = status_event.data.status.message;
-        status["level"] = status_event.data.status.level;
+        status["message"] = status_event.message;
+        status["level"] = static_cast<uint8_t>(status_event.level);
         static const char* level_names[] = {"info", "notice", "warning", "error"};
-        if (status_event.data.status.level < (sizeof(level_names) / sizeof(level_names[0]))) {
-            status["level_name"] = level_names[status_event.data.status.level];
+        auto level_index = static_cast<size_t>(status_event.level);
+        if (level_index < (sizeof(level_names) / sizeof(level_names[0]))) {
+            status["level_name"] = level_names[level_index];
         }
-        status["source_id"] = status_event.source_id;
-        status["timestamp_ms"] = status_event.timestamp_ms;
+        status["source_id"] = static_cast<uint32_t>(status_event.metadata.source);
+        status["timestamp_ms"] = status_event.metadata.timestamp_ms;
     }
 
-    auto appendAlarmEvent = [](JsonArray& arr, const BusEvent& evt, const char* type_label) {
+    auto appendAlarmEvent = [](JsonArray& arr, const auto& evt, const char* type_label) {
         JsonObject alarm_obj = arr.createNestedObject();
         alarm_obj["event"] = type_label;
-        alarm_obj["timestamp_ms"] = evt.timestamp_ms;
-        alarm_obj["source_id"] = evt.source_id;
-        alarm_obj["sequence"] = evt.sequence_number;
+        alarm_obj["timestamp_ms"] = evt.metadata.timestamp_ms;
+        alarm_obj["source_id"] = static_cast<uint32_t>(evt.metadata.source);
+        alarm_obj["sequence"] = evt.metadata.sequence;
 
-        const AlarmEvent& alarm = evt.data.alarm;
+        const auto& alarm = evt.alarm;
         alarm_obj["code"] = alarm.alarm_code;
         alarm_obj["severity"] = alarm.severity;
         static const char* severity_names[] = {"info", "warning", "error", "critical"};
@@ -218,18 +223,22 @@ String getStatusJSON() {
     };
 
     JsonArray alarms = doc.createNestedArray("alarms");
-    BusEvent alarm_event;
+    AlarmRaised alarm_event{};
     bool active_alarm = false;
-    if (eventBus.getLatest(EVENT_ALARM_RAISED, alarm_event)) {
+    if (eventBus.getLatest(alarm_event)) {
         appendAlarmEvent(alarms, alarm_event, "raised");
-        active_alarm |= alarm_event.data.alarm.is_active;
+        active_alarm |= alarm_event.alarm.is_active;
     }
-    if (eventBus.getLatest(EVENT_ALARM_CLEARED, alarm_event)) {
-        appendAlarmEvent(alarms, alarm_event, "cleared");
-        active_alarm &= alarm_event.data.alarm.is_active;
+
+    AlarmCleared cleared_event{};
+    if (eventBus.getLatest(cleared_event)) {
+        appendAlarmEvent(alarms, cleared_event, "cleared");
+        active_alarm &= cleared_event.alarm.is_active;
     }
-    if (eventBus.getLatest(EVENT_WARNING_RAISED, alarm_event)) {
-        appendAlarmEvent(alarms, alarm_event, "warning");
+
+    WarningRaised warning_event{};
+    if (eventBus.getLatest(warning_event)) {
+        appendAlarmEvent(alarms, warning_event, "warning");
     }
 
     doc["alarms_active"] = active_alarm;

@@ -3,13 +3,14 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "mqtt/publisher.h"
-#include "event_bus.h"
+#include "event/event_bus_v2.h"
+#include "event/event_types_v2.h"
 
 namespace mqtt {
 
 class VictronMqttBridge : public Publisher {
 public:
-    explicit VictronMqttBridge(EventBus& bus);
+    explicit VictronMqttBridge(tinybms::event::EventBusV2& bus);
     ~VictronMqttBridge() override;
 
     void enable(bool enabled);
@@ -27,19 +28,18 @@ public:
     void appendStatus(JsonObject obj) const;
 
 private:
-    static void onBusEvent(const BusEvent& event, void* user_data);
 #ifdef ARDUINO
     static void onMqttEvent(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 #endif
-    void handleRegisterEvent(const MqttRegisterEvent& payload);
+    void handleRegisterEvent(const tinybms::events::MqttRegisterValue& event);
 
     String buildTopic(const String& suffix) const;
     bool shouldAttemptReconnect(uint32_t now_ms) const;
     void noteError(uint32_t code, const char* message);
 
 private:
-    EventBus& bus_;
-    bool subscribed_;
+    tinybms::event::EventBusV2& bus_;
+    tinybms::event::EventSubscriber bus_subscription_;
     bool enabled_;
     bool configured_;
     bool connecting_;

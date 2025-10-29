@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SPIFFS.h>
+#include <cstring>
 #include "rtos_tasks.h"
 #include "rtos_config.h"
 #include "shared_data.h"
@@ -13,7 +14,8 @@
 #include "config_manager.h"
 #include "tinybms_victron_bridge.h"
 #include "tinybms_config_editor.h"
-#include "event_bus.h"
+#include "event/event_bus_v2.h"
+#include "event/event_types_v2.h"
 #include "bridge_core.h"
 #include "tiny_read_mapping.h"
 #include "victron_can_mapping.h"
@@ -34,7 +36,11 @@ extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t feedMutex;
 extern Logger logger;
 extern TinyBMSConfigEditor configEditor;
-extern EventBus& eventBus;
+using tinybms::event::eventBus;
+using tinybms::events::EventSource;
+using tinybms::events::StatusLevel;
+using tinybms::events::StatusMessage;
+using tinybms::events::LiveDataUpdate;
 extern mqtt::VictronMqttBridge mqttBridge;
 
 extern TaskHandle_t webServerTaskHandle;
@@ -73,9 +79,16 @@ void feedWatchdogSafely() {
 }
 
 void publishStatusIfPossible(const char* message, StatusLevel level) {
-    if (eventBus.isInitialized()) {
-        eventBus.publishStatus(message, SOURCE_ID_SYSTEM, level);
+    if (message == nullptr) {
+        return;
     }
+
+    StatusMessage event{};
+    event.metadata.source = EventSource::System;
+    event.level = level;
+    std::strncpy(event.message, message, sizeof(event.message) - 1);
+    event.message[sizeof(event.message) - 1] = '\0';
+    eventBus.publish(event);
 }
 
 bool createTask(const char* name,
@@ -117,7 +130,7 @@ bool initializeWiFi() {
 
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
         logger.log(LOG_ERROR, "[WiFi] Failed to acquire config mutex");
-        publishStatusIfPossible("WiFi configuration mutex unavailable", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("WiFi configuration mutex unavailable", StatusLevel::Error);
         return false;
     }
 
@@ -156,7 +169,7 @@ bool initializeWiFi() {
         logger.log(LOG_INFO, "[WiFi] IP Address: " + WiFi.localIP().toString());
         logger.log(LOG_INFO, "[WiFi] Hostname: " + config.wifi.sta_hostname);
         logger.log(LOG_INFO, "[WiFi] RSSI: " + String(WiFi.RSSI()) + " dBm");
-        publishStatusIfPossible("WiFi client connected", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("WiFi client connected", StatusLevel::Notice);
         success = true;
     } else if (config.wifi.ap_fallback.enabled) {
         logger.log(LOG_WARN, "[WiFi] Connection failed - starting AP mode");
@@ -165,11 +178,11 @@ bool initializeWiFi() {
         logger.log(LOG_INFO, "[WiFi] AP Mode started ✓");
         logger.log(LOG_INFO, "[WiFi] AP SSID: " + config.wifi.ap_fallback.ssid);
         logger.log(LOG_INFO, "[WiFi] AP IP: " + WiFi.softAPIP().toString());
-        publishStatusIfPossible("WiFi AP fallback active", STATUS_LEVEL_WARNING);
+        publishStatusIfPossible("WiFi AP fallback active", StatusLevel::Warning);
         success = true;
     } else {
         logger.log(LOG_ERROR, "[WiFi] Connection failed and AP fallback disabled");
-        publishStatusIfPossible("WiFi unavailable (connection failed)", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("WiFi unavailable (connection failed)", StatusLevel::Error);
     }
 
     xSemaphoreGive(configMutex);
@@ -187,7 +200,7 @@ bool initializeSPIFFS() {
     feedWatchdogSafely();
     if (!config.advanced.enable_spiffs) {
         logger.log(LOG_INFO, "[Storage] SPIFFS disabled via configuration");
-        publishStatusIfPossible("SPIFFS disabled", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("SPIFFS disabled", StatusLevel::Notice);
         return true;
     }
 
@@ -209,7 +222,7 @@ bool initializeSPIFFS() {
     }
 
     logger.log(LOG_DEBUG, "[SPIFFS] " + String(file_count) + " files, total " + String(total_size) + " bytes");
-    publishStatusIfPossible("SPIFFS mounted", STATUS_LEVEL_NOTICE);
+    publishStatusIfPossible("SPIFFS mounted", StatusLevel::Notice);
     return true;
 }
 
@@ -229,7 +242,7 @@ bool initializeBridge() {
     if (!success) {
         logger.log(LOG_ERROR, "[BRIDGE] Initialization failed!");
         logger.log(LOG_WARN, "[BRIDGE] Continuing without bridge (web interface still available)");
-        publishStatusIfPossible("Bridge unavailable", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("Bridge unavailable", StatusLevel::Error);
 
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             logger.log(LOG_DEBUG, "  UART RX: GPIO" + String(config.hardware.uart.rx_pin));
@@ -240,7 +253,7 @@ bool initializeBridge() {
         }
     } else {
         logger.log(LOG_INFO, "[BRIDGE] Initialized successfully ✓");
-        publishStatusIfPossible("Bridge ready", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("Bridge ready", StatusLevel::Notice);
 
         if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             logger.log(LOG_DEBUG, "[CONFIG] Bridge configuration:");
@@ -275,12 +288,12 @@ bool initializeMqttBridge() {
 
     if (!mqtt_cfg.enabled) {
         logger.log(LOG_INFO, "[MQTT] Disabled via configuration");
-        publishStatusIfPossible("MQTT bridge disabled", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("MQTT bridge disabled", StatusLevel::Notice);
         return true;
     }
 
     if (!mqttBridge.begin()) {
-        publishStatusIfPossible("MQTT event subscription failed", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("MQTT event subscription failed", StatusLevel::Error);
         return false;
     }
 
@@ -303,9 +316,9 @@ bool initializeMqttBridge() {
 
     bool connected = mqttBridge.connect();
     if (connected) {
-        publishStatusIfPossible("MQTT bridge connected", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("MQTT bridge connected", StatusLevel::Notice);
     } else {
-        publishStatusIfPossible("MQTT bridge connection failed", STATUS_LEVEL_WARNING);
+        publishStatusIfPossible("MQTT bridge connection failed", StatusLevel::Warning);
     }
 
     bool task_ok = createTask(
@@ -319,7 +332,7 @@ bool initializeMqttBridge() {
 
     if (!task_ok) {
         logger.log(LOG_ERROR, "[MQTT] Failed to create loop task");
-        publishStatusIfPossible("MQTT loop task failed", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("MQTT loop task failed", StatusLevel::Error);
     }
 
     return task_ok;
@@ -337,7 +350,7 @@ bool initializeConfigEditor() {
 
     configEditor.begin();
     logger.log(LOG_INFO, "[CONFIG_EDITOR] Register catalog ready");
-    publishStatusIfPossible("Config editor ready", STATUS_LEVEL_NOTICE);
+    publishStatusIfPossible("Config editor ready", StatusLevel::Notice);
     return true;
 }
 
@@ -359,33 +372,29 @@ bool initializeSystem() {
     if (spiffs_ok) {
         mapping_ok = initializeTinyReadMapping(SPIFFS, "/tiny_read.json", &logger);
         if (mapping_ok) {
-            publishStatusIfPossible("tiny_read mapping loaded", STATUS_LEVEL_NOTICE);
+            publishStatusIfPossible("tiny_read mapping loaded", StatusLevel::Notice);
         } else {
             logger.log(LOG_WARN, "[MAPPING] Failed to load /tiny_read.json");
-            publishStatusIfPossible("tiny_read mapping unavailable", STATUS_LEVEL_WARNING);
+            publishStatusIfPossible("tiny_read mapping unavailable", StatusLevel::Warning);
         }
 
         can_mapping_ok = initializeVictronCanMapping(SPIFFS, "/tiny_read_4vic.json", &logger);
         if (can_mapping_ok) {
-            publishStatusIfPossible("Victron CAN mapping loaded", STATUS_LEVEL_NOTICE);
+            publishStatusIfPossible("Victron CAN mapping loaded", StatusLevel::Notice);
         } else {
             logger.log(LOG_WARN, "[CAN_MAP] Failed to load /tiny_read_4vic.json");
-            publishStatusIfPossible("Victron CAN mapping unavailable", STATUS_LEVEL_WARNING);
+            publishStatusIfPossible("Victron CAN mapping unavailable", StatusLevel::Warning);
         }
     } else {
         logger.log(LOG_WARN, "[MAPPING] Skipping tiny_read mapping (SPIFFS unavailable)");
     }
 
-    const bool event_bus_ok = eventBus.begin(EVENT_BUS_QUEUE_SIZE);
-    if (!event_bus_ok) {
-        logger.log(LOG_ERROR, "[EVENT_BUS] Initialization failed");
-        overall_ok = false;
-    } else {
-        logger.log(LOG_INFO, "[EVENT_BUS] Initialized successfully ✓");
-        publishStatusIfPossible("Event bus ready", STATUS_LEVEL_NOTICE);
-        publishStatusIfPossible(spiffs_ok ? "SPIFFS mounted" : "SPIFFS unavailable",
-                                spiffs_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR);
-    }
+    eventBus.resetStats();
+    const bool event_bus_ok = true;
+    logger.log(LOG_INFO, "[EVENT_BUS] Ready ✓");
+    publishStatusIfPossible("Event bus ready", StatusLevel::Notice);
+    publishStatusIfPossible(spiffs_ok ? "SPIFFS mounted" : "SPIFFS unavailable",
+                            spiffs_ok ? StatusLevel::Notice : StatusLevel::Error);
 
     const bool wifi_ok = initializeWiFi();
     overall_ok &= wifi_ok;
@@ -402,9 +411,9 @@ bool initializeSystem() {
         if (!bridge_tasks_ok) {
             logger.log(LOG_ERROR, "[BRIDGE] Task creation failed");
             overall_ok = false;
-            publishStatusIfPossible("Bridge tasks unavailable", STATUS_LEVEL_ERROR);
+            publishStatusIfPossible("Bridge tasks unavailable", StatusLevel::Error);
         } else {
-            publishStatusIfPossible("Bridge tasks running", STATUS_LEVEL_NOTICE);
+            publishStatusIfPossible("Bridge tasks running", StatusLevel::Notice);
         }
     }
 
@@ -443,24 +452,24 @@ bool initializeSystem() {
     if (event_bus_ok) {
         publishStatusIfPossible(
             web_task_handle_ok ? "Web server task running" : "Web server task failed",
-            web_task_handle_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR
+            web_task_handle_ok ? StatusLevel::Notice : StatusLevel::Error
         );
         publishStatusIfPossible(
             websocket_task_ok ? "WebSocket task running" : "WebSocket task failed",
-            websocket_task_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR
+            websocket_task_ok ? StatusLevel::Notice : StatusLevel::Error
         );
         publishStatusIfPossible(
             watchdog_task_ok ? "Watchdog task running" : "Watchdog task failed",
-            watchdog_task_ok ? STATUS_LEVEL_NOTICE : STATUS_LEVEL_ERROR
+            watchdog_task_ok ? StatusLevel::Notice : StatusLevel::Error
         );
     }
 
     if (overall_ok) {
         logger.log(LOG_INFO, "[INIT] All subsystems initialized successfully ✓");
-        publishStatusIfPossible("System initialization complete", STATUS_LEVEL_NOTICE);
+        publishStatusIfPossible("System initialization complete", StatusLevel::Notice);
     } else {
         logger.log(LOG_ERROR, "[INIT] One or more subsystems failed to initialize");
-        publishStatusIfPossible("System initialization incomplete", STATUS_LEVEL_ERROR);
+        publishStatusIfPossible("System initialization incomplete", StatusLevel::Error);
     }
 
     return overall_ok;

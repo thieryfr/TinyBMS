@@ -16,7 +16,7 @@
 #include "config_manager.h"  // Needed for config references
 #include "watchdog_manager.h"
 #include "web_routes.h"
-#include "event_bus.h"
+#include "event/event_bus_v2.h"
 #include "hal/hal_manager.h"
 #include "hal/interfaces/ihal_can.h"
 #include "tinybms_victron_bridge.h"
@@ -28,7 +28,7 @@ extern WatchdogManager Watchdog;
 extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t feedMutex;
 extern Logger logger;
-extern EventBus& eventBus;
+using tinybms::event::eventBus;
 extern TinyBMS_Victron_Bridge bridge;
 
 // External functions
@@ -969,8 +969,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // GET /api/statistics
     // ===========================================
     server.on("/api/statistics", HTTP_GET, [](AsyncWebServerRequest *request) {
-        BusStats stats;
-        eventBus.getStats(stats);
+        tinybms::event::BusStatistics stats = eventBus.statistics();
 
         StaticJsonDocument<768> doc;
         doc["success"] = true;
@@ -1008,12 +1007,12 @@ void setupAPIRoutes(AsyncWebServer& server) {
         (void)events;  // Placeholder to keep structure consistent
 
         JsonObject eventBus = data.createNestedObject("event_bus");
-        eventBus["total_events_published"] = stats.total_events_published;
-        eventBus["total_events_dispatched"] = stats.total_events_dispatched;
-        eventBus["queue_overruns"] = stats.queue_overruns;
-        eventBus["dispatch_errors"] = stats.dispatch_errors;
-        eventBus["total_subscribers"] = stats.total_subscribers;
-        eventBus["current_queue_depth"] = stats.current_queue_depth;
+        eventBus["total_events_published"] = stats.total_published;
+        eventBus["total_events_dispatched"] = stats.total_delivered;
+        eventBus["subscriber_count"] = stats.subscriber_count;
+        eventBus["queue_overruns"] = 0;
+        eventBus["dispatch_errors"] = 0;
+        eventBus["current_queue_depth"] = 0;
 
         sendJsonResponse(request, 200, doc);
     });

@@ -1,16 +1,45 @@
 #include "config_manager.h"
 #include <ArduinoJson.h>
 #include "logger.h"
-#include "event_bus.h"
+#include "event/event_bus_v2.h"
+#include "event/event_types_v2.h"
 #include "hal/hal_manager.h"
 #include "hal/interfaces/ihal_storage.h"
 
 #include <string>
 #include <vector>
+#include <cstring>
 
 extern SemaphoreHandle_t configMutex;
 extern Logger logger;
-extern EventBus& eventBus;
+
+using tinybms::event::eventBus;
+using tinybms::events::ConfigChanged;
+using tinybms::events::EventSource;
+
+namespace {
+
+void publishConfigChange(const char* path, const char* old_value, const char* new_value) {
+    ConfigChanged event{};
+    event.metadata.source = EventSource::ConfigManager;
+    if (path) {
+        std::strncpy(event.change.config_path, path, sizeof(event.change.config_path) - 1);
+    }
+    event.change.config_path[sizeof(event.change.config_path) - 1] = '\0';
+
+    if (old_value) {
+        std::strncpy(event.change.old_value, old_value, sizeof(event.change.old_value) - 1);
+    }
+    event.change.old_value[sizeof(event.change.old_value) - 1] = '\0';
+
+    if (new_value) {
+        std::strncpy(event.change.new_value, new_value, sizeof(event.change.new_value) - 1);
+    }
+    event.change.new_value[sizeof(event.change.new_value) - 1] = '\0';
+    eventBus.publish(event);
+}
+
+} // namespace
 
 ConfigManager::ConfigManager()
     : filename_("/config.json"), loaded_(false) {}
@@ -73,7 +102,7 @@ bool ConfigManager::begin(const char* filename) {
 
     printConfig();
 
-    eventBus.publishConfigChange("*", "", "", SOURCE_ID_CONFIG_MANAGER);
+    publishConfigChange("*", "", "");
 
     xSemaphoreGive(configMutex);
     return true;
@@ -110,7 +139,7 @@ bool ConfigManager::save() {
     file->close();
     logger.log(LOG_INFO, "Configuration saved successfully");
 
-    eventBus.publishConfigChange("*", "", "", SOURCE_ID_CONFIG_MANAGER);
+    publishConfigChange("*", "", "");
 
     xSemaphoreGive(configMutex);
     return true;

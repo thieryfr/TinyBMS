@@ -86,11 +86,13 @@ uint8_t clampQos(uint8_t qos) {
 
 } // namespace
 
+using tinybms::events::MqttRegisterValue;
+using tinybms::events::MqttRegisterEvent;
+
 #define MQTT_LOG(level, msg) do { logger.log(level, String("[MQTT] ") + (msg)); } while(0)
 
-VictronMqttBridge::VictronMqttBridge(EventBus& bus)
+VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     : bus_(bus)
-    , subscribed_(false)
     , enabled_(false)
     , configured_(false)
     , connecting_(false)
@@ -109,10 +111,7 @@ VictronMqttBridge::VictronMqttBridge(EventBus& bus)
 
 VictronMqttBridge::~VictronMqttBridge() {
     disconnect();
-    if (subscribed_) {
-        bus_.unsubscribe(EVENT_MQTT_REGISTER_VALUE, &VictronMqttBridge::onBusEvent);
-        subscribed_ = false;
-    }
+    bus_subscription_.unsubscribe();
 }
 
 void VictronMqttBridge::enable(bool enabled) {
@@ -123,18 +122,23 @@ void VictronMqttBridge::enable(bool enabled) {
 }
 
 bool VictronMqttBridge::begin() {
-    if (subscribed_) {
+    if (bus_subscription_.isActive()) {
         return true;
     }
 
-    subscribed_ = bus_.subscribe(EVENT_MQTT_REGISTER_VALUE, &VictronMqttBridge::onBusEvent, this);
-    if (!subscribed_) {
+    bus_subscription_ = bus_.subscribe<MqttRegisterValue>(
+        [this](const MqttRegisterValue& event) {
+            handleRegisterEvent(event);
+        });
+
+    if (!bus_subscription_.isActive()) {
         noteError(1, "Event bus subscription failed");
-        MQTT_LOG(LOG_ERROR, "Failed to subscribe to EVENT_MQTT_REGISTER_VALUE");
-    } else {
-        MQTT_LOG(LOG_INFO, "Subscribed to EVENT_MQTT_REGISTER_VALUE");
+        MQTT_LOG(LOG_ERROR, "Failed to subscribe to MQTT register events");
+        return false;
     }
-    return subscribed_;
+
+    MQTT_LOG(LOG_INFO, "Subscribed to MQTT register events");
+    return true;
 }
 
 void VictronMqttBridge::configure(const BrokerSettings& settings) {
@@ -373,7 +377,7 @@ bool VictronMqttBridge::isConnected() const {
 void VictronMqttBridge::appendStatus(JsonObject obj) const {
     obj["enabled"] = enabled_;
     obj["configured"] = configured_;
-    obj["subscribed"] = subscribed_;
+    obj["subscribed"] = bus_subscription_.isActive();
     obj["connected"] = connected_;
     obj["client_id"] = settings_.client_id;
     obj["root_topic"] = sanitized_root_topic_;
@@ -406,11 +410,12 @@ String VictronMqttBridge::buildTopic(const String& suffix) const {
     return topic;
 }
 
-void VictronMqttBridge::handleRegisterEvent(const MqttRegisterEvent& payload) {
+void VictronMqttBridge::handleRegisterEvent(const MqttRegisterValue& event) {
     if (!enabled_ || !configured_) {
         return;
     }
 
+    const MqttRegisterEvent& payload = event.payload;
     const TinyRegisterRuntimeBinding* binding = findTinyRegisterBinding(payload.address);
     if (!binding) {
         return;
@@ -436,15 +441,6 @@ void VictronMqttBridge::handleRegisterEvent(const MqttRegisterEvent& payload) {
     }
 
     publishRegister(value);
-}
-
-void VictronMqttBridge::onBusEvent(const BusEvent& event, void* user_data) {
-    if (!user_data || event.type != EVENT_MQTT_REGISTER_VALUE) {
-        return;
-    }
-
-    auto* self = static_cast<VictronMqttBridge*>(user_data);
-    self->handleRegisterEvent(event.data.mqtt_register);
 }
 
 #ifdef ARDUINO
