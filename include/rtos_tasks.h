@@ -29,7 +29,6 @@ extern AsyncWebSocket ws;
 extern SemaphoreHandle_t uartMutex;
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
-extern SemaphoreHandle_t liveMutex;   // Phase 1: Protects bridge.live_data_ access
 extern SemaphoreHandle_t statsMutex;  // Phase 1: Protects bridge.stats access
 
 // ====================================================================================

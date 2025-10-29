@@ -34,7 +34,6 @@ TinyBMS_Victron_Bridge::TinyBMS_Victron_Bridge()
       event_sink_(nullptr),
       initialized_(false),
       victron_keepalive_ok_(false) {
-    memset(&live_data_, 0, sizeof(live_data_));
     memset(&config_, 0, sizeof(config_));
     stats = BridgeStats{};
     last_uart_poll_ms_ = last_pgn_update_ms_ = last_cvl_update_ms_ = 0;
@@ -197,10 +196,6 @@ bool Bridge_CreateTasks(TinyBMS_Victron_Bridge* bridge) {
                       cvl_stack, bridge, TASK_NORMAL_PRIORITY, nullptr, 1);
 
     return (ok1 == pdPASS && ok2 == pdPASS && ok3 == pdPASS);
-}
-
-TinyBMS_LiveData TinyBMS_Victron_Bridge::getLiveData() const {
-    return live_data_;
 }
 
 TinyBMS_Config TinyBMS_Victron_Bridge::getConfig() const {

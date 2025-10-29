@@ -26,7 +26,6 @@
 SemaphoreHandle_t uartMutex;
 SemaphoreHandle_t feedMutex;
 SemaphoreHandle_t configMutex;
-SemaphoreHandle_t liveMutex;   // Protects bridge.live_data_ access
 SemaphoreHandle_t statsMutex;  // Protects bridge.stats access
 
 // Web Server objects
@@ -56,17 +55,16 @@ void setup() {
     uartMutex = xSemaphoreCreateMutex();
     feedMutex = xSemaphoreCreateMutex();
     configMutex = xSemaphoreCreateMutex();
-    liveMutex = xSemaphoreCreateMutex();   // Phase 1: Fix race condition on live_data_
     statsMutex = xSemaphoreCreateMutex();  // Phase 1: Fix race condition on stats
 
-    if (!uartMutex || !feedMutex || !configMutex || !liveMutex || !statsMutex) {
+    if (!uartMutex || !feedMutex || !configMutex || !statsMutex) {
         Serial.println("[INIT] ❌ Mutex creation failed");
         while (true) {
             delay(1000);
         }
     }
 
-    Serial.println("[INIT] All mutexes created (uart, feed, config, live, stats)");
+    Serial.println("[INIT] All mutexes created (uart, feed, config, stats)");
 
     // Initialize HAL factory and hardware interfaces
     hal::setFactory(hal::createEsp32Factory());
