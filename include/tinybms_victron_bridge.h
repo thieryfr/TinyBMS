@@ -49,6 +49,7 @@ struct BridgeStats {
     double   energy_discharged_wh = 0.0;
     CVLState cvl_state = CVL_BULK;
     bool     victron_keepalive_ok = false;
+    bool     cell_protection_active = false;
 };
 
 namespace mqtt {
