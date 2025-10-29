@@ -64,7 +64,8 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
     options.retry_delay_ms = 50;
     options.response_timeout_ms = 100;
 
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+    // Phase 2: Increase configMutex timeout from 25ms to 100ms (consistency)
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         options.attempt_count = std::max<uint8_t>(static_cast<uint8_t>(1), config.tinybms.uart_retry_count);
         options.retry_delay_ms = config.tinybms.uart_retry_delay_ms;
         options.response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
@@ -274,10 +275,28 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     bridge->config_.overheat_cutoff_c = static_cast<float>(d.overheat_cutoff_c);
                 }
 
-                bridge->live_data_ = d;
+                // Phase 1: Protect live_data_ write with liveMutex
+                if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    bridge->live_data_ = d;
+                    xSemaphoreGive(liveMutex);
+                } else {
+                    logger.log(LOG_WARN, "[UART] Failed to acquire liveMutex for live_data_ write");
+                }
                 eventBus.publishLiveData(d, SOURCE_ID_UART);
 
-                const auto& th = config.victron.thresholds;
+                // Phase 2: Protect config.victron.thresholds read
+                VictronConfig::Thresholds th;
+                if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                    th = config.victron.thresholds;
+                    xSemaphoreGive(configMutex);
+                } else {
+                    logger.log(LOG_WARN, "[UART] Failed to acquire configMutex for thresholds read, using defaults");
+                    // Use safe defaults
+                    th.overvoltage_v = 60.0f;
+                    th.undervoltage_v = 40.0f;
+                    th.overtemp_c = 60.0f;
+                    th.low_temp_charge_c = 0.0f;
+                }
                 const float pack_voltage_v = d.voltage;
                 const float internal_temp_c = d.temperature / 10.0f;
                 const float pack_temp_max_c = has_pack_temp ? static_cast<float>(d.pack_temp_max) / 10.0f : internal_temp_c;

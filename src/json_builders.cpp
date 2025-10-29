@@ -99,47 +99,54 @@ String getStatusJSON() {
         }
     }
 
+    // Phase 1: Copy stats locally with statsMutex protection
+    BridgeStats local_stats;
+    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        local_stats = bridge.stats;
+        xSemaphoreGive(statsMutex);
+    } // If mutex fails, local_stats will have default values (zeros)
+
     // Statistics
     JsonObject stats = doc.createNestedObject("stats");
-    stats["cvl_current_v"] = round(bridge.stats.cvl_current_v * 10) / 10.0;
-    stats["cvl_state"] = bridge.stats.cvl_state;
+    stats["cvl_current_v"] = round(local_stats.cvl_current_v * 10) / 10.0;
+    stats["cvl_state"] = local_stats.cvl_state;
 
     const char* cvl_state_names[] = {"BULK", "TRANSITION", "FLOAT_APPROACH", "FLOAT", "IMBALANCE_HOLD"};
-    if (bridge.stats.cvl_state < 5)
-        stats["cvl_state_name"] = cvl_state_names[bridge.stats.cvl_state];
+    if (local_stats.cvl_state < 5)
+        stats["cvl_state_name"] = cvl_state_names[local_stats.cvl_state];
     else
         stats["cvl_state_name"] = "UNKNOWN";
 
     JsonObject can_stats = stats.createNestedObject("can");
-    can_stats["tx_success"] = bridge.stats.can_tx_count;
-    can_stats["rx_success"] = bridge.stats.can_rx_count;
-    can_stats["tx_errors"] = bridge.stats.can_tx_errors;
-    can_stats["rx_errors"] = bridge.stats.can_rx_errors;
-    can_stats["bus_off_count"] = bridge.stats.can_bus_off_count;
-    can_stats["rx_dropped"] = bridge.stats.can_queue_overflows;
+    can_stats["tx_success"] = local_stats.can_tx_count;
+    can_stats["rx_success"] = local_stats.can_rx_count;
+    can_stats["tx_errors"] = local_stats.can_tx_errors;
+    can_stats["rx_errors"] = local_stats.can_rx_errors;
+    can_stats["bus_off_count"] = local_stats.can_bus_off_count;
+    can_stats["rx_dropped"] = local_stats.can_queue_overflows;
 
-    stats["can_tx_count"] = bridge.stats.can_tx_count;           // Backward compatibility
-    stats["can_rx_count"] = bridge.stats.can_rx_count;
-    stats["can_tx_errors"] = bridge.stats.can_tx_errors;
-    stats["can_rx_errors"] = bridge.stats.can_rx_errors;
-    stats["can_bus_off_count"] = bridge.stats.can_bus_off_count;
-    stats["can_queue_overflows"] = bridge.stats.can_queue_overflows;
+    stats["can_tx_count"] = local_stats.can_tx_count;           // Backward compatibility
+    stats["can_rx_count"] = local_stats.can_rx_count;
+    stats["can_tx_errors"] = local_stats.can_tx_errors;
+    stats["can_rx_errors"] = local_stats.can_rx_errors;
+    stats["can_bus_off_count"] = local_stats.can_bus_off_count;
+    stats["can_queue_overflows"] = local_stats.can_queue_overflows;
 
     JsonObject uart_stats = stats.createNestedObject("uart");
-    uart_stats["success"] = bridge.stats.uart_success_count;
-    uart_stats["errors"] = bridge.stats.uart_errors;
-    uart_stats["timeouts"] = bridge.stats.uart_timeouts;
-    uart_stats["crc_errors"] = bridge.stats.uart_crc_errors;
-    uart_stats["retry_count"] = bridge.stats.uart_retry_count;
+    uart_stats["success"] = local_stats.uart_success_count;
+    uart_stats["errors"] = local_stats.uart_errors;
+    uart_stats["timeouts"] = local_stats.uart_timeouts;
+    uart_stats["crc_errors"] = local_stats.uart_crc_errors;
+    uart_stats["retry_count"] = local_stats.uart_retry_count;
 
-    stats["uart_errors"] = bridge.stats.uart_errors;
-    stats["uart_success_count"] = bridge.stats.uart_success_count;
-    stats["uart_timeouts"] = bridge.stats.uart_timeouts;
-    stats["uart_crc_errors"] = bridge.stats.uart_crc_errors;
-    stats["uart_retry_count"] = bridge.stats.uart_retry_count;
+    stats["uart_errors"] = local_stats.uart_errors;
+    stats["uart_success_count"] = local_stats.uart_success_count;
+    stats["uart_timeouts"] = local_stats.uart_timeouts;
+    stats["uart_crc_errors"] = local_stats.uart_crc_errors;
+    stats["uart_retry_count"] = local_stats.uart_retry_count;
 
     JsonObject keepalive_stats = stats.createNestedObject("keepalive");
-    keepalive_stats["ok"] = bridge.stats.victron_keepalive_ok;
+    keepalive_stats["ok"] = local_stats.victron_keepalive_ok;
     keepalive_stats["last_tx_ms"] = bridge.last_keepalive_tx_ms_;
     keepalive_stats["last_rx_ms"] = bridge.last_keepalive_rx_ms_;
     keepalive_stats["interval_ms"] = bridge.keepalive_interval_ms_;
@@ -147,11 +154,11 @@ String getStatusJSON() {
     keepalive_stats["since_last_rx_ms"] = bridge.last_keepalive_rx_ms_ > 0 ?
                                            (millis() - bridge.last_keepalive_rx_ms_) : 0;
 
-    stats["victron_keepalive_ok"] = bridge.stats.victron_keepalive_ok;
-    stats["ccl_limit_a"] = round(bridge.stats.ccl_limit_a * 10) / 10.0;
-    stats["dcl_limit_a"] = round(bridge.stats.dcl_limit_a * 10) / 10.0;
-    stats["energy_charged_wh"] = bridge.stats.energy_charged_wh;
-    stats["energy_discharged_wh"] = bridge.stats.energy_discharged_wh;
+    stats["victron_keepalive_ok"] = local_stats.victron_keepalive_ok;
+    stats["ccl_limit_a"] = round(local_stats.ccl_limit_a * 10) / 10.0;
+    stats["dcl_limit_a"] = round(local_stats.dcl_limit_a * 10) / 10.0;
+    stats["energy_charged_wh"] = local_stats.energy_charged_wh;
+    stats["energy_discharged_wh"] = local_stats.energy_discharged_wh;
 
     EventBus::BusStats bus_stats{};
     eventBus.getStats(bus_stats);

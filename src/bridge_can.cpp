@@ -69,10 +69,16 @@ void copyAsciiPadded(uint8_t* dest, size_t length, const String& source, size_t 
 }
 
 String resolveManufacturerName(const TinyBMS_Victron_Bridge& bridge) {
-    String manufacturer = getRegisterString(bridge.live_data_, 500);
+    String manufacturer;
+    // Phase 1: Protect live_data_ read with liveMutex
+    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        manufacturer = getRegisterString(bridge.live_data_, 500);
+        xSemaphoreGive(liveMutex);
+    }
     if (manufacturer.length() == 0) {
         manufacturer = "TinyBMS";
-        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        // Phase 2: Increase configMutex timeout to 100ms
+        if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             manufacturer = config.victron.manufacturer_name;
             xSemaphoreGive(configMutex);
         }
@@ -85,12 +91,17 @@ String resolveManufacturerName(const TinyBMS_Victron_Bridge& bridge) {
 
 String resolveBatteryName(const TinyBMS_Victron_Bridge& bridge) {
     String name;
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+    // Phase 2: Increase configMutex timeout to 100ms
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         name = config.victron.battery_name;
         xSemaphoreGive(configMutex);
     }
     if (name.length() == 0) {
-        name = getRegisterString(bridge.live_data_, 502);
+        // Phase 1: Protect live_data_ read with liveMutex
+        if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+            name = getRegisterString(bridge.live_data_, 502);
+            xSemaphoreGive(liveMutex);
+        }
     }
     if (name.length() == 0) {
         name = "Lithium Battery";
@@ -99,7 +110,12 @@ String resolveBatteryName(const TinyBMS_Victron_Bridge& bridge) {
 }
 
 String resolveBatteryFamily(const TinyBMS_Victron_Bridge& bridge) {
-    String family = getRegisterString(bridge.live_data_, 502);
+    String family;
+    // Phase 1: Protect live_data_ read with liveMutex
+    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        family = getRegisterString(bridge.live_data_, 502);
+        xSemaphoreGive(liveMutex);
+    }
     if (family.length() == 0) {
         family = resolveBatteryName(bridge);
     }
@@ -341,7 +357,23 @@ bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uin
         return false;
     }
 
-    VictronMappingContext ctx{bridge.live_data_, bridge.stats};
+    // Phase 1: Copy live_data_ and stats locally with mutex protection
+    TinyBMS_LiveData local_data;
+    BridgeStats local_stats;
+    if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        local_data = bridge.live_data_;
+        xSemaphoreGive(liveMutex);
+    } else {
+        return false; // Cannot proceed without data
+    }
+    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        local_stats = bridge.stats;
+        xSemaphoreGive(statsMutex);
+    } else {
+        return false; // Cannot proceed without stats
+    }
+
+    VictronMappingContext ctx{local_data, local_stats};
     bool wrote_any = false;
 
     for (const auto& field : def->fields) {
@@ -350,7 +382,7 @@ bool applyVictronMapping(const TinyBMS_Victron_Bridge& bridge, uint16_t pgn, uin
 
         switch (field.source.type) {
             case VictronValueSourceType::LiveData:
-                has_value = getLiveDataValue(field.source.live_field, bridge.live_data_, source_value);
+                has_value = getLiveDataValue(field.source.live_field, local_data, source_value);
                 break;
             case VictronValueSourceType::Function:
                 has_value = computeFunctionValue(field, bridge, ctx, source_value);
@@ -643,7 +675,13 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
 
         if (now - bridge->last_pgn_update_ms_ >= bridge->pgn_update_interval_ms_) {
             TinyBMS_LiveData d;
-            if (eventBus.getLatestLiveData(d)) bridge->live_data_ = d;
+            // Phase 1: Protect live_data_ write with liveMutex
+            if (eventBus.getLatestLiveData(d)) {
+                if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    bridge->live_data_ = d;
+                    xSemaphoreGive(liveMutex);
+                }
+            }
 
             bridge->updateEnergyCounters(now);
 
@@ -670,12 +708,16 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
             }
         }
 
+        // Phase 1: Protect stats writes with statsMutex
         CanDriverStats driverStats = CanDriver::getStats();
-        bridge->stats.can_tx_count = driverStats.tx_success;
-        bridge->stats.can_tx_errors = driverStats.tx_errors;
-        bridge->stats.can_rx_errors = driverStats.rx_errors;
-        bridge->stats.can_bus_off_count = driverStats.bus_off_events;
-        bridge->stats.can_queue_overflows = driverStats.rx_dropped;
+        if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            bridge->stats.can_tx_count = driverStats.tx_success;
+            bridge->stats.can_tx_errors = driverStats.tx_errors;
+            bridge->stats.can_rx_errors = driverStats.rx_errors;
+            bridge->stats.can_bus_off_count = driverStats.bus_off_events;
+            bridge->stats.can_queue_overflows = driverStats.rx_dropped;
+            xSemaphoreGive(statsMutex);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
