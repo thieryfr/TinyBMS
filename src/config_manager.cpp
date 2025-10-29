@@ -217,6 +217,22 @@ void ConfigManager::loadCVLConfig(const JsonDocument& doc) {
     cvl.minimum_ccl_in_float_a = cvlObj["minimum_ccl_in_float_a"] | cvl.minimum_ccl_in_float_a;
     cvl.imbalance_hold_threshold_mv = cvlObj["imbalance_hold_threshold_mv"] | cvl.imbalance_hold_threshold_mv;
     cvl.imbalance_release_threshold_mv = cvlObj["imbalance_release_threshold_mv"] | cvl.imbalance_release_threshold_mv;
+    cvl.series_cell_count = cvlObj["series_cell_count"] | cvl.series_cell_count;
+    cvl.cell_max_voltage_v = cvlObj["cell_max_voltage_v"] | cvl.cell_max_voltage_v;
+    cvl.cell_safety_threshold_v = cvlObj["cell_safety_threshold_v"] | cvl.cell_safety_threshold_v;
+    cvl.cell_safety_release_v = cvlObj["cell_safety_release_v"] | cvl.cell_safety_release_v;
+    cvl.cell_min_float_voltage_v = cvlObj["cell_min_float_voltage_v"] | cvl.cell_min_float_voltage_v;
+    cvl.cell_protection_kp = cvlObj["cell_protection_kp"] | cvl.cell_protection_kp;
+    cvl.dynamic_current_nominal_a = cvlObj["dynamic_current_nominal_a"] | cvl.dynamic_current_nominal_a;
+    cvl.max_recovery_step_v = cvlObj["max_recovery_step_v"] | cvl.max_recovery_step_v;
+    cvl.sustain_soc_entry_percent = cvlObj["sustain_soc_entry_percent"] | cvl.sustain_soc_entry_percent;
+    cvl.sustain_soc_exit_percent = cvlObj["sustain_soc_exit_percent"] | cvl.sustain_soc_exit_percent;
+    cvl.sustain_voltage_v = cvlObj["sustain_voltage_v"] | cvl.sustain_voltage_v;
+    cvl.sustain_per_cell_voltage_v = cvlObj["sustain_per_cell_voltage_v"] | cvl.sustain_per_cell_voltage_v;
+    cvl.sustain_ccl_limit_a = cvlObj["sustain_ccl_limit_a"] | cvl.sustain_ccl_limit_a;
+    cvl.sustain_dcl_limit_a = cvlObj["sustain_dcl_limit_a"] | cvl.sustain_dcl_limit_a;
+    cvl.imbalance_drop_per_mv = cvlObj["imbalance_drop_per_mv"] | cvl.imbalance_drop_per_mv;
+    cvl.imbalance_drop_max_v = cvlObj["imbalance_drop_max_v"] | cvl.imbalance_drop_max_v;
 }
 
 void ConfigManager::loadMqttConfig(const JsonDocument& doc) {
@@ -365,6 +381,22 @@ void ConfigManager::saveCVLConfig(JsonDocument& doc) const {
     cvlObj["minimum_ccl_in_float_a"] = cvl.minimum_ccl_in_float_a;
     cvlObj["imbalance_hold_threshold_mv"] = cvl.imbalance_hold_threshold_mv;
     cvlObj["imbalance_release_threshold_mv"] = cvl.imbalance_release_threshold_mv;
+    cvlObj["series_cell_count"] = cvl.series_cell_count;
+    cvlObj["cell_max_voltage_v"] = cvl.cell_max_voltage_v;
+    cvlObj["cell_safety_threshold_v"] = cvl.cell_safety_threshold_v;
+    cvlObj["cell_safety_release_v"] = cvl.cell_safety_release_v;
+    cvlObj["cell_min_float_voltage_v"] = cvl.cell_min_float_voltage_v;
+    cvlObj["cell_protection_kp"] = cvl.cell_protection_kp;
+    cvlObj["dynamic_current_nominal_a"] = cvl.dynamic_current_nominal_a;
+    cvlObj["max_recovery_step_v"] = cvl.max_recovery_step_v;
+    cvlObj["sustain_soc_entry_percent"] = cvl.sustain_soc_entry_percent;
+    cvlObj["sustain_soc_exit_percent"] = cvl.sustain_soc_exit_percent;
+    cvlObj["sustain_voltage_v"] = cvl.sustain_voltage_v;
+    cvlObj["sustain_per_cell_voltage_v"] = cvl.sustain_per_cell_voltage_v;
+    cvlObj["sustain_ccl_limit_a"] = cvl.sustain_ccl_limit_a;
+    cvlObj["sustain_dcl_limit_a"] = cvl.sustain_dcl_limit_a;
+    cvlObj["imbalance_drop_per_mv"] = cvl.imbalance_drop_per_mv;
+    cvlObj["imbalance_drop_max_v"] = cvl.imbalance_drop_max_v;
 }
 
 void ConfigManager::saveMqttConfig(JsonDocument& doc) const {
