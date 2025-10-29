@@ -189,7 +189,6 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
 
     uart_poll_interval_ms_ = uart_poller_.currentInterval();
 
-    bool stats_updated = false;
     if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         stats.uart_retry_count += result.retries_performed;
         stats.uart_timeouts += result.timeout_count;
@@ -202,21 +201,11 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
         stats.uart_latency_max_ms = uart_poller_.maxLatencyMs();
         stats.uart_latency_avg_ms = uart_poller_.averageLatencyMs();
         stats.uart_poll_interval_current_ms = uart_poll_interval_ms_;
-        stats_updated = true;
         xSemaphoreGive(statsMutex);
-    }
-    if (!stats_updated) {
-        stats.uart_latency_last_ms = elapsed_ms;
-        stats.uart_latency_max_ms = std::max(stats.uart_latency_max_ms, elapsed_ms);
-        stats.uart_latency_avg_ms = uart_poller_.averageLatencyMs();
-        stats.uart_poll_interval_current_ms = uart_poll_interval_ms_;
-        stats.uart_retry_count += result.retries_performed;
-        stats.uart_timeouts += result.timeout_count;
-        stats.uart_crc_errors += result.crc_error_count;
-        stats.uart_success_count += result.success ? 1U : 0U;
-        if (!result.success) {
-            stats.uart_errors++;
-        }
+    } else {
+        // If the stats mutex cannot be obtained, skip updating UART statistics to avoid
+        // inconsistent shared state. The next successful acquisition will refresh the
+        // counters and latency tracking.
     }
 
     switch (result.last_status) {
