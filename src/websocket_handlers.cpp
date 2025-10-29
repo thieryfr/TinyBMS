@@ -204,14 +204,9 @@ void websocketTask(void *pvParameters) {
                     if (ws_throttle.shouldSend(now, payload_size)) {
                         notifyClients(json);
                         ws_throttle.recordSend(now, payload_size);
-                        bool stats_ok = false;
-                        if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                        if (xSemaphoreTake(statsMutex, portMAX_DELAY) == pdTRUE) {
                             bridge.stats.websocket_sent_count++;
-                            stats_ok = true;
                             xSemaphoreGive(statsMutex);
-                        }
-                        if (!stats_ok) {
-                            bridge.stats.websocket_sent_count++;
                         }
 
                         if (logging_config.log_can_traffic) {
@@ -223,14 +218,9 @@ void websocketTask(void *pvParameters) {
                         }
                     } else {
                         ws_throttle.recordDrop();
-                        bool stats_ok = false;
-                        if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                        if (xSemaphoreTake(statsMutex, portMAX_DELAY) == pdTRUE) {
                             bridge.stats.websocket_dropped_count++;
-                            stats_ok = true;
                             xSemaphoreGive(statsMutex);
-                        }
-                        if (!stats_ok) {
-                            bridge.stats.websocket_dropped_count++;
                         }
 
                         if (logging_config.log_can_traffic) {
