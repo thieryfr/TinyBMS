@@ -17,6 +17,8 @@
 #include "tiny_read_mapping.h"
 #include "mqtt/publisher.h"
 #include "event/event_types_v2.h"
+#include "hal/hal_config.h"
+#include "hal/interfaces/ihal_uart.h"
 
 using tinybms::events::AlarmCode;
 using tinybms::events::AlarmRaised;
@@ -33,10 +35,62 @@ extern SemaphoreHandle_t uartMutex;
 extern SemaphoreHandle_t feedMutex;
 extern WatchdogManager Watchdog;
 extern SemaphoreHandle_t configMutex;
+extern SemaphoreHandle_t statsMutex;
 
 #define BRIDGE_LOG(level, msg) do { logger.log(level, String("[UART] ") + (msg)); } while(0)
 
 namespace {
+class RingBufferedHalUart : public hal::IHalUart {
+public:
+    RingBufferedHalUart(hal::IHalUart& upstream, optimization::ByteRingBuffer& buffer)
+        : upstream_(upstream), buffer_(buffer) {}
+
+    hal::Status initialize(const hal::UartConfig& config) override {
+        return upstream_.initialize(config);
+    }
+
+    void setTimeout(uint32_t timeout_ms) override {
+        upstream_.setTimeout(timeout_ms);
+    }
+
+    uint32_t getTimeout() const override {
+        return upstream_.getTimeout();
+    }
+
+    size_t write(const uint8_t* buffer, size_t size) override {
+        return upstream_.write(buffer, size);
+    }
+
+    void flush() override {
+        upstream_.flush();
+    }
+
+    size_t readBytes(uint8_t* buffer, size_t length) override {
+        size_t read = upstream_.readBytes(buffer, length);
+        if (read > 0) {
+            buffer_.push(buffer, read);
+        }
+        return read;
+    }
+
+    int available() override {
+        return upstream_.available();
+    }
+
+    int read() override {
+        int value = upstream_.read();
+        if (value >= 0) {
+            uint8_t byte = static_cast<uint8_t>(value & 0xFF);
+            buffer_.push(&byte, 1);
+        }
+        return value;
+    }
+
+private:
+    hal::IHalUart& upstream_;
+    optimization::ByteRingBuffer& buffer_;
+};
+
 struct TinyRegisterReadBlock {
     uint16_t start;
     uint16_t count;
@@ -115,15 +169,54 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
     };
 
     tinybms::DelayConfig delay_config{delay_adapter, nullptr};
+    const uint32_t start_ms = millis();
+    uart_rx_buffer_.clear();
+    RingBufferedHalUart buffered_uart(*tiny_uart_, uart_rx_buffer_);
     tinybms::TransactionResult result = tinybms::readHoldingRegisters(
-        *tiny_uart_, start_addr, count, output, options, delay_config);
+        buffered_uart, start_addr, count, output, options, delay_config);
 
-    stats.uart_retry_count += result.retries_performed;
-    stats.uart_timeouts += result.timeout_count;
-    stats.uart_crc_errors += result.crc_error_count;
-    stats.uart_success_count += result.success ? 1 : 0;
-    if (!result.success) {
-        stats.uart_errors++;
+    const uint32_t elapsed_ms = millis() - start_ms;
+
+    if (result.success) {
+        uart_poller_.recordSuccess(elapsed_ms, static_cast<uint32_t>(count) * 2U);
+    } else {
+        if (result.last_status == tinybms::AttemptStatus::Timeout) {
+            uart_poller_.recordTimeout();
+        } else {
+            uart_poller_.recordFailure(elapsed_ms);
+        }
+    }
+
+    uart_poll_interval_ms_ = uart_poller_.currentInterval();
+
+    bool stats_updated = false;
+    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        stats.uart_retry_count += result.retries_performed;
+        stats.uart_timeouts += result.timeout_count;
+        stats.uart_crc_errors += result.crc_error_count;
+        stats.uart_success_count += result.success ? 1U : 0U;
+        if (!result.success) {
+            stats.uart_errors++;
+        }
+        stats.uart_latency_last_ms = elapsed_ms;
+        stats.uart_latency_max_ms = uart_poller_.maxLatencyMs();
+        stats.uart_latency_avg_ms = uart_poller_.averageLatencyMs();
+        stats.uart_poll_interval_current_ms = uart_poll_interval_ms_;
+        stats_updated = true;
+        xSemaphoreGive(statsMutex);
+    }
+    if (!stats_updated) {
+        stats.uart_latency_last_ms = elapsed_ms;
+        stats.uart_latency_max_ms = std::max(stats.uart_latency_max_ms, elapsed_ms);
+        stats.uart_latency_avg_ms = uart_poller_.averageLatencyMs();
+        stats.uart_poll_interval_current_ms = uart_poll_interval_ms_;
+        stats.uart_retry_count += result.retries_performed;
+        stats.uart_timeouts += result.timeout_count;
+        stats.uart_crc_errors += result.crc_error_count;
+        stats.uart_success_count += result.success ? 1U : 0U;
+        if (!result.success) {
+            stats.uart_errors++;
+        }
     }
 
     switch (result.last_status) {

@@ -10,6 +10,8 @@
 #include "bridge_event_sink.h"
 #include "cvl_types.h"
 #include "hal/interfaces/ihal_uart.h"
+#include "optimization/adaptive_polling.h"
+#include "optimization/ring_buffer.h"
 
 class HardwareSerial;
 class WatchdogManager;
@@ -43,6 +45,10 @@ struct BridgeStats {
     uint32_t uart_timeouts = 0;
     uint32_t uart_crc_errors = 0;
     uint32_t uart_retry_count = 0;
+    uint32_t uart_latency_last_ms = 0;
+    uint32_t uart_latency_max_ms = 0;
+    float    uart_latency_avg_ms = 0.0f;
+    uint32_t uart_poll_interval_current_ms = 100;
     float    cvl_current_v = 0.0f;
     float    ccl_limit_a = 0.0f;
     float    dcl_limit_a = 0.0f;
@@ -51,6 +57,8 @@ struct BridgeStats {
     CVLState cvl_state = CVL_BULK;
     bool     victron_keepalive_ok = false;
     bool     cell_protection_active = false;
+    uint32_t websocket_sent_count = 0;
+    uint32_t websocket_dropped_count = 0;
 };
 
 namespace mqtt {
@@ -96,6 +104,8 @@ public:
 
 public:
     hal::IHalUart* tiny_uart_;
+    optimization::AdaptivePoller uart_poller_;
+    optimization::ByteRingBuffer uart_rx_buffer_;
 
     TinyBMS_LiveData live_data_{};
     TinyBMS_Config   config_{};
