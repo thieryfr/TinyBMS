@@ -143,12 +143,26 @@ String getStatusJSON() {
     uart_stats["timeouts"] = local_stats.uart_timeouts;
     uart_stats["crc_errors"] = local_stats.uart_crc_errors;
     uart_stats["retry_count"] = local_stats.uart_retry_count;
+    uart_stats["latency_ms_last"] = local_stats.uart_latency_last_ms;
+    uart_stats["latency_ms_max"] = local_stats.uart_latency_max_ms;
+    uart_stats["latency_ms_avg"] = local_stats.uart_latency_avg_ms;
+    uart_stats["interval_ms_current"] = local_stats.uart_poll_interval_current_ms;
 
     stats["uart_errors"] = local_stats.uart_errors;
     stats["uart_success_count"] = local_stats.uart_success_count;
     stats["uart_timeouts"] = local_stats.uart_timeouts;
     stats["uart_crc_errors"] = local_stats.uart_crc_errors;
     stats["uart_retry_count"] = local_stats.uart_retry_count;
+    stats["uart_latency_last_ms"] = local_stats.uart_latency_last_ms;
+    stats["uart_latency_max_ms"] = local_stats.uart_latency_max_ms;
+    stats["uart_latency_avg_ms"] = local_stats.uart_latency_avg_ms;
+    stats["uart_poll_interval_current_ms"] = local_stats.uart_poll_interval_current_ms;
+
+    JsonObject websocket_stats = stats.createNestedObject("websocket");
+    websocket_stats["sent"] = local_stats.websocket_sent_count;
+    websocket_stats["throttled"] = local_stats.websocket_dropped_count;
+    stats["websocket_sent_count"] = local_stats.websocket_sent_count;
+    stats["websocket_dropped_count"] = local_stats.websocket_dropped_count;
 
     JsonObject keepalive_stats = stats.createNestedObject("keepalive");
     keepalive_stats["ok"] = local_stats.victron_keepalive_ok;
@@ -339,6 +353,14 @@ String getSystemConfigJSON() {
     // TinyBMS
     JsonObject tiny = doc.createNestedObject("tinybms");
     tiny["poll_interval_ms"] = config.tinybms.poll_interval_ms;
+    tiny["poll_interval_min_ms"] = config.tinybms.poll_interval_min_ms;
+    tiny["poll_interval_max_ms"] = config.tinybms.poll_interval_max_ms;
+    tiny["poll_backoff_step_ms"] = config.tinybms.poll_backoff_step_ms;
+    tiny["poll_recovery_step_ms"] = config.tinybms.poll_recovery_step_ms;
+    tiny["poll_latency_target_ms"] = config.tinybms.poll_latency_target_ms;
+    tiny["poll_latency_slack_ms"] = config.tinybms.poll_latency_slack_ms;
+    tiny["poll_failure_threshold"] = config.tinybms.poll_failure_threshold;
+    tiny["poll_success_threshold"] = config.tinybms.poll_success_threshold;
     tiny["uart_retry_count"] = config.tinybms.uart_retry_count;
     tiny["uart_retry_delay_ms"] = config.tinybms.uart_retry_delay_ms;
     tiny["broadcast_expected"] = config.tinybms.broadcast_expected;
@@ -380,6 +402,10 @@ String getSystemConfigJSON() {
     JsonObject web = doc.createNestedObject("web_server");
     web["port"] = config.web_server.port;
     web["websocket_update_interval_ms"] = config.web_server.websocket_update_interval_ms;
+    web["websocket_min_interval_ms"] = config.web_server.websocket_min_interval_ms;
+    web["websocket_burst_window_ms"] = config.web_server.websocket_burst_window_ms;
+    web["websocket_burst_max"] = config.web_server.websocket_burst_max;
+    web["websocket_max_payload_bytes"] = config.web_server.websocket_max_payload_bytes;
     web["enable_cors"] = config.web_server.enable_cors;
     web["enable_auth"] = config.web_server.enable_auth;
     web["username"] = config.web_server.username;

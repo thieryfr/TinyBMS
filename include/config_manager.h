@@ -54,6 +54,14 @@ public:
 
     struct TinyBMSConfig {
         uint32_t poll_interval_ms = 100;
+        uint32_t poll_interval_min_ms = 50;
+        uint32_t poll_interval_max_ms = 500;
+        uint32_t poll_backoff_step_ms = 25;
+        uint32_t poll_recovery_step_ms = 10;
+        uint32_t poll_latency_target_ms = 40;
+        uint32_t poll_latency_slack_ms = 15;
+        uint8_t poll_failure_threshold = 3;
+        uint8_t poll_success_threshold = 6;
         uint8_t uart_retry_count = 3;
         uint32_t uart_retry_delay_ms = 50;
         bool broadcast_expected = true;
@@ -128,6 +136,10 @@ public:
     struct WebServerConfig {
         uint16_t port = 80;
         uint32_t websocket_update_interval_ms = 1000;
+        uint32_t websocket_min_interval_ms = 100;
+        uint32_t websocket_burst_window_ms = 1000;
+        uint32_t websocket_burst_max = 4;
+        uint32_t websocket_max_payload_bytes = 4096;
         bool enable_cors = true;
         bool enable_auth = false;
         String username = "admin";

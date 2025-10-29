@@ -19,6 +19,7 @@
 #include "event/event_bus_v2.h"     // Phase 3: Event Bus integration
 #include "event/event_types_v2.h"
 #include "tiny_read_mapping.h"
+#include "optimization/websocket_throttle.h"
 
 extern AsyncWebServer server;
 extern AsyncWebSocket ws;
@@ -28,10 +29,17 @@ extern ConfigManager config;
 extern WatchdogManager Watchdog;
 extern Logger logger;
 extern TinyBMS_Victron_Bridge bridge;
+extern SemaphoreHandle_t statsMutex;
 using tinybms::event::eventBus;  // Phase 3: Event Bus instance
 using tinybms::events::EventSource;
 using tinybms::events::LiveDataUpdate;
 using tinybms::events::StatusMessage;
+
+namespace {
+optimization::WebsocketThrottle ws_throttle;
+optimization::WebsocketThrottleConfig active_ws_config{};
+bool ws_throttle_configured = false;
+}
 
 // ====================================================================================
 // WebSocket Event Handler
@@ -157,7 +165,29 @@ void websocketTask(void *pvParameters) {
             xSemaphoreGive(configMutex);
         }
 
-        const uint32_t interval_ms = std::max<uint32_t>(50, web_config.websocket_update_interval_ms);
+        optimization::WebsocketThrottleConfig throttle_config{};
+        throttle_config.min_interval_ms = std::max<uint32_t>(50, web_config.websocket_min_interval_ms);
+        throttle_config.burst_window_ms = std::max<uint32_t>(throttle_config.min_interval_ms, web_config.websocket_burst_window_ms);
+        throttle_config.max_burst_count = std::max<uint32_t>(1, web_config.websocket_burst_max);
+        throttle_config.max_payload_bytes = web_config.websocket_max_payload_bytes;
+
+        if (!ws_throttle_configured ||
+            throttle_config.min_interval_ms != active_ws_config.min_interval_ms ||
+            throttle_config.burst_window_ms != active_ws_config.burst_window_ms ||
+            throttle_config.max_burst_count != active_ws_config.max_burst_count ||
+            throttle_config.max_payload_bytes != active_ws_config.max_payload_bytes) {
+            ws_throttle.configure(throttle_config);
+            active_ws_config = throttle_config;
+            ws_throttle_configured = true;
+            logger.log(LOG_INFO,
+                String("WebSocket throttle updated: min=") + throttle_config.min_interval_ms +
+                "ms window=" + throttle_config.burst_window_ms +
+                "ms burst=" + throttle_config.max_burst_count +
+                " payload<=" + throttle_config.max_payload_bytes + "B");
+        }
+
+        const uint32_t interval_ms = std::max<uint32_t>(throttle_config.min_interval_ms,
+                                                         std::max<uint32_t>(50, web_config.websocket_update_interval_ms));
 
         if (now - last_update_ms >= interval_ms) {
 
@@ -170,15 +200,45 @@ void websocketTask(void *pvParameters) {
                 buildStatusJSON(json, data);
 
                 if (!json.isEmpty()) {
-                    notifyClients(json);
-                }
+                    const size_t payload_size = static_cast<size_t>(json.length());
+                    if (ws_throttle.shouldSend(now, payload_size)) {
+                        notifyClients(json);
+                        ws_throttle.recordSend(now, payload_size);
+                        bool stats_ok = false;
+                        if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                            bridge.stats.websocket_sent_count++;
+                            stats_ok = true;
+                            xSemaphoreGive(statsMutex);
+                        }
+                        if (!stats_ok) {
+                            bridge.stats.websocket_sent_count++;
+                        }
 
-                if (logging_config.log_can_traffic) {
-                    logger.log(LOG_DEBUG,
-                        "WebSocket TX: V=" + String(data.voltage) +
-                        " I=" + String(data.current) +
-                        " SOC=" + String(data.soc_percent) + "%"
-                    );
+                        if (logging_config.log_can_traffic) {
+                            logger.log(LOG_DEBUG,
+                                "WebSocket TX: V=" + String(data.voltage) +
+                                " I=" + String(data.current) +
+                                " SOC=" + String(data.soc_percent) + "%"
+                            );
+                        }
+                    } else {
+                        ws_throttle.recordDrop();
+                        bool stats_ok = false;
+                        if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                            bridge.stats.websocket_dropped_count++;
+                            stats_ok = true;
+                            xSemaphoreGive(statsMutex);
+                        }
+                        if (!stats_ok) {
+                            bridge.stats.websocket_dropped_count++;
+                        }
+
+                        if (logging_config.log_can_traffic) {
+                            logger.log(LOG_DEBUG,
+                                String("WebSocket throttled (min ") + active_ws_config.min_interval_ms +
+                                "ms, burst " + active_ws_config.max_burst_count + ")");
+                        }
+                    }
                 }
             }
 

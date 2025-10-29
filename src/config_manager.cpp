@@ -207,6 +207,14 @@ void ConfigManager::loadTinyBMSConfig(const JsonDocument& doc) {
     if (tinyObj.isNull()) return;
 
     tinybms.poll_interval_ms = tinyObj["poll_interval_ms"] | tinybms.poll_interval_ms;
+    tinybms.poll_interval_min_ms = tinyObj["poll_interval_min_ms"] | tinybms.poll_interval_min_ms;
+    tinybms.poll_interval_max_ms = tinyObj["poll_interval_max_ms"] | tinybms.poll_interval_max_ms;
+    tinybms.poll_backoff_step_ms = tinyObj["poll_backoff_step_ms"] | tinybms.poll_backoff_step_ms;
+    tinybms.poll_recovery_step_ms = tinyObj["poll_recovery_step_ms"] | tinybms.poll_recovery_step_ms;
+    tinybms.poll_latency_target_ms = tinyObj["poll_latency_target_ms"] | tinybms.poll_latency_target_ms;
+    tinybms.poll_latency_slack_ms = tinyObj["poll_latency_slack_ms"] | tinybms.poll_latency_slack_ms;
+    tinybms.poll_failure_threshold = tinyObj["poll_failure_threshold"] | tinybms.poll_failure_threshold;
+    tinybms.poll_success_threshold = tinyObj["poll_success_threshold"] | tinybms.poll_success_threshold;
     tinybms.uart_retry_count = tinyObj["uart_retry_count"] | tinybms.uart_retry_count;
     tinybms.uart_retry_delay_ms = tinyObj["uart_retry_delay_ms"] | tinybms.uart_retry_delay_ms;
     tinybms.broadcast_expected = tinyObj["broadcast_expected"] | tinybms.broadcast_expected;
@@ -295,6 +303,10 @@ void ConfigManager::loadWebServerConfig(const JsonDocument& doc) {
 
     web_server.port = webObj["port"] | web_server.port;
     web_server.websocket_update_interval_ms = webObj["websocket_update_interval_ms"] | web_server.websocket_update_interval_ms;
+    web_server.websocket_min_interval_ms = webObj["websocket_min_interval_ms"] | web_server.websocket_min_interval_ms;
+    web_server.websocket_burst_window_ms = webObj["websocket_burst_window_ms"] | web_server.websocket_burst_window_ms;
+    web_server.websocket_burst_max = webObj["websocket_burst_max"] | web_server.websocket_burst_max;
+    web_server.websocket_max_payload_bytes = webObj["websocket_max_payload_bytes"] | web_server.websocket_max_payload_bytes;
     web_server.enable_cors = webObj["enable_cors"] | web_server.enable_cors;
     web_server.enable_auth = webObj["enable_auth"] | web_server.enable_auth;
     web_server.username = webObj["username"] | web_server.username;
@@ -377,6 +389,14 @@ void ConfigManager::saveHardwareConfig(JsonDocument& doc) const {
 void ConfigManager::saveTinyBMSConfig(JsonDocument& doc) const {
     JsonObject tinyObj = doc.createNestedObject("tinybms");
     tinyObj["poll_interval_ms"] = tinybms.poll_interval_ms;
+    tinyObj["poll_interval_min_ms"] = tinybms.poll_interval_min_ms;
+    tinyObj["poll_interval_max_ms"] = tinybms.poll_interval_max_ms;
+    tinyObj["poll_backoff_step_ms"] = tinybms.poll_backoff_step_ms;
+    tinyObj["poll_recovery_step_ms"] = tinybms.poll_recovery_step_ms;
+    tinyObj["poll_latency_target_ms"] = tinybms.poll_latency_target_ms;
+    tinyObj["poll_latency_slack_ms"] = tinybms.poll_latency_slack_ms;
+    tinyObj["poll_failure_threshold"] = tinybms.poll_failure_threshold;
+    tinyObj["poll_success_threshold"] = tinybms.poll_success_threshold;
     tinyObj["uart_retry_count"] = tinybms.uart_retry_count;
     tinyObj["uart_retry_delay_ms"] = tinybms.uart_retry_delay_ms;
     tinyObj["broadcast_expected"] = tinybms.broadcast_expected;
@@ -455,6 +475,10 @@ void ConfigManager::saveWebServerConfig(JsonDocument& doc) const {
     JsonObject webObj = doc.createNestedObject("web_server");
     webObj["port"] = web_server.port;
     webObj["websocket_update_interval_ms"] = web_server.websocket_update_interval_ms;
+    webObj["websocket_min_interval_ms"] = web_server.websocket_min_interval_ms;
+    webObj["websocket_burst_window_ms"] = web_server.websocket_burst_window_ms;
+    webObj["websocket_burst_max"] = web_server.websocket_burst_max;
+    webObj["websocket_max_payload_bytes"] = web_server.websocket_max_payload_bytes;
     webObj["enable_cors"] = web_server.enable_cors;
     webObj["enable_auth"] = web_server.enable_auth;
     webObj["username"] = web_server.username;
