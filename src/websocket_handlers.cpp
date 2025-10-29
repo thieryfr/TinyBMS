@@ -16,7 +16,8 @@
 #include "rtos_config.h"
 #include "logger.h"        // ✅ Logging support
 #include "config_manager.h"
-#include "event_bus.h"     // Phase 3: Event Bus integration
+#include "event/event_bus_v2.h"     // Phase 3: Event Bus integration
+#include "event/event_types_v2.h"
 #include "tiny_read_mapping.h"
 
 extern AsyncWebServer server;
@@ -27,7 +28,10 @@ extern ConfigManager config;
 extern WatchdogManager Watchdog;
 extern Logger logger;
 extern TinyBMS_Victron_Bridge bridge;
-extern EventBus& eventBus;  // Phase 3: Event Bus instance
+using tinybms::event::eventBus;  // Phase 3: Event Bus instance
+using tinybms::events::EventSource;
+using tinybms::events::LiveDataUpdate;
+using tinybms::events::StatusMessage;
 
 // ====================================================================================
 // WebSocket Event Handler
@@ -111,17 +115,18 @@ void buildStatusJSON(String& output, const TinyBMS_LiveData& data) {
         }
     }
 
-    BusEvent status_event;
-    if (eventBus.getLatest(EVENT_STATUS_MESSAGE, status_event)) {
+    StatusMessage status_event{};
+    if (eventBus.getLatest(status_event)) {
         JsonObject status = doc.createNestedObject("status_message");
-        status["message"] = status_event.data.status.message;
-        status["level"] = status_event.data.status.level;
+        status["message"] = status_event.message;
+        status["level"] = static_cast<uint8_t>(status_event.level);
         static const char* level_names[] = {"info", "notice", "warning", "error"};
-        if (status_event.data.status.level < (sizeof(level_names) / sizeof(level_names[0]))) {
-            status["level_name"] = level_names[status_event.data.status.level];
+        auto level_index = static_cast<size_t>(status_event.level);
+        if (level_index < (sizeof(level_names) / sizeof(level_names[0]))) {
+            status["level_name"] = level_names[level_index];
         }
-        status["source_id"] = status_event.source_id;
-        status["timestamp_ms"] = status_event.timestamp_ms;
+        status["source_id"] = static_cast<uint32_t>(status_event.metadata.source);
+        status["timestamp_ms"] = status_event.metadata.timestamp_ms;
     }
 
     serializeJson(doc, output);
@@ -156,9 +161,10 @@ void websocketTask(void *pvParameters) {
 
         if (now - last_update_ms >= interval_ms) {
 
-            TinyBMS_LiveData data;
+            LiveDataUpdate latest{};
             // Phase 3: Use Event Bus cache instead of legacy queue
-            if (eventBus.getLatestLiveData(data)) {
+            if (eventBus.getLatest(latest)) {
+                TinyBMS_LiveData data = latest.data;
 
                 String json;
                 buildStatusJSON(json, data);

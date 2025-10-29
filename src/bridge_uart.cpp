@@ -7,6 +7,7 @@
 #include <array>
 #include <map>
 #include <vector>
+#include <cstring>
 #include "bridge_uart.h"
 #include "logger.h"
 #include "config_manager.h"
@@ -15,6 +16,16 @@
 #include "uart/tinybms_uart_client.h"
 #include "tiny_read_mapping.h"
 #include "mqtt/publisher.h"
+#include "event/event_types_v2.h"
+
+using tinybms::events::AlarmCode;
+using tinybms::events::AlarmRaised;
+using tinybms::events::AlarmSeverity;
+using tinybms::events::EventSource;
+using tinybms::events::LiveDataUpdate;
+using tinybms::events::MqttRegisterValue;
+using tinybms::events::MqttRegisterEvent;
+using tinybms::events::WarningRaised;
 
 extern Logger logger;
 extern ConfigManager config;
@@ -42,6 +53,25 @@ constexpr TinyRegisterReadBlock kTinyReadBlocks[] = {
 
 constexpr size_t kTinyReadBlockCount = sizeof(kTinyReadBlocks) / sizeof(kTinyReadBlocks[0]);
 constexpr uint16_t kTinyMaxReadWords = 32;
+
+void publishAlarmEvent(BridgeEventSink& sink,
+                       EventSource source,
+                       AlarmCode code,
+                       const char* message,
+                       AlarmSeverity severity,
+                       float value) {
+    AlarmRaised event{};
+    event.metadata.source = source;
+    event.alarm.alarm_code = static_cast<uint16_t>(code);
+    event.alarm.severity = static_cast<uint8_t>(severity);
+    if (message) {
+        std::strncpy(event.alarm.message, message, sizeof(event.alarm.message) - 1);
+        event.alarm.message[sizeof(event.alarm.message) - 1] = '\0';
+    }
+    event.alarm.value = value;
+    event.alarm.is_active = true;
+    sink.publish(event);
+}
 }
 
 bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
@@ -294,11 +324,17 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                 }
 
                 // Phase 3: Publish live_data FIRST to ensure consumers see complete snapshot
-                event_sink.publishLiveData(d, SOURCE_ID_UART);
+                LiveDataUpdate live_event{};
+                live_event.metadata.source = EventSource::Uart;
+                live_event.data = d;
+                event_sink.publish(live_event);
 
                 // Phase 3: Now publish deferred MQTT register events
                 for (const auto& mqtt_event : deferred_mqtt_events) {
-                    event_sink.publishMqttRegister(mqtt_event, SOURCE_ID_UART);
+                    MqttRegisterValue mqtt_value{};
+                    mqtt_value.metadata.source = EventSource::Uart;
+                    mqtt_value.payload = mqtt_event;
+                    event_sink.publish(mqtt_value);
                 }
 
                 // Phase 2: Protect config.victron.thresholds read
@@ -331,7 +367,12 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     overvoltage_alarm = pack_voltage_v > th.overvoltage_v;
                 }
                 if (overvoltage_alarm) {
-                    event_sink.publishAlarm(ALARM_OVERVOLTAGE, "Voltage high", ALARM_SEVERITY_ERROR, overvoltage_value, SOURCE_ID_UART);
+                    publishAlarmEvent(event_sink,
+                                       EventSource::Uart,
+                                       AlarmCode::OverVoltage,
+                                       "Voltage high",
+                                       AlarmSeverity::Error,
+                                       overvoltage_value);
                 }
 
                 float undervoltage_value = pack_voltage_v;
@@ -343,20 +384,45 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
                     undervoltage_alarm = (pack_voltage_v > 0.1f && pack_voltage_v < th.undervoltage_v);
                 }
                 if (undervoltage_alarm) {
-                    event_sink.publishAlarm(ALARM_UNDERVOLTAGE, "Voltage low", ALARM_SEVERITY_WARNING, undervoltage_value, SOURCE_ID_UART);
+                    publishAlarmEvent(event_sink,
+                                       EventSource::Uart,
+                                       AlarmCode::UnderVoltage,
+                                       "Voltage low",
+                                       AlarmSeverity::Warning,
+                                       undervoltage_value);
                 }
 
                 if (d.cell_imbalance_mv > th.imbalance_alarm_mv) {
-                    event_sink.publishAlarm(ALARM_CELL_IMBALANCE, "Imbalance above alarm threshold", ALARM_SEVERITY_WARNING, d.cell_imbalance_mv, SOURCE_ID_UART);
+                    publishAlarmEvent(event_sink,
+                                       EventSource::Uart,
+                                       AlarmCode::CellImbalance,
+                                       "Imbalance above alarm threshold",
+                                       AlarmSeverity::Warning,
+                                       static_cast<float>(d.cell_imbalance_mv));
                 }
                 if (pack_temp_max_c > overheat_cutoff_c) {
-                    event_sink.publishAlarm(ALARM_OVERTEMPERATURE, "Temp high", ALARM_SEVERITY_ERROR, pack_temp_max_c, SOURCE_ID_UART);
+                    publishAlarmEvent(event_sink,
+                                       EventSource::Uart,
+                                       AlarmCode::OverTemperature,
+                                       "Temp high",
+                                       AlarmSeverity::Error,
+                                       pack_temp_max_c);
                 }
                 if (pack_temp_min_c < th.low_temp_charge_c && d.current > 3.0f) {
-                    event_sink.publishAlarm(ALARM_LOW_T_CHARGE, "Charging at low T", ALARM_SEVERITY_WARNING, pack_temp_min_c, SOURCE_ID_UART);
+                    publishAlarmEvent(event_sink,
+                                       EventSource::Uart,
+                                       AlarmCode::LowTempCharge,
+                                       "Charging at low T",
+                                       AlarmSeverity::Warning,
+                                       pack_temp_min_c);
                 }
             } else {
-                event_sink.publishAlarm(ALARM_UART_ERROR, "TinyBMS UART error", ALARM_SEVERITY_WARNING, bridge->stats.uart_errors, SOURCE_ID_UART);
+                publishAlarmEvent(event_sink,
+                                   EventSource::Uart,
+                                   AlarmCode::UartError,
+                                   "TinyBMS UART error",
+                                   AlarmSeverity::Warning,
+                                   static_cast<float>(bridge->stats.uart_errors));
             }
 
             bridge->last_uart_poll_ms_ = now;

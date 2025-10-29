@@ -12,7 +12,8 @@
 #include "rtos_config.h"
 #include "config_manager.h"
 #include "logger.h"
-#include "event_bus.h"
+#include "event/event_bus_v2.h"
+#include "event/event_types_v2.h"
 #include "mqtt/victron_mqtt_bridge.h"
 #include "tinybms_config_editor.h"
 #include "hal/hal_manager.h"
@@ -37,6 +38,8 @@ WatchdogManager Watchdog;
 TinyBMS_Victron_Bridge bridge;
 Logger logger;
 TinyBMSConfigEditor configEditor;
+
+using tinybms::event::eventBus;
 
 mqtt::VictronMqttBridge mqttBridge(eventBus);
 

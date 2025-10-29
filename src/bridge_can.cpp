@@ -4,6 +4,7 @@
  */
 #include <Arduino.h>
 #include <string.h>
+#include <cstring>
 #include <math.h>
 #include <cmath>
 #include <algorithm>
@@ -16,6 +17,13 @@
 #include "rtos_config.h"
 #include "hal/hal_manager.h"
 #include "hal/interfaces/ihal_can.h"
+#include "event/event_types_v2.h"
+
+using tinybms::events::AlarmCode;
+using tinybms::events::AlarmRaised;
+using tinybms::events::AlarmSeverity;
+using tinybms::events::EventSource;
+using tinybms::events::LiveDataUpdate;
 
 extern Logger logger;
 extern ConfigManager config;
@@ -38,6 +46,24 @@ static inline int16_t  clamp_s16(int v){ return (int16_t)  (v<-32768?-32768:(v>3
 static inline int      round_i(float x){ return (int)lrintf(x); }
 
 namespace {
+
+void publishCanAlarm(BridgeEventSink& sink,
+                     AlarmCode code,
+                     const char* message,
+                     AlarmSeverity severity,
+                     float value) {
+    AlarmRaised event{};
+    event.metadata.source = EventSource::Can;
+    event.alarm.alarm_code = static_cast<uint16_t>(code);
+    event.alarm.severity = static_cast<uint8_t>(severity);
+    if (message) {
+        std::strncpy(event.alarm.message, message, sizeof(event.alarm.message) - 1);
+        event.alarm.message[sizeof(event.alarm.message) - 1] = '\0';
+    }
+    event.alarm.value = value;
+    event.alarm.is_active = true;
+    sink.publish(event);
+}
 
 String getRegisterString(const TinyBMS_LiveData& live, uint16_t address) {
     const TinyRegisterSnapshot* snap = live.findSnapshot(address);
@@ -434,7 +460,11 @@ bool TinyBMS_Victron_Bridge::sendVictronPGN(uint16_t pgn_id, const uint8_t* data
     if (ok) {
         if (log_can_traffic) BRIDGE_LOG(LOG_DEBUG, String("TX PGN 0x") + String(pgn_id, HEX));
     } else {
-        eventSink().publishAlarm(ALARM_CAN_TX_ERROR, "CAN TX failed", ALARM_SEVERITY_WARNING, pgn_id, SOURCE_ID_CAN);
+        publishCanAlarm(eventSink(),
+                        AlarmCode::CanTxError,
+                        "CAN TX failed",
+                        AlarmSeverity::Warning,
+                        static_cast<float>(pgn_id));
         BRIDGE_LOG(LOG_WARN, String("TX failed PGN 0x") + String(pgn_id, HEX));
     }
     return ok;
@@ -680,9 +710,10 @@ void TinyBMS_Victron_Bridge::canTask(void *pvParameters){
         bridge->keepAliveProcessRX(now);
 
         if (now - bridge->last_pgn_update_ms_ >= bridge->pgn_update_interval_ms_) {
-            TinyBMS_LiveData d;
+            LiveDataUpdate latest{};
             // Phase 1: Protect live_data_ write with liveMutex
-            if (event_sink.getLatestLiveData(d)) {
+            if (event_sink.latest(latest)) {
+                const TinyBMS_LiveData& d = latest.data;
                 if (xSemaphoreTake(liveMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     bridge->live_data_ = d;
                     xSemaphoreGive(liveMutex);

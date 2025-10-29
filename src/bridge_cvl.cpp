@@ -12,6 +12,13 @@
 #include "rtos_config.h"
 #include "config_manager.h"
 #include "cvl_logic.h"
+#include "event/event_types_v2.h"
+
+#include <cstring>
+
+using tinybms::events::CVLStateChanged;
+using tinybms::events::EventSource;
+using tinybms::events::LiveDataUpdate;
 
 extern Logger logger;
 extern ConfigManager config;
@@ -105,8 +112,9 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
         BridgeEventSink& event_sink = bridge->eventSink();
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
         if (now - bridge->last_cvl_update_ms_ >= bridge->cvl_update_interval_ms_) {
-            TinyBMS_LiveData data;
-            if (event_sink.getLatestLiveData(data)) {
+            LiveDataUpdate latest_live{};
+            if (event_sink.latest(latest_live)) {
+                const TinyBMS_LiveData& data = latest_live.data;
                 CVLInputs inputs;
                 inputs.soc_percent = data.soc_percent;
                 inputs.cell_imbalance_mv = data.cell_imbalance_mv;
@@ -147,13 +155,15 @@ void TinyBMS_Victron_Bridge::cvlTask(void *pvParameters){
 
                 if (result.state != last_state) {
                     uint32_t duration = now - state_entry_ms;
-                    event_sink.publishCVLStateChange(static_cast<uint8_t>(last_state),
-                                                     static_cast<uint8_t>(result.state),
-                                                     result.cvl_voltage_v,
-                                                     result.ccl_limit_a,
-                                                     result.dcl_limit_a,
-                                                     duration,
-                                                     SOURCE_ID_CVL);
+                    CVLStateChanged event{};
+                    event.metadata.source = EventSource::Cvl;
+                    event.state.old_state = static_cast<uint8_t>(last_state);
+                    event.state.new_state = static_cast<uint8_t>(result.state);
+                    event.state.new_cvl_voltage = result.cvl_voltage_v;
+                    event.state.new_ccl_current = result.ccl_limit_a;
+                    event.state.new_dcl_current = result.dcl_limit_a;
+                    event.state.state_duration_ms = duration;
+                    event_sink.publish(event);
                     logChangeIfNeeded(result, last_state, data);
                     last_state = result.state;
                     state_entry_ms = now;

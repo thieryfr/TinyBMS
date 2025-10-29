@@ -1,64 +1,71 @@
 #include "bridge_event_sink.h"
 
-#include "event_bus.h"
+using tinybms::event::EventBusV2;
+using namespace tinybms::events;
 
 namespace {
 class EventBusBridgeEventSink final : public BridgeEventSink {
 public:
     EventBusBridgeEventSink() : bus_(nullptr) {}
 
-    void setBus(EventBus& bus) { bus_ = &bus; }
+    void setBus(EventBusV2& bus) { bus_ = &bus; }
 
     bool isReady() const override {
-        return bus_ != nullptr && bus_->isInitialized();
+        return bus_ != nullptr;
     }
 
-    bool publishLiveData(const TinyBMS_LiveData& data, uint32_t source_id) override {
-        return bus_ != nullptr && bus_->publishLiveData(data, source_id);
+    void publish(const LiveDataUpdate& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
     }
 
-    bool publishMqttRegister(const MqttRegisterEvent& data, uint32_t source_id) override {
-        return bus_ != nullptr && bus_->publishMqttRegister(data, source_id);
+    void publish(const MqttRegisterValue& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
     }
 
-    bool publishAlarm(uint16_t alarm_code,
-                      const char* message,
-                      AlarmSeverity severity,
-                      float value,
-                      uint32_t source_id) override {
-        return bus_ != nullptr && bus_->publishAlarm(alarm_code, message, severity, value, source_id);
+    void publish(const AlarmRaised& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
     }
 
-    bool publishStatus(const char* message, uint32_t source_id, StatusLevel level) override {
-        return bus_ != nullptr && bus_->publishStatus(message, source_id, level);
+    void publish(const AlarmCleared& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
     }
 
-    bool publishCVLStateChange(uint8_t old_state,
-                               uint8_t new_state,
-                               float new_cvl_voltage,
-                               float new_ccl_current,
-                               float new_dcl_current,
-                               uint32_t state_duration_ms,
-                               uint32_t source_id) override {
-        return bus_ != nullptr && bus_->publishCVLStateChange(old_state,
-                                                              new_state,
-                                                              new_cvl_voltage,
-                                                              new_ccl_current,
-                                                              new_dcl_current,
-                                                              state_duration_ms,
-                                                              source_id);
+    void publish(const WarningRaised& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
     }
 
-    bool getLatestLiveData(TinyBMS_LiveData& data_out) const override {
-        return bus_ != nullptr && bus_->getLatestLiveData(data_out);
+    void publish(const StatusMessage& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
+    }
+
+    void publish(const CVLStateChanged& event) override {
+        if (bus_) {
+            bus_->publish(event);
+        }
+    }
+
+    bool latest(LiveDataUpdate& event_out) const override {
+        return bus_ != nullptr && bus_->getLatest(event_out);
     }
 
 private:
-    EventBus* bus_;
+    EventBusV2* bus_;
 };
 }  // namespace
 
-BridgeEventSink& defaultBridgeEventSink(EventBus& bus) {
+BridgeEventSink& defaultBridgeEventSink(EventBusV2& bus) {
     static EventBusBridgeEventSink sink;
     sink.setBus(bus);
     return sink;
