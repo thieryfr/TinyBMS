@@ -1,6 +1,7 @@
 /**
  * @file main.ino
  * @brief TinyBMS to Victron CAN-BMS Bridge with FreeRTOS + Logging System
+ * @version 1.3 - Phase 3: Dual WebServer Support (AsyncWebServer + ESP-IDF)
  */
 
 #include <Arduino.h>
@@ -28,6 +29,16 @@
     #define HAL_FACTORY_NAME "Arduino"
 #endif
 
+// Phase 3: Support both AsyncWebServer and ESP-IDF HTTP Server
+#ifdef USE_ESP_IDF_WEBSERVER
+    #include "esp_http_server_wrapper.h"
+    #include "esp_websocket_wrapper.h"
+    #define WEBSERVER_NAME "ESP-IDF"
+#else
+    #include <ESPAsyncWebServer.h>
+    #define WEBSERVER_NAME "AsyncWebServer"
+#endif
+
 #include <exception>
 
 // Global resources
@@ -37,8 +48,13 @@ SemaphoreHandle_t configMutex;
 SemaphoreHandle_t statsMutex;  // Protects bridge.stats access
 
 // Web Server objects
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
+#ifdef USE_ESP_IDF_WEBSERVER
+    tinybms::web::HttpServerIDF server;
+    tinybms::web::WebSocketIDF ws("/ws");
+#else
+    AsyncWebServer server(80);
+    AsyncWebSocket ws("/ws");
+#endif
 
 ConfigManager config;
 WatchdogManager Watchdog;
@@ -81,6 +97,13 @@ void setup() {
     #else
         hal::setFactory(hal::createEsp32Factory());
         Serial.println("[INIT] HAL Factory: Arduino wrappers");
+    #endif
+
+    // Phase 3: Log WebServer type
+    #ifdef USE_ESP_IDF_WEBSERVER
+        Serial.println("[INIT] WebServer: ESP-IDF HTTP Server");
+    #else
+        Serial.println("[INIT] WebServer: ESPAsyncWebServer");
     #endif
 
     auto applyHalConfig = [&]() {

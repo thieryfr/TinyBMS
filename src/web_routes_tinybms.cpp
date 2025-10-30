@@ -1,11 +1,24 @@
 /**
  * @file web_routes_tinybms.cpp
  * @brief API routes for TinyBMS configuration with Logging support
- * @version 1.1 - Logging + Mutex Safety
+ * @version 1.2 - Phase 3: Dual WebServer Support (AsyncWebServer + ESP-IDF)
  */
 
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
+
+// Conditional WebServer includes
+#ifdef USE_ESP_IDF_WEBSERVER
+    #include "esp_http_server_wrapper.h"
+    using tinybms::web::HttpServerIDF;
+    using tinybms::web::HttpRequestIDF;
+    using WebServerType = HttpServerIDF;
+    using WebRequestType = HttpRequestIDF;
+#else
+    #include <ESPAsyncWebServer.h>
+    using WebServerType = AsyncWebServer;
+    using WebRequestType = AsyncWebServerRequest;
+#endif
+
 #include <ArduinoJson.h>
 #include <Freertos.h>
 #include "rtos_tasks.h"
@@ -27,13 +40,13 @@ extern String getConfigJSON();
 
 namespace {
 
-void sendJsonResponse(AsyncWebServerRequest* request, int statusCode, JsonDocument& doc) {
+void sendJsonResponse(WebRequestType* request, int statusCode, JsonDocument& doc) {
     String payload;
     serializeJson(doc, payload);
     request->send(statusCode, "application/json", payload);
 }
 
-void sendErrorResponse(AsyncWebServerRequest* request, int statusCode, const String& message, const char* code = nullptr) {
+void sendErrorResponse(WebRequestType* request, int statusCode, const String& message, const char* code = nullptr) {
     StaticJsonDocument<256> doc;
     doc["success"] = false;
     doc["message"] = message;
@@ -48,7 +61,7 @@ void sendErrorResponse(AsyncWebServerRequest* request, int statusCode, const Str
 /**
  * @brief Register TinyBMS API routes
  */
-void setupTinyBMSConfigRoutes(AsyncWebServer& server) {
+void setupTinyBMSConfigRoutes(WebServerType& server) {
 
     logger.log(LOG_INFO, "[API] Registering TinyBMS config routes");
 
