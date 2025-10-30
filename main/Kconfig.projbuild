@@ -50,4 +50,29 @@ config TINYBMS_DIAGNOSTIC_PERIOD_MS
     default 5000
     range 1000 60000
 
+config TINYBMS_MQTT_ENABLED
+    bool "Enable MQTT bridge"
+    default n
+
+config TINYBMS_MQTT_BROKER
+    string "MQTT broker hostname"
+    default "localhost"
+
+config TINYBMS_MQTT_PORT
+    int "MQTT broker port"
+    default 1883
+    range 1 65535
+
+config TINYBMS_MQTT_ROOT_TOPIC
+    string "MQTT root topic"
+    default "tinybms"
+
+config TINYBMS_MQTT_TELEMETRY_TOPIC
+    string "MQTT telemetry topic"
+    default "telemetry"
+
+config TINYBMS_MQTT_STATUS_TOPIC
+    string "MQTT status topic"
+    default "status"
+
 endmenu

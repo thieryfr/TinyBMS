@@ -4,6 +4,7 @@
 #include "driver/uart.h"
 #include "driver/twai.h"
 #include <cstdint>
+#include <string>
 
 namespace tinybms {
 
@@ -22,6 +23,19 @@ struct BridgeTimings {
     uint32_t diagnostic_period_ms;
 };
 
+struct MqttTopics {
+    std::string root;
+    std::string telemetry;
+    std::string status;
+};
+
+struct MqttConfig {
+    bool enabled;
+    std::string broker_host;
+    uint16_t port;
+    MqttTopics topics;
+};
+
 struct BridgeConfig {
     uart_port_t uart_port;
     BridgePins pins;
@@ -29,6 +43,7 @@ struct BridgeConfig {
     twai_general_config_t can_general;
     twai_timing_config_t can_timing;
     twai_filter_config_t can_filter;
+    MqttConfig mqtt;
 };
 
 BridgeConfig load_bridge_config();

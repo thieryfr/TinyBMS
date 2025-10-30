@@ -5,6 +5,7 @@
 namespace tinybms {
 namespace {
 constexpr const char *TAG = "bridge-config";
+constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
 
 twai_timing_config_t resolve_timing(uint32_t bitrate) {
     switch (bitrate) {
@@ -49,6 +50,40 @@ BridgeConfig load_bridge_config() {
 
     cfg.can_timing = resolve_timing(CONFIG_TINYBMS_CAN_BITRATE);
     cfg.can_filter = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+    cfg.mqtt.enabled = CONFIG_TINYBMS_MQTT_ENABLED;
+    cfg.mqtt.broker_host = CONFIG_TINYBMS_MQTT_BROKER;
+    cfg.mqtt.topics.root = CONFIG_TINYBMS_MQTT_ROOT_TOPIC;
+    cfg.mqtt.topics.telemetry = CONFIG_TINYBMS_MQTT_TELEMETRY_TOPIC;
+    cfg.mqtt.topics.status = CONFIG_TINYBMS_MQTT_STATUS_TOPIC;
+
+    if (cfg.mqtt.enabled && cfg.mqtt.broker_host.empty()) {
+        ESP_LOGW(TAG, "MQTT enabled but broker hostname is empty, disabling module");
+        cfg.mqtt.enabled = false;
+    }
+
+    int mqtt_port = CONFIG_TINYBMS_MQTT_PORT;
+    if (mqtt_port < 1 || mqtt_port > 65535) {
+        ESP_LOGW(TAG, "MQTT port %d out of range, defaulting to %u", mqtt_port, DEFAULT_MQTT_PORT);
+        cfg.mqtt.port = DEFAULT_MQTT_PORT;
+    } else {
+        cfg.mqtt.port = static_cast<uint16_t>(mqtt_port);
+    }
+
+    if (cfg.mqtt.topics.root.empty()) {
+        cfg.mqtt.topics.root = "tinybms";
+        ESP_LOGW(TAG, "MQTT root topic missing, defaulting to %s", cfg.mqtt.topics.root.c_str());
+    }
+
+    if (cfg.mqtt.topics.telemetry.empty()) {
+        cfg.mqtt.topics.telemetry = cfg.mqtt.topics.root + "/telemetry";
+        ESP_LOGW(TAG, "MQTT telemetry topic missing, defaulting to %s", cfg.mqtt.topics.telemetry.c_str());
+    }
+
+    if (cfg.mqtt.topics.status.empty()) {
+        cfg.mqtt.topics.status = cfg.mqtt.topics.root + "/status";
+        ESP_LOGW(TAG, "MQTT status topic missing, defaulting to %s", cfg.mqtt.topics.status.c_str());
+    }
 
     return cfg;
 }
