@@ -46,3 +46,44 @@ Les paramètres sont fournis via `BrokerSettings` (typiquement depuis `config.js
 - Ajouter un buffer de publication différée lorsque la connexion n'est pas disponible (actuellement les événements sont perdus).
 - Implémenter un mode « retain personnalisé » selon la classe de registre (`value_class`).
 - Ajouter une option pour publier au format `retain=false` mais avec `last will` pour indiquer l'état de la passerelle.
+
+## Intégration temps réel avec les tâches existantes
+
+### 1. Choix d'une tâche MQTT dédiée
+- **Charge actuelle** :
+  - La tâche UART (↑ priorité 12) consomme l'essentiel du temps CPU lors de la reconstruction des échantillons `MeasurementSample` et pousse les données dans `sample_queue_`.
+  - La tâche CAN (↑ priorité 13) est volontairement courte : elle dépile l'échantillon, sérialise 8 octets et envoie le frame (blocage maximum 50 ms) tout en envoyant le keepalive périodique.
+  - La tâche diagnostic (↓ priorité 5) effectue un journal périodique faible.
+- **Contraintes MQTT** : la pile ESP-IDF (`esp_mqtt_client`) s'appuie sur des callbacks pouvant bloquer (socket/TLS) et nécessite une boucle de reconnexion. Mélanger ces appels réseau dans la tâche CAN allongerait la section critique et introduirait un risque de famine CAN lors de pertes réseau.
+- **Décision** : créer une **nouvelle tâche FreeRTOS `tinybms_mqtt`** (pile 6–8 Ko, priorité 8) dédiée au pilotage du module MQTT. Cette priorité reste inférieure au CAN (13) et à l'UART (12) pour préserver la latence critique, mais supérieure au diagnostic afin de garantir la vidange régulière des buffers MQTT.
+
+### 2. Structures de données partagées
+- Étendre `TinyBmsBridge` avec :
+  - Une queue `mqtt_sample_queue_` (longueur configurable, défaut 16) recevant les `MeasurementSample` côté UART, parallèlement à la queue CAN existante pour éviter le partage destructif.
+  - Un `StaticSemaphore_t` + `SemaphoreHandle_t mqtt_state_mutex_` protégeant l'état interne du module MQTT (`connected_`, `pending_config_`, compteurs) consulté par `/api/status`.
+- Pipeline :
+  1. `uart_task` pousse chaque échantillon dans **deux** queues (`sample_queue_` pour le CAN, `mqtt_sample_queue_` pour le MQTT). En cas de saturation MQTT, le comportement est non bloquant (`xQueueSend` avec timeout court et incrément `diagnostics::note_dropped_sample_mqtt`).
+  2. `mqtt_task` effectue `xQueueReceive` avec un timeout (200 ms) pour agréger les échantillons, puis publie via `VictronMqttBridge::publishSample()` tout en respectant le QoS configuré.
+  3. Un `EventGroupHandle_t mqtt_events_` (bits `CONNECTED`, `CONFIGURED`, `PUBLISH_ERROR`) permet de réveiller la tâche sur changement d'état (callbacks MQTT).
+
+### 3. API interne du module MQTT
+- `esp_err_t mqtt::init(const BrokerSettings &settings, QueueHandle_t sample_queue, EventGroupHandle_t events);`
+  - Initialise `VictronMqttBridge`, stocke les handles de queue/événements et lance la machine d'état (sans créer de tâche).
+- `void mqtt::start();`
+  - Active le pont (`enable(true)`), déclenche la connexion initiale et enregistre les callbacks `on_connected`, `on_disconnected`, `on_error`.
+- `void mqtt::stop();`
+  - Force `enable(false)`, vide la queue et désenregistre les callbacks.
+- `bool mqtt::publish_sample(const MeasurementSample &sample);`
+  - Sérialise un `MeasurementSample` en `RegisterValue` via `buildRegisterValue()` et publie le JSON correspondant.
+- `void mqtt::on_config_update(const BrokerSettings &settings);`
+  - Appliqué lorsqu'un changement arrive via la configuration (fichier ou API). Met à jour `pending_config_`, notifie la tâche par `xEventGroupSetBits(events, CONFIG_UPDATED)`.
+- Callbacks ESP-IDF :
+  - `handle_mqtt_connected()` → `xEventGroupSetBits(events, CONNECTED_BIT)` et déverrouille `mqtt_state_mutex_` pour actualiser l'état.
+  - `handle_mqtt_disconnected()` → bit `DISCONNECTED_BIT`, incrément compteur d'erreur.
+  - `handle_mqtt_published()` → bit `PUBLISHED_BIT` pour réveiller la tâche si elle attend un accusé QoS1.
+
+### Points d'intégration configuration
+- `tinybms::load_bridge_config()` : ajoute un bloc `config.mqtt` (timeout connexion, profondeur queue, QoS) transmis à `mqtt::init`.
+- `TinyBmsBridge::start()` : crée la queue MQTT, l'événement et la tâche `mqtt_task_entry` après la tâche CAN.
+- `/api/status` : `appendStatus(JsonObject)` doit lire les compteurs via `mqtt_state_mutex_` pour garantir la cohérence.
+- `diagnostics` : ajouter des compteurs `note_mqtt_publish()`, `note_mqtt_error()`, `note_mqtt_dropped_sample()` pour la supervision globale.
