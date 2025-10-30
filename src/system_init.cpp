@@ -399,7 +399,14 @@ bool initializeSystem() {
     const bool wifi_ok = initializeWiFi();
     overall_ok &= wifi_ok;
 
-    const bool mqtt_ok = initializeMqttBridge();
+    bool mqtt_ok = true;
+    if (!wifi_ok) {
+        logger.log(LOG_WARN, "[MQTT] Skipping initialization (WiFi unavailable)");
+        publishStatusIfPossible("MQTT bridge skipped (WiFi unavailable)", StatusLevel::Warning);
+    } else {
+        mqtt_ok = initializeMqttBridge();
+    }
+
     overall_ok &= mqtt_ok;
 
     const bool bridge_ok = initializeBridge();

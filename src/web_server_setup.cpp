@@ -41,8 +41,10 @@ void setupWebServer() {
     logger.log(LOG_INFO, "========================================");
 
     ConfigManager::WebServerConfig web_config{};
+    bool spiffs_enabled = true;
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         web_config = config.web_server;
+        spiffs_enabled = config.advanced.enable_spiffs;
         xSemaphoreGive(configMutex);
     } else {
         logger.log(LOG_WARN, "[WEB] Using default web server settings (config mutex unavailable)");
@@ -53,9 +55,16 @@ void setupWebServer() {
     server.addHandler(&ws);
     logger.log(LOG_INFO, "[WS] WebSocket handler registered at /ws");
 
-    // Serve static files from SPIFFS
-    server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
-    logger.log(LOG_INFO, "[WEB] Static files served from SPIFFS root");
+    // Serve static files from SPIFFS when enabled
+    if (spiffs_enabled) {
+        server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+        logger.log(LOG_INFO, "[WEB] Static files served from SPIFFS root");
+    } else {
+        logger.log(LOG_WARN, "[WEB] SPIFFS disabled - static hosting inactive");
+        server.on("/", [](AsyncWebServerRequest *request) {
+            request->send(503, "text/plain", "Static assets unavailable (SPIFFS disabled)");
+        });
+    }
 
     // Setup API routes (defined in web_routes_api.cpp)
     setupAPIRoutes(server);
