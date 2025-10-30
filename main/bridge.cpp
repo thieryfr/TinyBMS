@@ -9,6 +9,7 @@
 #include <strings.h>
 #include <cmath>
 #include <algorithm>
+#include <new>
 
 namespace tinybms {
 namespace {
@@ -34,13 +35,6 @@ void configure_led(gpio_num_t pin) {
     cfg.pull_up_en = GPIO_PULLUP_DISABLE;
     cfg.intr_type = GPIO_INTR_DISABLE;
     gpio_config(&cfg);
-}
-
-void set_led(gpio_num_t pin, bool on) {
-    if (pin == GPIO_NUM_NC) {
-        return;
-    }
-    gpio_set_level(pin, on ? 1 : 0);
 }
 
 } // namespace
@@ -84,7 +78,7 @@ esp_err_t TinyBmsBridge::init() {
     }
 
     configure_led(config_.pins.status_led);
-    set_led(config_.pins.status_led, false);
+    set_status_led(false);
 
     uart_config_t uart_cfg{};
     uart_cfg.baud_rate = static_cast<int>(config_.timings.uart_baudrate);
@@ -359,7 +353,7 @@ void TinyBmsBridge::can_task() {
                 ESP_LOGW(TAG, "Failed to send CAN status frame: %s", esp_err_to_name(err));
             } else {
                 diagnostics::note_can_publish(health_);
-                set_led(config_.pins.status_led, true);
+                set_status_led(true);
             }
         }
 
@@ -379,7 +373,7 @@ void TinyBmsBridge::can_task() {
                 diagnostics::note_can_publish(health_);
             }
             last_keepalive = now;
-            set_led(config_.pins.status_led, false);
+            set_status_led(false);
         }
     }
 
@@ -411,6 +405,45 @@ bool TinyBmsBridge::latest_sample(MeasurementSample &out) const {
 
 diagnostics::BridgeHealthSnapshot TinyBmsBridge::health_snapshot() const {
     return diagnostics::snapshot(health_);
+}
+
+void TinyBmsBridge::set_status_led(bool on) {
+    if (config_.pins.status_led == GPIO_NUM_NC) {
+        return;
+    }
+    gpio_set_level(config_.pins.status_led, on ? 1 : 0);
+}
+
+esp_err_t TinyBmsBridge::pulse_status_led(uint32_t duration_ms) {
+    if (config_.pins.status_led == GPIO_NUM_NC) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    struct PulseArgs {
+        TinyBmsBridge *self;
+        uint32_t duration_ms;
+    };
+
+    auto *args = new (std::nothrow) PulseArgs{this, duration_ms > 0 ? duration_ms : 500};
+    if (!args) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    auto pulse_task = [](void *ctx) {
+        auto *pulse = static_cast<PulseArgs *>(ctx);
+        pulse->self->set_status_led(true);
+        vTaskDelay(pdMS_TO_TICKS(pulse->duration_ms));
+        pulse->self->set_status_led(false);
+        delete pulse;
+        vTaskDelete(nullptr);
+    };
+
+    BaseType_t created = xTaskCreate(pulse_task, "led_pulse", 2048, args, 5, nullptr);
+    if (created != pdPASS) {
+        delete args;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 } // namespace tinybms

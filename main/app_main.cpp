@@ -1,6 +1,7 @@
 #include "bridge.hpp"
 #include "config.hpp"
 #include "http_server.hpp"
+#include "logger.hpp"
 #include "system_config.hpp"
 #include "wifi_manager.hpp"
 
@@ -12,6 +13,8 @@
 
 extern "C" void app_main(void) {
     constexpr const char *TAG = "tinybms-main";
+
+    tinybms::log::init();
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -28,6 +31,11 @@ extern "C" void app_main(void) {
 
     static tinybms::SystemConfig system_config;
     ESP_ERROR_CHECK(tinybms::load_system_config(system_config));
+
+    esp_err_t level_err = tinybms::log::set_global_level(system_config.logging.level);
+    if (level_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to apply log level: %s", esp_err_to_name(level_err));
+    }
 
     tinybms::BridgeConfig config = tinybms::load_bridge_config();
     static tinybms::TinyBmsBridge bridge(config);

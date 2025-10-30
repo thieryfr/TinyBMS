@@ -53,6 +53,14 @@ esp_err_t load_system_config(SystemConfig &config) {
         config.web.enable_cors = true;
         config.web.enable_websocket = true;
         config.web.cors_origin = "*";
+        config.web.websocket_update_interval_ms = 1000;
+        config.web.max_ws_clients = 4;
+        config.web.enable_auth = false;
+        config.web.username = "admin";
+        config.web.password = "tinybms";
+        config.logging.level = log::Level::Info;
+        config.logging.web_enabled = true;
+        config.logging.serial_enabled = true;
         return ESP_OK;
     } else if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
@@ -85,6 +93,32 @@ esp_err_t load_system_config(SystemConfig &config) {
     err = nvs_get_u8(handle, "cors_enabled", &cors_enabled);
     config.web.enable_cors = (err == ESP_OK) ? (cors_enabled != 0) : true;
     config.web.cors_origin = get_string(handle, "cors_origin", "*");
+
+    uint32_t ws_interval = 1000;
+    err = nvs_get_u32(handle, "ws_interval", &ws_interval);
+    config.web.websocket_update_interval_ms = (err == ESP_OK && ws_interval >= 100) ? ws_interval : 1000;
+
+    uint8_t ws_clients = 4;
+    err = nvs_get_u8(handle, "ws_clients", &ws_clients);
+    config.web.max_ws_clients = (err == ESP_OK && ws_clients > 0 && ws_clients <= 10) ? ws_clients : 4;
+
+    uint8_t auth_enabled = 0;
+    err = nvs_get_u8(handle, "web_auth", &auth_enabled);
+    config.web.enable_auth = (err == ESP_OK) ? (auth_enabled != 0) : false;
+    config.web.username = get_string(handle, "web_user", "admin");
+    config.web.password = get_string(handle, "web_pass", "tinybms");
+
+    uint8_t log_level = static_cast<uint8_t>(log::Level::Info);
+    err = nvs_get_u8(handle, "log_level", &log_level);
+    config.logging.level = (err == ESP_OK) ? static_cast<log::Level>(log_level) : log::Level::Info;
+
+    uint8_t log_web = 1;
+    err = nvs_get_u8(handle, "log_web", &log_web);
+    config.logging.web_enabled = (err == ESP_OK) ? (log_web != 0) : true;
+
+    uint8_t log_serial = 1;
+    err = nvs_get_u8(handle, "log_serial", &log_serial);
+    config.logging.serial_enabled = (err == ESP_OK) ? (log_serial != 0) : true;
 
     nvs_close(handle);
     return ESP_OK;
@@ -126,6 +160,32 @@ esp_err_t save_system_config(const SystemConfig &config) {
         ESP_LOGW(TAG, "Failed to store CORS flag: %s", esp_err_to_name(err));
     }
     set_string(handle, "cors_origin", config.web.cors_origin);
+    err = nvs_set_u32(handle, "ws_interval", config.web.websocket_update_interval_ms);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store websocket interval: %s", esp_err_to_name(err));
+    }
+    err = nvs_set_u8(handle, "ws_clients", config.web.max_ws_clients);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store websocket clients: %s", esp_err_to_name(err));
+    }
+    err = nvs_set_u8(handle, "web_auth", config.web.enable_auth ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store auth flag: %s", esp_err_to_name(err));
+    }
+    set_string(handle, "web_user", config.web.username);
+    set_string(handle, "web_pass", config.web.password);
+    err = nvs_set_u8(handle, "log_level", static_cast<uint8_t>(config.logging.level));
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store log level: %s", esp_err_to_name(err));
+    }
+    err = nvs_set_u8(handle, "log_web", config.logging.web_enabled ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store web logging flag: %s", esp_err_to_name(err));
+    }
+    err = nvs_set_u8(handle, "log_serial", config.logging.serial_enabled ? 1 : 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to store serial logging flag: %s", esp_err_to_name(err));
+    }
 
     err = nvs_commit(handle);
     if (err != ESP_OK) {

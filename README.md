@@ -6,7 +6,9 @@ The TinyBMS bridge is a pure ESP-IDF application that reproduces the complete fe
 
 - **ESP-IDF only** – UART, CAN (TWAI), Wi-Fi, SPIFFS and HTTP are handled by native ESP-IDF components without Arduino shims.
 - **Full web experience** – the legacy dashboard, monitoring and settings pages are compiled into a SPIFFS image and served through `esp_http_server` with optional CORS and JSON APIs.
+- **WebSocket telemetry** – `/ws/status` streams the most recent TinyBMS sample and diagnostics to the dashboard at a configurable cadence.
 - **REST configuration** – `/api/config/system` lets you read/write Wi-Fi, access-point and CORS settings that are stored in NVS and applied live.
+- **Log & hardware APIs** – `/api/logs/*` exposes the rolling ESP-IDF log buffer, while `/api/hardware/test/status-led` keeps the built-in diagnostics tools from the Arduino firmware.
 - **Real-time status** – `/api/status` returns bridge diagnostics and the most recent TinyBMS sample; the web UI consumes it for live graphs.
 - **Deterministic tasks** – dedicated UART, CAN and diagnostics tasks with configurable priorities and queue depth.
 - **Victron friendly CAN frames** – packs voltage/current/SOC/temperature into little-endian CAN data frames plus a keepalive PGN.
@@ -82,6 +84,19 @@ pio run -t uploadfs      # upload SPIFFS image for web UI
 3. **Diagnostics task** – periodically prints health counters (last UART byte, CAN transmissions, drops, errors).
 4. **Wi-Fi manager** – provisions an access point (`TinyBMS`/`tinybms` by default) and optionally joins a configured infrastructure network.
 5. **HTTP server** – serves `/` and static SPA assets from SPIFFS, exposes JSON endpoints for status/configuration and honours optional CORS headers.
+6. **WebSocket broadcaster** – pushes the same status payload over `/ws/status` to keep the dashboard graphs live without polling.
+7. **Log bridge** – mirrors ESP-IDF logs into a ring buffer for `/api/logs/recent` while maintaining the regular serial output.
+
+## 🌐 REST & WebSocket endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | `GET` | Current bridge diagnostics and last TinyBMS sample |
+| `/api/config/system` | `GET/POST` | Retrieve or update Wi-Fi/web/logging configuration stored in NVS |
+| `/api/logs/recent` | `GET` | Returns the recent ESP-IDF log entries (level, tag, message) |
+| `/api/logs/level` | `POST` | Changes the global ESP-IDF log level (persisted in NVS) |
+| `/api/hardware/test/status-led` | `POST` | Pulses the status LED to validate GPIO wiring |
+| `/ws/status` | `GET (WebSocket)` | Continuous telemetry feed consumed by the dashboard |
 
 ## 📦 Legacy implementation
 

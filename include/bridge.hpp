@@ -28,6 +28,8 @@ class TinyBmsBridge {
 
     bool latest_sample(MeasurementSample &out) const;
     diagnostics::BridgeHealthSnapshot health_snapshot() const;
+    esp_err_t pulse_status_led(uint32_t duration_ms);
+    void set_status_led(bool on);
 
   private:
     static void uart_task_entry(void *arg);
