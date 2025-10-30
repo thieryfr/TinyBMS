@@ -18,28 +18,188 @@ let historyData = {
 };
 const MAX_HISTORY_POINTS = 180; // 30 minutes at 10s intervals
 
+// Long-term history storage (localStorage)
+const HISTORY_STORAGE_KEY = 'tinybms_history_v1';
+const MAX_HISTORY_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const HISTORY_SAVE_INTERVAL_MS = 60000; // Save every 60s
+let lastHistorySave = Date.now();
+let currentPeriod = '30m'; // '30m', '1h', '24h', '7d'
+
+// ============================================
+// Long-term History Management
+// ============================================
+
+function loadHistoryFromStorage() {
+    try {
+        const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (!stored) return [];
+
+        const history = JSON.parse(stored);
+
+        // Clean old entries (> 7 days)
+        const now = Date.now();
+        const cleaned = history.filter(entry => {
+            return (now - entry.timestamp) < MAX_HISTORY_AGE_MS;
+        });
+
+        // Save cleaned data back
+        if (cleaned.length !== history.length) {
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+
+        return cleaned;
+    } catch (error) {
+        console.error('[History] Failed to load from storage:', error);
+        return [];
+    }
+}
+
+function saveHistoryToStorage(dataPoint) {
+    try {
+        const history = loadHistoryFromStorage();
+        history.push(dataPoint);
+
+        // Keep only last 10,000 points (~11 days at 10s intervals)
+        if (history.length > 10000) {
+            history.shift();
+        }
+
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+    } catch (error) {
+        console.error('[History] Failed to save to storage:', error);
+        // If localStorage is full, remove old data and retry
+        if (error.name === 'QuotaExceededError') {
+            const history = loadHistoryFromStorage().slice(-5000);
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+        }
+    }
+}
+
+function getHistoryForPeriod(period) {
+    const history = loadHistoryFromStorage();
+    const now = Date.now();
+    let maxAge;
+
+    switch(period) {
+        case '30m':
+            maxAge = 30 * 60 * 1000;
+            break;
+        case '1h':
+            maxAge = 60 * 60 * 1000;
+            break;
+        case '24h':
+            maxAge = 24 * 60 * 60 * 1000;
+            break;
+        case '7d':
+            maxAge = 7 * 24 * 60 * 60 * 1000;
+            break;
+        default:
+            maxAge = 30 * 60 * 1000;
+    }
+
+    // Filter by period
+    const filtered = history.filter(entry => {
+        return (now - entry.timestamp) <= maxAge;
+    });
+
+    // Downsample if too many points
+    return downsampleHistory(filtered, period);
+}
+
+function downsampleHistory(data, period) {
+    // For longer periods, downsample to max 200 points
+    const maxPoints = 200;
+
+    if (data.length <= maxPoints) {
+        return data;
+    }
+
+    const step = Math.ceil(data.length / maxPoints);
+    const downsampled = [];
+
+    for (let i = 0; i < data.length; i += step) {
+        // Average the points in this bucket
+        const bucket = data.slice(i, i + step);
+        const avg = {
+            timestamp: bucket[0].timestamp,
+            voltage: bucket.reduce((sum, p) => sum + p.voltage, 0) / bucket.length,
+            current: bucket.reduce((sum, p) => sum + p.current, 0) / bucket.length,
+            soc: bucket.reduce((sum, p) => sum + p.soc, 0) / bucket.length,
+            temperature: bucket.reduce((sum, p) => sum + p.temperature, 0) / bucket.length
+        };
+        downsampled.push(avg);
+    }
+
+    return downsampled;
+}
+
+function loadChartFromHistory(period) {
+    const history = getHistoryForPeriod(period);
+
+    if (history.length === 0) {
+        showToast(`Pas de données pour la période ${period}`, 'info');
+        return;
+    }
+
+    // Clear current in-memory history
+    historyData.timestamps = [];
+    historyData.voltage = [];
+    historyData.current = [];
+    historyData.soc = [];
+    historyData.temperature = [];
+
+    // Load from storage
+    history.forEach(entry => {
+        const date = new Date(entry.timestamp);
+        const timeStr = period === '24h' || period === '7d'
+            ? `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2,'0')}`
+            : date.toLocaleTimeString();
+
+        historyData.timestamps.push(timeStr);
+        historyData.voltage.push(entry.voltage);
+        historyData.current.push(entry.current);
+        historyData.soc.push(entry.soc);
+        historyData.temperature.push(entry.temperature);
+    });
+
+    // Update chart with current selection
+    const checkedRadio = document.querySelector('input[name="chartData"]:checked');
+    if (checkedRadio) {
+        const dataType = checkedRadio.id.replace('chart', '').toLowerCase();
+        updateChartData(dataType);
+    }
+
+    showToast(`Chargé ${history.length} points (${period})`, 'success', 2000);
+}
+
 // ============================================
 // Initialize Dashboard
 // ============================================
 
 function initDashboard() {
     console.log('[Dashboard] Initializing...');
-    
+
     // Create gauges
     createGauges();
-    
+
     // Create history chart
     createHistoryChart();
-    
+
     // Initialize cells grid
     initCellsGrid();
-    
+
     // Setup WebSocket data handler
     wsHandler.on('onMessage', handleWebSocketData);
-    
+
     // Setup chart data selector
     setupChartSelector();
-    
+
+    // Setup period selector
+    setupPeriodSelector();
+
+    // Load initial history
+    loadChartFromHistory(currentPeriod);
+
     console.log('[Dashboard] Initialized');
 }
 
@@ -184,13 +344,30 @@ function createHistoryChart() {
 
 function setupChartSelector() {
     const selectors = ['chartVoltage', 'chartCurrent', 'chartSOC', 'chartTemp'];
-    
+
     selectors.forEach(id => {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('change', (e) => {
                 if (e.target.checked) {
                     updateChartData(id.replace('chart', '').toLowerCase());
+                }
+            });
+        }
+    });
+}
+
+function setupPeriodSelector() {
+    const selectors = ['period30m', 'period1h', 'period24h', 'period7d'];
+
+    selectors.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    const period = id.replace('period', '').toLowerCase();
+                    currentPeriod = period;
+                    loadChartFromHistory(period);
                 }
             });
         }
@@ -241,28 +418,47 @@ function updateChartData(dataType) {
 
 function addHistoryPoint(voltage, current, soc, temperature) {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString();
-    
-    historyData.timestamps.push(timeStr);
-    historyData.voltage.push(voltage);
-    historyData.current.push(current);
-    historyData.soc.push(soc);
-    historyData.temperature.push(temperature);
-    
-    // Keep only last MAX_HISTORY_POINTS
-    if (historyData.timestamps.length > MAX_HISTORY_POINTS) {
-        historyData.timestamps.shift();
-        historyData.voltage.shift();
-        historyData.current.shift();
-        historyData.soc.shift();
-        historyData.temperature.shift();
+    const timeStr = currentPeriod === '24h' || currentPeriod === '7d'
+        ? `${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}`
+        : now.toLocaleTimeString();
+
+    // Only add to in-memory if we're on 30m period (real-time)
+    if (currentPeriod === '30m') {
+        historyData.timestamps.push(timeStr);
+        historyData.voltage.push(voltage);
+        historyData.current.push(current);
+        historyData.soc.push(soc);
+        historyData.temperature.push(temperature);
+
+        // Keep only last MAX_HISTORY_POINTS
+        if (historyData.timestamps.length > MAX_HISTORY_POINTS) {
+            historyData.timestamps.shift();
+            historyData.voltage.shift();
+            historyData.current.shift();
+            historyData.soc.shift();
+            historyData.temperature.shift();
+        }
+
+        // Update current chart
+        const checkedRadio = document.querySelector('input[name="chartData"]:checked');
+        if (checkedRadio) {
+            const dataType = checkedRadio.id.replace('chart', '').toLowerCase();
+            updateChartData(dataType);
+        }
     }
-    
-    // Update current chart
-    const checkedRadio = document.querySelector('input[name="chartData"]:checked');
-    if (checkedRadio) {
-        const dataType = checkedRadio.id.replace('chart', '').toLowerCase();
-        updateChartData(dataType);
+
+    // Save to localStorage periodically
+    const timeSinceLastSave = Date.now() - lastHistorySave;
+    if (timeSinceLastSave >= HISTORY_SAVE_INTERVAL_MS) {
+        const dataPoint = {
+            timestamp: now.getTime(),
+            voltage: voltage,
+            current: current,
+            soc: soc,
+            temperature: temperature
+        };
+        saveHistoryToStorage(dataPoint);
+        lastHistorySave = Date.now();
     }
 }
 
@@ -397,15 +593,181 @@ function updateBalancingDisplay(balancingBits) {
 }
 
 // ============================================
+// Alert System
+// ============================================
+
+const ALERT_THRESHOLDS = {
+    soc_critical: 20,
+    soc_low: 30,
+    temp_warning: 45,
+    temp_critical: 50,
+    imbalance_warning: 150,
+    imbalance_critical: 200,
+    balancing_duration_warning: 1800000  // 30 minutes in ms
+};
+
+let balancingStartTime = null;
+let lastAlerts = {
+    soc_critical: false,
+    soc_low: false,
+    temp_warning: false,
+    temp_critical: false,
+    imbalance_warning: false,
+    imbalance_critical: false,
+    balancing_duration: false,
+    victron_keepalive: false
+};
+
+function checkAlerts(liveData, stats) {
+    const currentAlerts = {
+        soc_critical: false,
+        soc_low: false,
+        temp_warning: false,
+        temp_critical: false,
+        imbalance_warning: false,
+        imbalance_critical: false,
+        balancing_duration: false,
+        victron_keepalive: false
+    };
+
+    // SOC Alerts
+    const soc = liveData.soc_percent || 0;
+    if (soc < ALERT_THRESHOLDS.soc_critical) {
+        currentAlerts.soc_critical = true;
+        if (!lastAlerts.soc_critical) {
+            createPersistentAlert('soc_critical', `⚠️ SOC Critique: ${soc.toFixed(1)}%`, 'danger');
+            addNotification(`SOC Critical: ${soc.toFixed(1)}% - Charge immediately!`, 'danger');
+        }
+    } else if (soc < ALERT_THRESHOLDS.soc_low) {
+        currentAlerts.soc_low = true;
+        if (!lastAlerts.soc_low) {
+            createPersistentAlert('soc_low', `⚡ SOC Faible: ${soc.toFixed(1)}%`, 'warning');
+            addNotification(`SOC Low: ${soc.toFixed(1)}% - Consider charging`, 'warning');
+        }
+    } else {
+        removePersistentAlert('soc_critical');
+        removePersistentAlert('soc_low');
+    }
+
+    // Temperature Alerts
+    const temp = (liveData.temperature || 0) / 10;
+    if (temp > ALERT_THRESHOLDS.temp_critical) {
+        currentAlerts.temp_critical = true;
+        if (!lastAlerts.temp_critical) {
+            createPersistentAlert('temp_critical', `🔥 Température Critique: ${temp.toFixed(1)}°C`, 'danger');
+            addNotification(`Temperature Critical: ${temp.toFixed(1)}°C - Shutdown recommended!`, 'danger');
+        }
+    } else if (temp > ALERT_THRESHOLDS.temp_warning) {
+        currentAlerts.temp_warning = true;
+        if (!lastAlerts.temp_warning) {
+            createPersistentAlert('temp_warning', `🌡️ Température Élevée: ${temp.toFixed(1)}°C`, 'warning');
+            addNotification(`Temperature High: ${temp.toFixed(1)}°C - Monitor closely`, 'warning');
+        }
+    } else {
+        removePersistentAlert('temp_critical');
+        removePersistentAlert('temp_warning');
+    }
+
+    // Cell Imbalance Alerts
+    const minCell = liveData.min_cell_mv || 0;
+    const maxCell = liveData.max_cell_mv || 0;
+    const imbalance = maxCell - minCell;
+    if (imbalance > ALERT_THRESHOLDS.imbalance_critical) {
+        currentAlerts.imbalance_critical = true;
+        if (!lastAlerts.imbalance_critical) {
+            createPersistentAlert('imbalance_critical', `⚡ Déséquilibre Critique: ${imbalance}mV`, 'danger');
+            addNotification(`Cell Imbalance Critical: ${imbalance}mV - Check cells!`, 'danger');
+        }
+    } else if (imbalance > ALERT_THRESHOLDS.imbalance_warning) {
+        currentAlerts.imbalance_warning = true;
+        if (!lastAlerts.imbalance_warning) {
+            createPersistentAlert('imbalance_warning', `⚠️ Déséquilibre Élevé: ${imbalance}mV`, 'warning');
+            addNotification(`Cell Imbalance High: ${imbalance}mV`, 'warning');
+        }
+    } else {
+        removePersistentAlert('imbalance_critical');
+        removePersistentAlert('imbalance_warning');
+    }
+
+    // Balancing Duration Alert
+    const isBalancing = (liveData.balancing_bits || 0) > 0;
+    if (isBalancing) {
+        if (balancingStartTime === null) {
+            balancingStartTime = Date.now();
+        }
+        const balancingDuration = Date.now() - balancingStartTime;
+        if (balancingDuration > ALERT_THRESHOLDS.balancing_duration_warning) {
+            currentAlerts.balancing_duration = true;
+            if (!lastAlerts.balancing_duration) {
+                const durationMin = Math.floor(balancingDuration / 60000);
+                createPersistentAlert('balancing_duration', `⏱️ Balancing actif depuis ${durationMin}min`, 'info');
+                addNotification(`Balancing active for ${durationMin} minutes`, 'info');
+            }
+        }
+    } else {
+        balancingStartTime = null;
+        removePersistentAlert('balancing_duration');
+    }
+
+    // Victron Keepalive Alert
+    if (!stats.victron_keepalive_ok) {
+        currentAlerts.victron_keepalive = true;
+        if (!lastAlerts.victron_keepalive) {
+            createPersistentAlert('victron_keepalive', '📡 Victron Keepalive Perdu', 'warning');
+            addNotification('Victron keepalive timeout - Check connection', 'warning');
+        }
+    } else {
+        removePersistentAlert('victron_keepalive');
+    }
+
+    lastAlerts = currentAlerts;
+}
+
+function createPersistentAlert(id, message, type) {
+    // Remove if exists
+    removePersistentAlert(id);
+
+    const alertsContainer = document.getElementById('persistentAlerts');
+    if (!alertsContainer) {
+        // Create container if it doesn't exist
+        const container = document.createElement('div');
+        container.id = 'persistentAlerts';
+        container.className = 'persistent-alerts-container';
+        document.querySelector('.main-content')?.prepend(container);
+    }
+
+    const alert = document.createElement('div');
+    alert.id = `alert-${id}`;
+    alert.className = `alert alert-${type} alert-dismissible fade show persistent-alert`;
+    alert.setAttribute('role', 'alert');
+    alert.innerHTML = `
+        <strong>${message}</strong>
+        <button type="button" class="btn-close" onclick="removePersistentAlert('${id}')"></button>
+    `;
+
+    document.getElementById('persistentAlerts')?.appendChild(alert);
+}
+
+function removePersistentAlert(id) {
+    const alert = document.getElementById(`alert-${id}`);
+    if (alert) {
+        alert.remove();
+    }
+}
+
+// ============================================
 // WebSocket Data Handler
 // ============================================
 
 function handleWebSocketData(data) {
     if (!data || !data.live_data) return;
-    
+
     const liveData = data.live_data;
     const stats = data.stats || {};
-    
+
+    // Check for alerts FIRST
+    checkAlerts(liveData, stats);
+
     // Update gauges
     if (gauges.soc) {
         updateGauge(gauges.soc, liveData.soc_percent || 0, 0, 100);

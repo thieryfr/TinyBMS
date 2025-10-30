@@ -14,7 +14,7 @@ const REGISTERS = {
     304: { name: 'Charge Finished Current', unit: 'mA', min: 100, max: 5000, default: 1000, group: 'pack' },
     306: { name: 'Battery Capacity', unit: '0.01Ah', min: 5000, max: 50000, default: 31400, group: 'pack', display: (v) => `${(v/100).toFixed(2)} Ah` },
     307: { name: 'Cell Count', unit: 'cells', min: 4, max: 32, default: 16, group: 'pack' },
-    
+
     // Protection (315-320)
     315: { name: 'Overvoltage Cutoff', unit: 'mV', min: 3600, max: 4200, default: 3800, group: 'protection' },
     316: { name: 'Undervoltage Cutoff', unit: 'mV', min: 2000, max: 3000, default: 2800, group: 'protection' },
@@ -22,10 +22,117 @@ const REGISTERS = {
     318: { name: 'Charge Overcurrent', unit: 'A', min: 10, max: 150, default: 90, group: 'protection' },
     319: { name: 'Overheat Temperature', unit: '0.1°C', min: 400, max: 800, default: 600, group: 'protection', display: (v) => `${(v/10).toFixed(1)} °C` },
     320: { name: 'Low Temp Charge', unit: '0.1°C', min: -200, max: 100, default: 0, group: 'protection', display: (v) => `${(v/10).toFixed(1)} °C` },
-    
+
     // Communication (342-343)
     342: { name: 'Broadcast Enable', unit: 'bool', min: 0, max: 1, default: 1, group: 'comm' },
     343: { name: 'Protocol Selection', unit: 'enum', min: 0, max: 3, default: 2, group: 'comm' }
+};
+
+// ============================================
+// Configuration Presets
+// ============================================
+
+const CONFIG_PRESETS = {
+    'lifepo4_16s_default': {
+        name: 'LiFePO4 16S (Défaut)',
+        description: 'Configuration standard pour batterie LiFePO4 16S (51.2V nominal)',
+        icon: 'battery-three-quarters',
+        values: {
+            300: 3650,  // Fully Charged: 3.65V per cell
+            302: 3250,  // Fully Discharged: 3.25V per cell
+            304: 1000,  // Charge Finished Current: 1A
+            306: 31400, // Capacity: 314Ah
+            307: 16,    // Cell Count: 16
+            315: 3800,  // Overvoltage Cutoff: 3.8V
+            316: 2800,  // Undervoltage Cutoff: 2.8V
+            317: 65,    // Discharge Overcurrent: 65A
+            318: 90,    // Charge Overcurrent: 90A
+            319: 600,   // Overheat: 60°C
+            320: 0,     // Low Temp Charge: 0°C
+            342: 1,     // Broadcast Enable
+            343: 2      // Protocol
+        }
+    },
+    'lifepo4_12s': {
+        name: 'LiFePO4 12S',
+        description: 'Configuration pour batterie LiFePO4 12S (38.4V nominal)',
+        icon: 'battery-half',
+        values: {
+            300: 3650,
+            302: 3250,
+            304: 1000,
+            306: 31400,
+            307: 12,    // 12 cells
+            315: 3800,
+            316: 2800,
+            317: 65,
+            318: 90,
+            319: 600,
+            320: 0,
+            342: 1,
+            343: 2
+        }
+    },
+    'lifepo4_fast_charge': {
+        name: 'Charge Rapide',
+        description: 'Configuration optimisée pour charge rapide (augmente les limites de courant)',
+        icon: 'bolt',
+        values: {
+            300: 3650,
+            302: 3250,
+            304: 2000,  // Charge Finished: 2A (plus élevé)
+            306: 31400,
+            307: 16,
+            315: 3750,  // Overvoltage plus conservateur
+            316: 2900,  // Undervoltage plus conservateur
+            317: 90,    // Discharge: 90A (augmenté)
+            318: 120,   // Charge: 120A (augmenté)
+            319: 550,   // Overheat: 55°C (plus strict)
+            320: 50,    // Low Temp: 5°C (protection température basse)
+            342: 1,
+            343: 2
+        }
+    },
+    'lifepo4_longevity': {
+        name: 'Longévité Maximale',
+        description: 'Configuration conservatrice pour maximiser la durée de vie de la batterie',
+        icon: 'heart',
+        values: {
+            300: 3550,  // Fully Charged: 3.55V (plus bas)
+            302: 3300,  // Fully Discharged: 3.3V (plus haut)
+            304: 500,   // Charge Finished: 0.5A (plus strict)
+            306: 31400,
+            307: 16,
+            315: 3650,  // Overvoltage: 3.65V (plus bas)
+            316: 3000,  // Undervoltage: 3.0V (plus haut)
+            317: 50,    // Discharge: 50A (limité)
+            318: 60,    // Charge: 60A (limité)
+            319: 500,   // Overheat: 50°C (strict)
+            320: 100,   // Low Temp: 10°C (strict)
+            342: 1,
+            343: 2
+        }
+    },
+    'lifepo4_high_power': {
+        name: 'Haute Puissance',
+        description: 'Configuration pour applications haute puissance (inverseurs, moteurs)',
+        icon: 'fire',
+        values: {
+            300: 3650,
+            302: 3250,
+            304: 1500,
+            306: 31400,
+            307: 16,
+            315: 3800,
+            316: 2800,
+            317: 150,   // Discharge: 150A (très élevé)
+            318: 120,   // Charge: 120A
+            319: 600,
+            320: 0,
+            342: 1,
+            343: 2
+        }
+    }
 };
 
 // Register state
@@ -39,7 +146,7 @@ let registerStates = {}; // 'synced', 'modified', 'error', 'writing', 'reading'
 
 function initConfig() {
     console.log('[Config] Initializing...');
-    
+
     // Initialize register values with defaults
     Object.keys(REGISTERS).forEach(reg => {
         const regNum = parseInt(reg);
@@ -47,18 +154,99 @@ function initConfig() {
         registerBmsValues[regNum] = REGISTERS[regNum].default;
         registerStates[regNum] = 'synced';
     });
-    
+
     // Load protection registers dynamically
     loadProtectionRegisters();
-    
+
+    // Load presets UI
+    loadPresetsUI();
+
     // Setup search
     setupConfigSearch();
-    
+
     // Setup tooltips
     const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
     tooltips.forEach(el => new bootstrap.Tooltip(el));
-    
+
     console.log('[Config] Initialized');
+}
+
+// ============================================
+// Presets UI and Functions
+// ============================================
+
+function loadPresetsUI() {
+    const container = document.getElementById('presetsContainer');
+    if (!container) return;
+
+    let html = `
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-magic"></i> Presets de Configuration</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Sélectionnez un preset pour charger une configuration optimisée.
+                    <strong>Attention:</strong> Cela modifiera tous les registres sans écriture immédiate.
+                </p>
+                <div class="row g-3">
+    `;
+
+    Object.entries(CONFIG_PRESETS).forEach(([key, preset]) => {
+        html += `
+            <div class="col-md-6 col-lg-4">
+                <div class="card preset-card h-100" onclick="applyPreset('${key}')">
+                    <div class="card-body text-center">
+                        <i class="fas fa-${preset.icon} fa-3x text-primary mb-3"></i>
+                        <h6 class="card-title">${preset.name}</h6>
+                        <p class="card-text small text-muted">${preset.description}</p>
+                        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); applyPreset('${key}')">
+                            <i class="fas fa-download"></i> Charger
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+async function applyPreset(presetKey) {
+    const preset = CONFIG_PRESETS[presetKey];
+    if (!preset) {
+        showToast('Preset non trouvé', 'error');
+        return;
+    }
+
+    if (!await confirmAction(
+        `Charger le preset "${preset.name}"?`,
+        `${preset.description}\n\nCeci modifiera ${Object.keys(preset.values).length} registres localement. Vous devrez cliquer sur "Write All" pour envoyer au BMS.`
+    )) {
+        return;
+    }
+
+    let modifiedCount = 0;
+
+    Object.entries(preset.values).forEach(([reg, value]) => {
+        const regNum = parseInt(reg);
+        if (REGISTERS[regNum]) {
+            updateRegisterValue(regNum, value);
+            modifiedCount++;
+        }
+    });
+
+    showToast(`Preset "${preset.name}" chargé: ${modifiedCount} registres modifiés`, 'success', 5000);
+    addNotification(`Configuration preset "${preset.name}" appliquée localement`, 'success');
+
+    // Scroll to protection registers section
+    document.getElementById('protectionRegisters')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================

@@ -264,20 +264,40 @@
                 <div class="row g-3 mb-4">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0"><i class="fas fa-chart-area"></i> History (30 min)</h5>
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <input type="radio" class="btn-check" name="chartData" id="chartVoltage" autocomplete="off" checked>
-                                    <label class="btn btn-outline-primary" for="chartVoltage">Voltage</label>
-                                    
-                                    <input type="radio" class="btn-check" name="chartData" id="chartCurrent" autocomplete="off">
-                                    <label class="btn btn-outline-primary" for="chartCurrent">Current</label>
-                                    
-                                    <input type="radio" class="btn-check" name="chartData" id="chartSOC" autocomplete="off">
-                                    <label class="btn btn-outline-primary" for="chartSOC">SOC</label>
-                                    
-                                    <input type="radio" class="btn-check" name="chartData" id="chartTemp" autocomplete="off">
-                                    <label class="btn btn-outline-primary" for="chartTemp">Temperature</label>
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <h5 class="mb-0"><i class="fas fa-chart-area"></i> Historical Data</h5>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <!-- Period Selector -->
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <input type="radio" class="btn-check" name="chartPeriod" id="period30m" autocomplete="off" checked>
+                                            <label class="btn btn-outline-info" for="period30m">30m</label>
+
+                                            <input type="radio" class="btn-check" name="chartPeriod" id="period1h" autocomplete="off">
+                                            <label class="btn btn-outline-info" for="period1h">1h</label>
+
+                                            <input type="radio" class="btn-check" name="chartPeriod" id="period24h" autocomplete="off">
+                                            <label class="btn btn-outline-info" for="period24h">24h</label>
+
+                                            <input type="radio" class="btn-check" name="chartPeriod" id="period7d" autocomplete="off">
+                                            <label class="btn btn-outline-info" for="period7d">7d</label>
+                                        </div>
+
+                                        <!-- Data Type Selector -->
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <input type="radio" class="btn-check" name="chartData" id="chartVoltage" autocomplete="off" checked>
+                                            <label class="btn btn-outline-primary" for="chartVoltage">Voltage</label>
+
+                                            <input type="radio" class="btn-check" name="chartData" id="chartCurrent" autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="chartCurrent">Current</label>
+
+                                            <input type="radio" class="btn-check" name="chartData" id="chartSOC" autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="chartSOC">SOC</label>
+
+                                            <input type="radio" class="btn-check" name="chartData" id="chartTemp" autocomplete="off">
+                                            <label class="btn btn-outline-primary" for="chartTemp">Temperature</label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-body">
@@ -572,7 +592,10 @@
                         </select>
                     </div>
                 </div>
-                
+
+                <!-- Configuration Presets -->
+                <div id="presetsContainer"></div>
+
                 <!-- Battery Pack Group -->
                 <div class="card mb-3">
                     <div class="card-header bg-primary text-white">
