@@ -1,0 +1,33 @@
+{
+  "ess_version": "Venus OS v3.61 / ESS 1.16",
+  "test_date": "2025-01-18",
+  "result": "pass",
+  "root_topic": "victron/tinybms",
+  "legacy_topics_verified": [
+    "battery_pack_voltage",
+    "battery_pack_current",
+    "internal_temperature",
+    "state_of_charge",
+    "state_of_health",
+    "max_charge_current",
+    "max_discharge_current",
+    "overvoltage_cutoff_mv",
+    "undervoltage_cutoff_mv",
+    "discharge_overcurrent_a",
+    "charge_overcurrent_a",
+    "overheat_cutoff_c"
+  ],
+  "functional_matrix": {
+    "pack_power_w": {
+      "dbus_path": "/Dc/0/Power",
+      "payload_samples": [-1224.4, -1183.2, -1150.0],
+      "status": "ok"
+    },
+    "system_state": {
+      "dbus_path": "/System/0/State",
+      "payload_samples": [3, 3, 4],
+      "status": "ok"
+    }
+  },
+  "notes": "Run against GX device in ESS mode with 10-minute soak. MQTT root topic preserved and no configuration changes required."
+}
