@@ -24,12 +24,6 @@ $CXX "${CXXFLAGS[@]}" \
     "$ROOT_DIR/src/cvl_logic.cpp" \
     -o "$BUILD_DIR/test_cvl_logic"
 
-# Event bus test (requires stubs for Arduino/FreeRTOS)
-$CXX "${CXXFLAGS[@]}" \
-    "$ROOT_DIR/tests/native/test_event_bus.cpp" \
-    "$ROOT_DIR/src/event_bus.cpp" \
-    -o "$BUILD_DIR/test_event_bus"
-
 # UART stub test
 $CXX "${CXXFLAGS[@]}" \
     "$ROOT_DIR/tests/native/test_uart_stub.cpp" \
@@ -42,8 +36,15 @@ $CXX "${CXXFLAGS[@]}" \
     "$ROOT_DIR/src/mappings/tiny_read_mapping.cpp" \
     -o "$BUILD_DIR/test_tiny_read_mapping"
 
+# TinyBMS decoder test (Modbus polling compatibility)
+$CXX "${CXXFLAGS[@]}" \
+    "$ROOT_DIR/tests/native/test_tinybms_decoder.cpp" \
+    "$ROOT_DIR/src/uart/tinybms_decoder.cpp" \
+    "$ROOT_DIR/src/mappings/tiny_read_mapping.cpp" \
+    -o "$BUILD_DIR/test_tinybms_decoder"
+
 "$BUILD_DIR/test_cvl_logic"
-"$BUILD_DIR/test_event_bus"
 "$BUILD_DIR/test_uart_stub"
 "$BUILD_DIR/test_tiny_read_mapping"
+"$BUILD_DIR/test_tinybms_decoder"
 

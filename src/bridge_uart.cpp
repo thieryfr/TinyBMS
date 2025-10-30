@@ -14,6 +14,7 @@
 #include "watchdog_manager.h"
 #include "rtos_config.h"
 #include "uart/tinybms_uart_client.h"
+#include "uart/tinybms_decoder.h"
 #include "tiny_read_mapping.h"
 #include "mqtt/publisher.h"
 #include "event/event_types_v2.h"
@@ -266,113 +267,20 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
 
                 const auto& bindings = getTinyRegisterBindings();
                 for (const auto& binding : bindings) {
-                    if (binding.register_count == 0) {
-                        continue;
-                    }
-
-                    uint16_t raw_words[TINY_REGISTER_MAX_WORDS] = {0};
-                    bool has_all_words = true;
-                    for (uint8_t idx = 0; idx < binding.register_count; ++idx) {
-                        auto it = register_values.find(static_cast<uint16_t>(binding.register_address + idx));
-                        if (it == register_values.end()) {
-                            has_all_words = false;
-                            break;
+                    MqttRegisterEvent mqtt_event{};
+                    tinybms::events::MqttRegisterEvent* event_ptr = event_sink.isReady() ? &mqtt_event : nullptr;
+                    if (tinybms::uart::detail::decodeAndApplyBinding(binding,
+                                                                     register_values,
+                                                                     d,
+                                                                     now,
+                                                                     event_ptr)) {
+                        if (event_ptr != nullptr) {
+                            deferred_mqtt_events.push_back(mqtt_event);
                         }
-                        raw_words[idx] = it->second;
-                    }
-
-                    if (!has_all_words) {
-                        continue;
-                    }
-
-                    int32_t raw_value = 0;
-                    if (binding.value_type == TinyRegisterValueType::String) {
-                        raw_value = 0;
-                    } else if (binding.value_type == TinyRegisterValueType::Uint32 && binding.register_count >= 2) {
-                        // TinyBMS exposes 32-bit counters as LSW/MSW pairs. Register `binding.register_address`
-                        // holds the low word and the following register the high word (e.g. lifetime counter 32->33).
-                        const uint32_t low_word = static_cast<uint32_t>(raw_words[0]);
-                        const uint32_t high_word = static_cast<uint32_t>(raw_words[1]);
-                        raw_value = static_cast<int32_t>((high_word << 16) | low_word);
-                    } else if (binding.data_slice == TinyRegisterDataSlice::LowByte ||
-                               binding.data_slice == TinyRegisterDataSlice::HighByte) {
-                        const uint8_t byte_value = (binding.data_slice == TinyRegisterDataSlice::LowByte)
-                            ? static_cast<uint8_t>(raw_words[0] & 0x00FFu)
-                            : static_cast<uint8_t>((raw_words[0] >> 8) & 0x00FFu);
-                        raw_value = binding.is_signed
-                            ? static_cast<int32_t>(static_cast<int8_t>(byte_value))
-                            : static_cast<int32_t>(byte_value);
-                    } else {
-                        raw_value = binding.is_signed
-                            ? static_cast<int32_t>(static_cast<int16_t>(raw_words[0]))
-                            : static_cast<int32_t>(raw_words[0]);
-                    }
-
-                    float scaled_value = static_cast<float>(raw_value) * binding.scale;
-
-                    String text_value;
-                    if (binding.value_type == TinyRegisterValueType::String) {
-                        text_value.reserve(binding.register_count * 2);
-                        for (uint8_t idx = 0; idx < binding.register_count; ++idx) {
-                            char high = static_cast<char>((raw_words[idx] >> 8) & 0xFF);
-                            char low = static_cast<char>(raw_words[idx] & 0xFF);
-                            if (high != '\0') {
-                                text_value += high;
-                            }
-                            if (low != '\0') {
-                                text_value += low;
-                            }
-                        }
-                    } else if (binding.metadata_address == 501 && binding.register_count >= 2) {
-                        uint16_t major = raw_words[0];
-                        uint16_t minor = raw_words[1];
-                        text_value = String(major) + "." + String(minor);
-                    }
-
-                    const String* text_ptr = text_value.length() > 0 ? &text_value : nullptr;
-                    d.applyBinding(binding, raw_value, scaled_value, text_ptr, raw_words);
-
-                    // Phase 3: Defer MQTT register events - collect now, publish after live_data
-                    if (event_sink.isReady()) {
-                        MqttRegisterEvent mqtt_event{};
-                        mqtt_event.address =
-                            (binding.metadata_address != 0) ? binding.metadata_address : binding.register_address;
-                        mqtt_event.value_type = binding.value_type;
-                        mqtt_event.raw_value = raw_value;
-                        mqtt_event.timestamp_ms = now;
-
-                        const uint8_t copy_count = std::min<uint8_t>(binding.register_count,
-                                                                      static_cast<uint8_t>(TINY_REGISTER_MAX_WORDS));
-                        mqtt_event.raw_word_count = copy_count;
-                        for (uint8_t i = 0; i < copy_count; ++i) {
-                            mqtt_event.raw_words[i] = raw_words[i];
-                        }
-                        for (uint8_t i = copy_count; i < TINY_REGISTER_MAX_WORDS; ++i) {
-                            mqtt_event.raw_words[i] = 0;
-                        }
-
-                        mqtt_event.has_text = (text_ptr != nullptr);
-                        if (mqtt_event.has_text) {
-                            size_t text_len = static_cast<size_t>(text_value.length());
-                            if (text_len >= sizeof(mqtt_event.text_value)) {
-                                text_len = sizeof(mqtt_event.text_value) - 1;
-                            }
-                            text_value.toCharArray(mqtt_event.text_value, text_len + 1);
-                        } else {
-                            mqtt_event.text_value[0] = '\0';
-                        }
-
-                        deferred_mqtt_events.push_back(mqtt_event);
                     }
                 }
 
-                d.cell_imbalance_mv = (d.max_cell_mv > d.min_cell_mv)
-                    ? static_cast<uint16_t>(d.max_cell_mv - d.min_cell_mv)
-                    : 0;
-
-                if (d.online_status == 0) {
-                    d.online_status = 0x91;
-                }
+                tinybms::uart::detail::finalizeLiveDataFromRegisters(d);
 
                 const bool has_pack_temp = (d.findSnapshot(113) != nullptr);
                 const bool has_overvoltage_reg = (d.findSnapshot(315) != nullptr);

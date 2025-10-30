@@ -32,6 +32,12 @@ struct TinyRegisterSnapshot {
 /**
  * @struct TinyBMS_LiveData
  * @brief Structure de données partagées entre tâches UART, CAN, WebSocket
+ *
+ * ⚠️ Compatibilité ascendante : cette structure est utilisée par de nombreux modules
+ * (publieurs MQTT, mappers CAN, API Web). Son agencement mémoire reste inchangé pour
+ * garantir la stabilité de l'API historique. Les nouveaux champs TinyBMS doivent être
+ * exposés via `register_snapshots` ou des helpers dédiés plutôt qu'en modifiant le
+ * layout existant.
  */
 struct TinyBMS_LiveData {
     float voltage;               // V
