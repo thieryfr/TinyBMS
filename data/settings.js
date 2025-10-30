@@ -31,6 +31,20 @@ let systemSettings = {
         can_bitrate: 500000,
         can_termination: true
     },
+    tinybms: {
+        poll_interval_ms: 100,
+        poll_interval_min_ms: 50,
+        poll_interval_max_ms: 500,
+        poll_backoff_step_ms: 25,
+        poll_recovery_step_ms: 10,
+        poll_latency_target_ms: 40,
+        poll_latency_slack_ms: 15,
+        poll_failure_threshold: 3,
+        poll_success_threshold: 6,
+        uart_retry_count: 3,
+        uart_retry_delay_ms: 50,
+        broadcast_expected: true
+    },
     cvl: {
         enabled: true,
         bulk_transition_soc: 90,
@@ -47,7 +61,34 @@ let systemSettings = {
         battery_name: 'LiFePO4 48V 300Ah',
         pgn_interval_ms: 1000,
         cvl_interval_ms: 20000,
-        keepalive_interval_ms: 5000
+        keepalive_interval_ms: 5000,
+        thresholds: {
+            undervoltage_v: 44.0,
+            overvoltage_v: 58.4,
+            overtemp_c: 55,
+            low_temp_charge_c: 0,
+            imbalance_warn_mv: 100,
+            imbalance_alarm_mv: 200,
+            soc_low_percent: 10,
+            soc_high_percent: 99,
+            derate_current_a: 1.0
+        }
+    },
+    mqtt: {
+        enabled: false,
+        uri: 'mqtt://127.0.0.1',
+        port: 1883,
+        client_id: 'tinybms-victron',
+        username: '',
+        password: '',
+        root_topic: 'victron/tinybms',
+        clean_session: true,
+        use_tls: false,
+        server_certificate: '',
+        keepalive_seconds: 30,
+        reconnect_interval_ms: 5000,
+        default_qos: 0,
+        retain_by_default: false
     },
     logging: {
         level: 'info',
@@ -62,6 +103,12 @@ let systemSettings = {
         ws_max_clients: 4,
         ws_update_interval: 1000,
         cors_enabled: true
+    },
+    advanced: {
+        enable_spiffs: true,
+        enable_ota: false,
+        watchdog_timeout_s: 30,
+        stack_size_bytes: 8192
     }
 };
 
@@ -730,6 +777,111 @@ async function confirmReboot(title, message) {
         
         modal.show();
     });
+}
+
+// ============================================
+// TinyBMS Settings
+// ============================================
+
+async function saveTinyBMSSettings() {
+    const settings = {
+        tinybms: {
+            poll_interval_ms: parseInt(document.getElementById('tinyPollInterval').value),
+            poll_interval_min_ms: parseInt(document.getElementById('tinyPollMin').value),
+            poll_interval_max_ms: parseInt(document.getElementById('tinyPollMax').value),
+            poll_backoff_step_ms: parseInt(document.getElementById('tinyBackoffStep').value),
+            poll_recovery_step_ms: parseInt(document.getElementById('tinyRecoveryStep').value),
+            poll_latency_target_ms: parseInt(document.getElementById('tinyLatencyTarget').value),
+            poll_latency_slack_ms: parseInt(document.getElementById('tinyLatencySlack').value),
+            poll_failure_threshold: parseInt(document.getElementById('tinyFailureThreshold').value),
+            poll_success_threshold: parseInt(document.getElementById('tinySuccessThreshold').value),
+            uart_retry_count: parseInt(document.getElementById('tinyRetryCount').value),
+            uart_retry_delay_ms: parseInt(document.getElementById('tinyRetryDelay').value),
+            broadcast_expected: document.getElementById('tinyBroadcastExpected').checked
+        }
+    };
+
+    try {
+        await postAPI('/api/config/save', { settings });
+        systemSettings.tinybms = settings.tinybms;
+        showToast('TinyBMS settings saved successfully', 'success');
+        addNotification('TinyBMS polling configuration updated', 'success');
+    } catch (error) {
+        console.error('[Settings] Error saving TinyBMS settings:', error);
+        showToast('Failed to save TinyBMS settings', 'error');
+    }
+}
+
+// ============================================
+// MQTT Settings
+// ============================================
+
+async function saveMQTTSettings() {
+    const settings = {
+        mqtt: {
+            enabled: document.getElementById('mqttEnabled').checked,
+            uri: document.getElementById('mqttUri').value,
+            port: parseInt(document.getElementById('mqttPort').value),
+            client_id: document.getElementById('mqttClientId').value,
+            username: document.getElementById('mqttUsername').value,
+            password: document.getElementById('mqttPassword').value,
+            root_topic: document.getElementById('mqttRootTopic').value,
+            clean_session: document.getElementById('mqttCleanSession').checked,
+            use_tls: document.getElementById('mqttUseTls').checked,
+            server_certificate: document.getElementById('mqttServerCert')?.value || '',
+            keepalive_seconds: parseInt(document.getElementById('mqttKeepalive').value),
+            reconnect_interval_ms: parseInt(document.getElementById('mqttReconnectInterval').value),
+            default_qos: parseInt(document.getElementById('mqttQos').value),
+            retain_by_default: document.getElementById('mqttRetain').checked
+        }
+    };
+
+    try {
+        await postAPI('/api/config/save', { settings });
+        systemSettings.mqtt = settings.mqtt;
+        showToast('MQTT settings saved successfully. Restart required.', 'success', 5000);
+        addNotification('MQTT configuration updated - restart to apply', 'success');
+    } catch (error) {
+        console.error('[Settings] Error saving MQTT settings:', error);
+        showToast('Failed to save MQTT settings', 'error');
+    }
+}
+
+// ============================================
+// Extended Victron Settings (with thresholds)
+// ============================================
+
+async function saveVictronSettings() {
+    const settings = {
+        victron: {
+            manufacturer: document.getElementById('victronManufacturer').value,
+            battery_name: document.getElementById('victronBatteryName').value,
+            pgn_interval_ms: parseInt(document.getElementById('victronPgnInterval').value),
+            cvl_interval_ms: parseInt(document.getElementById('victronCvlInterval').value),
+            keepalive_interval_ms: parseInt(document.getElementById('victronKeepaliveInterval').value),
+            thresholds: {
+                undervoltage_v: parseFloat(document.getElementById('victronUndervoltage').value),
+                overvoltage_v: parseFloat(document.getElementById('victronOvervoltage').value),
+                overtemp_c: parseFloat(document.getElementById('victronOvertemp').value),
+                low_temp_charge_c: parseFloat(document.getElementById('victronLowTempCharge').value),
+                imbalance_warn_mv: parseInt(document.getElementById('victronImbalanceWarn').value),
+                imbalance_alarm_mv: parseInt(document.getElementById('victronImbalanceAlarm').value),
+                soc_low_percent: parseFloat(document.getElementById('victronSocLow').value),
+                soc_high_percent: parseFloat(document.getElementById('victronSocHigh').value),
+                derate_current_a: parseFloat(document.getElementById('victronDerateCurrent').value)
+            }
+        }
+    };
+
+    try {
+        await postAPI('/api/config/victron', settings);
+        systemSettings.victron = settings.victron;
+        showToast('Victron settings saved successfully', 'success');
+        addNotification('Victron integration settings updated', 'success');
+    } catch (error) {
+        console.error('[Settings] Error saving Victron settings:', error);
+        showToast('Failed to save Victron settings', 'error');
+    }
 }
 
 // ============================================
