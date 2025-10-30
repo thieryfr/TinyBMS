@@ -1,4 +1,4 @@
-# TinyBMS-Victron Bridge
+# TinyBMS-Victron Bridge test before commit
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Architecture Score](https://img.shields.io/badge/architecture-9.5%2F10-brightgreen)]()
