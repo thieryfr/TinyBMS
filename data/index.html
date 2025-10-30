@@ -183,6 +183,16 @@
                                 <h5 class="mb-0"><i class="fas fa-microchip"></i> Cell Voltages (16S Configuration)</h5>
                             </div>
                             <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <small class="text-muted">Display range</small>
+                                        <div id="cellVoltageRangeLabel" class="fw-semibold">3.000 - 3.700 V</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small class="text-muted">Imbalance status legend</small>
+                                        <div id="cellImbalanceLegend" class="small text-muted">OK &lt; 30 mV | Warning &lt; 100 mV | High ≥ 100 mV</div>
+                                    </div>
+                                </div>
                                 <!-- Cell Stats -->
                                 <div class="row mb-3">
                                     <div class="col-md-4">
@@ -1014,6 +1024,11 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="pill" href="#settingsDashboardUI">
+                            <i class="fas fa-sliders-h"></i> Dashboard UI
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" data-bs-toggle="pill" href="#settingsLogging">
                             <i class="fas fa-file-alt"></i> Logging
                         </a>
@@ -1831,6 +1846,131 @@
                                 <button class="btn btn-success" onclick="saveMQTTSettings()">
                                     <i class="fas fa-save"></i> Save MQTT Settings
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard UI Settings -->
+                    <div class="tab-pane fade" id="settingsDashboardUI">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5><i class="fas fa-sliders-h"></i> Dashboard Display Preferences</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted small">
+                                    These preferences are stored in your browser and adjust how the dashboard renders cell voltages and alerts.
+                                </p>
+
+                                <div class="card mb-4 border-primary">
+                                    <div class="card-header bg-primary text-white">
+                                        <h6 class="mb-0"><i class="fas fa-battery-half"></i> Cell Voltage Bar</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row g-3">
+                                            <div class="col-md-3">
+                                                <label class="form-label">Minimum Voltage</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardCellMin" min="2000" max="4000" step="10">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                                <small class="text-muted">Lower bound of the cell bar scale</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Maximum Voltage</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardCellMax" min="3200" max="4200" step="10">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                                <small class="text-muted">Upper bound of the cell bar scale</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Imbalance Warning</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardCellWarning" min="5" max="500" step="5">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                                <small class="text-muted">Threshold for warning badge</small>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Imbalance High</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardCellCritical" min="10" max="600" step="5">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                                <small class="text-muted">Threshold for high imbalance badge</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card border-warning mb-4">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Alert Thresholds</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row g-3">
+                                            <div class="col-md-3">
+                                                <label class="form-label">SOC Critical</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertSocCritical" min="0" max="50" step="1">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">SOC Warning</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertSocLow" min="0" max="60" step="1">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Temp Warning</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertTempWarning" min="0" max="70" step="1">
+                                                    <span class="input-group-text">°C</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Temp Critical</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertTempCritical" min="0" max="90" step="1">
+                                                    <span class="input-group-text">°C</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Imbalance Warning</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertImbalanceWarning" min="20" max="400" step="10">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Imbalance Critical</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertImbalanceCritical" min="20" max="600" step="10">
+                                                    <span class="input-group-text">mV</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Balancing Duration</label>
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" class="form-control" id="dashboardAlertBalancingMinutes" min="5" max="240" step="5">
+                                                    <span class="input-group-text">min</span>
+                                                </div>
+                                                <small class="text-muted">Time before persistent alert</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-secondary" onclick="resetDashboardUIPreferences()">
+                                        <i class="fas fa-undo"></i> Reset to Defaults
+                                    </button>
+                                    <button class="btn btn-success" onclick="saveDashboardUIPreferences()">
+                                        <i class="fas fa-save"></i> Save Dashboard Preferences
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

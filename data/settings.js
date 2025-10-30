@@ -112,6 +112,28 @@ let systemSettings = {
     }
 };
 
+const DASHBOARD_PREFS_FALLBACK = {
+    cellVoltage: {
+        min_mv: 3000,
+        max_mv: 3700,
+        warning_delta_mv: 30,
+        critical_delta_mv: 100
+    },
+    alerts: {
+        soc_critical: 20,
+        soc_low: 30,
+        temp_warning: 45,
+        temp_critical: 50,
+        imbalance_warning: 150,
+        imbalance_critical: 200,
+        balancing_duration_warning_ms: 30 * 60 * 1000
+    }
+};
+
+let dashboardUIPreferences = typeof window.getDashboardPreferences === 'function'
+    ? window.getDashboardPreferences()
+    : mergeObjects(JSON.parse(JSON.stringify(DASHBOARD_PREFS_FALLBACK)), {});
+
 // ============================================
 // Initialize Settings
 // ============================================
@@ -211,6 +233,175 @@ function populateSettingsUI() {
     document.getElementById('wsMaxClients').value = systemSettings.system.ws_max_clients;
     document.getElementById('wsUpdateInterval').value = systemSettings.system.ws_update_interval;
     document.getElementById('webCORS').checked = systemSettings.system.cors_enabled;
+
+    populateDashboardUIPreferences();
+}
+
+function populateDashboardUIPreferences() {
+    if (typeof window.getDashboardPreferences === 'function') {
+        dashboardUIPreferences = window.getDashboardPreferences();
+    } else {
+        dashboardUIPreferences = mergeObjects(JSON.parse(JSON.stringify(DASHBOARD_PREFS_FALLBACK)), {});
+    }
+
+    const minInput = document.getElementById('dashboardCellMin');
+    if (!minInput) {
+        return;
+    }
+
+    document.getElementById('dashboardCellMin').value = dashboardUIPreferences.cellVoltage.min_mv;
+    document.getElementById('dashboardCellMax').value = dashboardUIPreferences.cellVoltage.max_mv;
+    document.getElementById('dashboardCellWarning').value = dashboardUIPreferences.cellVoltage.warning_delta_mv;
+    document.getElementById('dashboardCellCritical').value = dashboardUIPreferences.cellVoltage.critical_delta_mv;
+
+    document.getElementById('dashboardAlertSocCritical').value = dashboardUIPreferences.alerts.soc_critical;
+    document.getElementById('dashboardAlertSocLow').value = dashboardUIPreferences.alerts.soc_low;
+    document.getElementById('dashboardAlertTempWarning').value = dashboardUIPreferences.alerts.temp_warning;
+    document.getElementById('dashboardAlertTempCritical').value = dashboardUIPreferences.alerts.temp_critical;
+    document.getElementById('dashboardAlertImbalanceWarning').value = dashboardUIPreferences.alerts.imbalance_warning;
+    document.getElementById('dashboardAlertImbalanceCritical').value = dashboardUIPreferences.alerts.imbalance_critical;
+    document.getElementById('dashboardAlertBalancingMinutes').value = Math.round(
+        dashboardUIPreferences.alerts.balancing_duration_warning_ms / 60000
+    );
+}
+
+function saveDashboardUIPreferences(options = {}) {
+    const silent = options && options.silent;
+
+    const minMv = parseInt(document.getElementById('dashboardCellMin').value, 10);
+    const maxMv = parseInt(document.getElementById('dashboardCellMax').value, 10);
+    const warningMv = parseInt(document.getElementById('dashboardCellWarning').value, 10);
+    const criticalMv = parseInt(document.getElementById('dashboardCellCritical').value, 10);
+
+    if (!Number.isFinite(minMv) || !Number.isFinite(maxMv)) {
+        showToast('Invalid cell voltage range', 'error');
+        return false;
+    }
+
+    if (maxMv <= minMv) {
+        showToast('Maximum cell voltage must be greater than minimum', 'error');
+        return false;
+    }
+
+    if (!Number.isFinite(warningMv) || !Number.isFinite(criticalMv)) {
+        showToast('Invalid imbalance thresholds', 'error');
+        return false;
+    }
+
+    if (warningMv <= 0 || criticalMv <= warningMv) {
+        showToast('Imbalance high threshold must be greater than warning threshold', 'error');
+        return false;
+    }
+
+    const socCritical = parseInt(document.getElementById('dashboardAlertSocCritical').value, 10);
+    const socLow = parseInt(document.getElementById('dashboardAlertSocLow').value, 10);
+    if (!Number.isFinite(socCritical) || !Number.isFinite(socLow)) {
+        showToast('Invalid SOC thresholds', 'error');
+        return false;
+    }
+    if (socLow <= socCritical) {
+        showToast('SOC warning must be greater than SOC critical', 'error');
+        return false;
+    }
+
+    const tempWarning = parseInt(document.getElementById('dashboardAlertTempWarning').value, 10);
+    const tempCritical = parseInt(document.getElementById('dashboardAlertTempCritical').value, 10);
+    if (!Number.isFinite(tempWarning) || !Number.isFinite(tempCritical)) {
+        showToast('Invalid temperature thresholds', 'error');
+        return false;
+    }
+    if (tempCritical < tempWarning) {
+        showToast('Temperature critical must be greater or equal to warning', 'error');
+        return false;
+    }
+
+    const imbalanceWarning = parseInt(document.getElementById('dashboardAlertImbalanceWarning').value, 10);
+    const imbalanceCritical = parseInt(document.getElementById('dashboardAlertImbalanceCritical').value, 10);
+    if (!Number.isFinite(imbalanceWarning) || !Number.isFinite(imbalanceCritical)) {
+        showToast('Invalid imbalance alert thresholds', 'error');
+        return false;
+    }
+    if (imbalanceCritical <= imbalanceWarning) {
+        showToast('Imbalance critical threshold must be greater than warning', 'error');
+        return false;
+    }
+
+    const balancingMinutes = parseInt(document.getElementById('dashboardAlertBalancingMinutes').value, 10);
+    if (!Number.isFinite(balancingMinutes) || balancingMinutes <= 0) {
+        showToast('Balancing duration must be greater than zero', 'error');
+        return false;
+    }
+
+    const newPreferences = {
+        cellVoltage: {
+            min_mv: minMv,
+            max_mv: maxMv,
+            warning_delta_mv: warningMv,
+            critical_delta_mv: criticalMv
+        },
+        alerts: {
+            soc_critical: socCritical,
+            soc_low: socLow,
+            temp_warning: tempWarning,
+            temp_critical: tempCritical,
+            imbalance_warning: imbalanceWarning,
+            imbalance_critical: imbalanceCritical,
+            balancing_duration_warning_ms: balancingMinutes * 60000
+        }
+    };
+
+    if (typeof window.setDashboardPreferences === 'function') {
+        window.setDashboardPreferences(newPreferences);
+        dashboardUIPreferences = window.getDashboardPreferences();
+    } else {
+        dashboardUIPreferences = mergeObjects(JSON.parse(JSON.stringify(DASHBOARD_PREFS_FALLBACK)), newPreferences);
+    }
+
+    populateDashboardUIPreferences();
+
+    if (!silent) {
+        showToast('Dashboard preferences saved', 'success');
+    }
+
+    return true;
+}
+
+function resetDashboardUIPreferences() {
+    if (typeof window.getDashboardPreferenceDefaults === 'function' && typeof window.setDashboardPreferences === 'function') {
+        const defaults = window.getDashboardPreferenceDefaults();
+        window.setDashboardPreferences(defaults);
+        dashboardUIPreferences = window.getDashboardPreferences();
+    } else {
+        dashboardUIPreferences = mergeObjects(JSON.parse(JSON.stringify(DASHBOARD_PREFS_FALLBACK)), {});
+    }
+
+    populateDashboardUIPreferences();
+    showToast('Dashboard preferences reset to defaults', 'info');
+}
+
+function mergeObjects(target, source) {
+    const merged = {
+        cellVoltage: { ...target.cellVoltage, ...(source.cellVoltage || {}) },
+        alerts: { ...target.alerts, ...(source.alerts || {}) }
+    };
+
+    merged.cellVoltage.max_mv = Math.max(merged.cellVoltage.max_mv, merged.cellVoltage.min_mv + 1);
+    merged.cellVoltage.min_mv = Math.min(merged.cellVoltage.min_mv, merged.cellVoltage.max_mv - 1);
+    merged.cellVoltage.warning_delta_mv = Math.max(1, merged.cellVoltage.warning_delta_mv);
+    merged.cellVoltage.critical_delta_mv = Math.max(
+        merged.cellVoltage.warning_delta_mv + 1,
+        merged.cellVoltage.critical_delta_mv
+    );
+
+    merged.alerts.soc_low = Math.max(merged.alerts.soc_low, merged.alerts.soc_critical + 1);
+    merged.alerts.temp_critical = Math.max(merged.alerts.temp_critical, merged.alerts.temp_warning);
+    merged.alerts.imbalance_critical = Math.max(
+        merged.alerts.imbalance_warning + 1,
+        merged.alerts.imbalance_critical
+    );
+    merged.alerts.balancing_duration_warning_ms = Math.max(60000, merged.alerts.balancing_duration_warning_ms);
+
+    return merged;
 }
 
 // ============================================
@@ -636,10 +827,14 @@ async function reloadConfig() {
 
 async function saveAllSettings() {
     if (!confirm('Save ALL current settings?')) return;
-    
+
+    if (!saveDashboardUIPreferences({ silent: true })) {
+        return;
+    }
+
     // Collect all values
     // (Already done in individual save functions)
-    
+
     try {
         const response = await postAPI('/api/config/save', { settings: systemSettings });
         
