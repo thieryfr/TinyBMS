@@ -72,6 +72,15 @@ Le suffixe de topic est généré automatiquement à partir de la clef `TinyBMS`
 
 Exemple : `home/garage/battery/soc_percent`.
 
+#### Compatibilité et nouveaux topics
+
+- La mise à jour 2025 conserve le root topic historique `victron/tinybms` ; aucune reconfiguration côté broker ou automatisme n'est nécessaire.
+- Les topics existants listés dans [`tests/fixtures/mqtt_topics_snapshot.json`](../tests/fixtures/mqtt_topics_snapshot.json) restent inchangés (voir tableau "Topics preserved" dans [docs/testing/mqtt_topic_regression.md](testing/mqtt_topic_regression.md)).
+- Deux topics additionnels sont désormais publiés :
+  - `pack_power_w` → `/Dc/0/Power` (puissance calculée, affichable directement par Venus OS).
+  - `system_state` → `/System/0/State` (miroir de l'état TinyBMS pour ESS).
+- Les tests automatisés `python -m pytest tests/integration/test_mqtt_topic_regression.py -v` garantissent que seule cette extension additive est introduite.
+
 ### Identifiants recommandés
 
 * Utiliser un `client_id` stable par passerelle afin de tirer parti du mécanisme de session persistante.

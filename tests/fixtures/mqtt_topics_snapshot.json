@@ -1,0 +1,42 @@
+{
+  "before": {
+    "root_topic": "victron/tinybms",
+    "topics": [
+      "battery_pack_voltage",
+      "battery_pack_current",
+      "internal_temperature",
+      "state_of_charge",
+      "state_of_health",
+      "max_charge_current",
+      "max_discharge_current",
+      "overvoltage_cutoff_mv",
+      "undervoltage_cutoff_mv",
+      "discharge_overcurrent_a",
+      "charge_overcurrent_a",
+      "overheat_cutoff_c"
+    ]
+  },
+  "after": {
+    "root_topic": "victron/tinybms",
+    "topics": [
+      "battery_pack_voltage",
+      "battery_pack_current",
+      "internal_temperature",
+      "state_of_charge",
+      "state_of_health",
+      "max_charge_current",
+      "max_discharge_current",
+      "overvoltage_cutoff_mv",
+      "undervoltage_cutoff_mv",
+      "discharge_overcurrent_a",
+      "charge_overcurrent_a",
+      "overheat_cutoff_c",
+      "pack_power_w",
+      "system_state"
+    ],
+    "new_topics": [
+      "pack_power_w",
+      "system_state"
+    ]
+  }
+}

@@ -19,6 +19,7 @@ Le projet TinyBMS-Victron Bridge v2.5.0 est un système embarqué mature combina
 - ✅ **HAL abstraction** permettant changement de plateforme
 - ✅ **Documentation exhaustive** (18+ fichiers markdown, tests complets)
 - ✅ **Tests d'intégration** Python + tests natifs C++
+- 🔄 **Compatibilité ascendante** : mise à jour MQTT rétrocompatible, aucun changement de configuration requis (root topic conservé)
 
 **\*Prêt après :** Tests stress WebSocket (2-3h) + Validation CAN sur Victron GX réel
 
