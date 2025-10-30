@@ -1,3 +1,3 @@
-idf_component_register(SRCS "app_main.cpp" "bridge.cpp" "config.cpp" "diagnostics.cpp"
+idf_component_register(SRCS "app_main.cpp" "bridge.cpp" "config.cpp" "diagnostics.cpp" "mqtt_formatter.cpp"
                         INCLUDE_DIRS "." "../include"
                         REQUIRES mqtt)
