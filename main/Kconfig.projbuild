@@ -1,0 +1,53 @@
+menu "TinyBMS ESP-IDF Bridge"
+
+config TINYBMS_UART_PORT
+    int "UART controller number"
+    default 1
+    range 0 2
+
+config TINYBMS_UART_BAUD
+    int "TinyBMS UART baudrate"
+    default 115200
+    range 1200 921600
+
+config TINYBMS_UART_RX_PIN
+    int "TinyBMS UART RX pin"
+    default 16
+
+config TINYBMS_UART_TX_PIN
+    int "TinyBMS UART TX pin"
+    default 17
+
+config TINYBMS_CAN_RX_PIN
+    int "Victron CAN RX pin"
+    default 4
+
+config TINYBMS_CAN_TX_PIN
+    int "Victron CAN TX pin"
+    default 5
+
+config TINYBMS_STATUS_LED_PIN
+    int "Status LED pin"
+    default 2
+
+config TINYBMS_CAN_BITRATE
+    int "Victron CAN bitrate (bps)"
+    default 500000
+    range 125000 1000000
+
+config TINYBMS_SAMPLE_QUEUE_LENGTH
+    int "Sample queue depth"
+    default 24
+    range 4 128
+
+config TINYBMS_KEEPALIVE_PERIOD_MS
+    int "CAN keepalive period (ms)"
+    default 1000
+    range 100 10000
+
+config TINYBMS_DIAGNOSTIC_PERIOD_MS
+    int "Diagnostics log period (ms)"
+    default 5000
+    range 1000 60000
+
+endmenu

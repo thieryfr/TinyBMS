@@ -1,29 +1,34 @@
-# Migration ESP-IDF pour TinyBMS-Victron Bridge
+# Migration ESP-IDF – État final
 
-## Objectifs
-- Utiliser ESP-IDF comme runtime principal pour profiter des drivers officiels (TWAI, Wi-Fi, NVS, watchdog)
-- Conserver la couche applicative Arduino existante pour accélérer la transition
-- Documenter les fichiers impactés et les points de vigilance lors de la compilation sous ESP-IDF
+La migration vers ESP-IDF est **terminée** et l’ensemble des fonctionnalités historiques est désormais assuré par des composants natifs : TWAI, UART, Wi-Fi, SPIFFS, HTTP serveur et stockage NVS.
 
-## Configuration PlatformIO
-- `platformio.ini` utilise désormais `framework = arduino, espidf`
-- Dépendance `sandeepmistry/CAN` supprimée (driver TWAI natif via ESP-IDF)
+## Résumé
 
-## Fichiers impactés
-- `src/hal/esp32/esp32_can.cpp`: driver CAN basé sur `driver/twai.h`
-- `src/hal/esp32/esp32_gpio.cpp`: GPIO pilotés via API Arduino (composant) et compatibles ESP-IDF
-- `src/hal/esp32/esp32_uart.cpp`: UART TinyBMS utilisant `HardwareSerial` (Arduino component)
-- `src/hal/esp32/esp32_watchdog.cpp`: watchdog matériel via `esp_task_wdt`
-- `src/hal/esp32/esp32_storage.cpp`: montage SPIFFS/NVS
-- `src/mqtt/victron_mqtt_bridge.cpp`: client MQTT natif ESP-IDF
-- `src/watchdog_manager.cpp`: coordination du watchdog système
+- ✅ Remplacement complet du code Arduino (`.ino`, AsyncWebServer, WiFi Arduino, SPIFFS Arduino…)
+- ✅ Nouvelle architecture `app_main` ESP-IDF avec CMake et `main/`
+- ✅ Tâches FreeRTOS explicites (UART, CAN, diagnostics)
+- ✅ Configuration via Kconfig (`menuconfig`) pour la couche matérielle
+- ✅ Wi-Fi AP/STA et API REST implémentés avec `esp_wifi` et `esp_http_server`
+- ✅ Interface web historique servie depuis SPIFFS (`esp_vfs_spiffs`)
+- ✅ Conservation de l’ancien code sous `legacy/` pour référence
 
-## Checklist de compilation
-1. Installer l'outil ESP-IDF via PlatformIO (`platformio platform install espressif32`)
-2. Lancer `pio run` pour vérifier la compilation croisée FreeRTOS + Arduino component
-3. Déployer via `pio run -t upload` et vérifier la trace série 115200 bauds
+## Checklist de build
 
-## Étapes suivantes
-- Migrer progressivement les modules dépendants d'`Arduino.h` vers des abstractions HAL pures
-- Ajouter des tests natifs ciblant les implémentations ESP-IDF
-- Mettre à jour la documentation module par module lorsque le portage complet sera achevé
+```bash
+idf.py set-target esp32
+idf.py menuconfig   # régler pins et cadence
+idf.py build
+idf.py flash monitor
+idf.py spiffs
+idf.py -p /dev/ttyUSB0 spiffs-flash
+```
+
+## Suivi
+
+- [x] Mise à jour `platformio.ini` (`framework = espidf` uniquement)
+- [x] Suppression des bibliothèques Arduino (ESPAsyncWebServer, ArduinoJson, etc.)
+- [x] Nouvelle documentation (README) décrivant l’architecture ESP-IDF
+- [x] Portage de la configuration/web UI via `esp_http_server`, SPIFFS et NVS
+- [ ] Ajouter des tests unitaires `unity` spécifiques au parsing UART et à l’encodage CAN (prochain jalon)
+
+La base de code est prête pour des évolutions 100 % ESP-IDF (tests automatisés, MQTT natif, WebSocket temps réel, etc.).
