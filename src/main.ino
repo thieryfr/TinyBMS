@@ -18,7 +18,15 @@
 #include "tinybms_config_editor.h"
 #include "hal/hal_manager.h"
 #include "hal/hal_config.h"
-#include "hal/esp32_factory.h"
+
+// Phase 2: Support both Arduino and ESP-IDF HAL
+#ifdef USE_ESP_IDF_HAL
+    #include "hal/esp32_idf_factory.h"
+    #define HAL_FACTORY_NAME "ESP-IDF"
+#else
+    #include "hal/esp32_factory.h"
+    #define HAL_FACTORY_NAME "Arduino"
+#endif
 
 #include <exception>
 
@@ -66,8 +74,14 @@ void setup() {
 
     Serial.println("[INIT] All mutexes created (uart, feed, config, stats)");
 
-    // Initialize HAL factory and hardware interfaces
-    hal::setFactory(hal::createEsp32Factory());
+    // Phase 2: Initialize HAL factory (Arduino or ESP-IDF)
+    #ifdef USE_ESP_IDF_HAL
+        hal::setFactory(hal::createEsp32IdfFactory());
+        Serial.println("[INIT] HAL Factory: ESP-IDF native drivers");
+    #else
+        hal::setFactory(hal::createEsp32Factory());
+        Serial.println("[INIT] HAL Factory: Arduino wrappers");
+    #endif
 
     auto applyHalConfig = [&]() {
         try {
