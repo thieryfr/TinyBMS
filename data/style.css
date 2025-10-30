@@ -353,30 +353,128 @@ body {
    ============================================ */
 
 @media (max-width: 768px) {
+    body {
+        padding-top: 65px;
+        padding-bottom: 55px;
+    }
+
     .main-content {
         padding: 10px;
     }
-    
-    .cells-grid {
-        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        gap: 10px;
-    }
-    
+
+    /* Gauges en 2x2 sur mobile */
     .gauge-card {
-        min-height: 240px;
+        min-height: 220px;
     }
-    
+
     .gauge-container {
-        max-width: 150px;
+        max-width: 140px;
     }
-    
+
+    /* Cell grid 4x4 au lieu de 2x8 */
+    .cells-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+    }
+
+    .cell-item {
+        padding: 8px;
+    }
+
+    .cell-number {
+        font-size: 0.75rem;
+    }
+
+    .cell-voltage {
+        font-size: 0.95rem;
+    }
+
+    /* Tabs plus compacts */
     .nav-tabs .nav-link {
-        font-size: 0.9rem;
-        padding: 8px 10px;
+        font-size: 0.8rem;
+        padding: 8px 6px;
     }
-    
+
+    .nav-tabs .nav-link i {
+        display: none; /* Cache les icônes sur mobile pour gagner de la place */
+    }
+
+    /* Footer plus compact */
     .footer {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
+        padding: 10px 0;
+    }
+
+    /* Cards plus compactes */
+    .card-header h5 {
+        font-size: 1rem;
+    }
+
+    .card-body {
+        padding: 12px;
+    }
+
+    /* Alertes adaptées au mobile */
+    .persistent-alerts-container {
+        top: 70px;
+        width: 95%;
+    }
+
+    .persistent-alert {
+        font-size: 0.9rem;
+        padding: 10px;
+    }
+
+    /* Charts responsive */
+    #historyChart {
+        max-height: 250px;
+    }
+
+    /* System status plus compact */
+    .status-card .card-body {
+        padding: 10px;
+    }
+
+    .cell-stat {
+        padding: 8px;
+    }
+
+    /* Navbar mobile */
+    .navbar-brand {
+        font-size: 1rem;
+    }
+
+    .status-led-container {
+        display: none; /* Cache le LED status sur très petit écran */
+    }
+}
+
+/* Tablettes (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .cells-grid {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+    }
+
+    .gauge-card {
+        min-height: 260px;
+    }
+}
+
+/* Touch optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Augmenter les zones tactiles */
+    .btn {
+        padding: 10px 16px;
+        min-height: 44px;
+    }
+
+    .nav-tabs .nav-link {
+        min-height: 44px;
+    }
+
+    .cell-item {
+        min-height: 80px;
     }
 }
 
@@ -434,6 +532,52 @@ body {
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Persistent Alerts
+   ============================================ */
+
+.persistent-alerts-container {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1050;
+    max-width: 600px;
+    width: 90%;
+}
+
+.persistent-alert {
+    margin-bottom: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideDown 0.3s ease-out;
+}
+
+.persistent-alert.alert-danger {
+    animation: blinkDanger 1.5s ease-in-out infinite;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes blinkDanger {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+    50% {
+        opacity: 0.85;
+        box-shadow: 0 4px 20px rgba(220, 53, 69, 0.6);
+    }
 }
 
 /* ============================================
@@ -553,6 +697,26 @@ body {
 /* ============================================
    Config TinyBMS Styles
    ============================================ */
+
+.preset-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid var(--border-color);
+}
+
+.preset-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(13, 110, 253, 0.2);
+    border-color: var(--primary);
+}
+
+.preset-card .fa-3x {
+    transition: transform 0.3s ease;
+}
+
+.preset-card:hover .fa-3x {
+    transform: scale(1.1);
+}
 
 .register-group {
     padding: 10px 0;
