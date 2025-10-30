@@ -17,6 +17,8 @@ Diffuser les changements de registres TinyBMS vers un broker MQTT selon la conve
    - `publishRegister()` construit un payload JSON compact (`address`, `value`, `raw`, `label`, `unit`, `timestamp_ms`, `key`, `comment`) et publie sur `root_topic/suffix` avec le QoS et le retain configurés.
 3. `appendStatus(JsonObject)` est invoqué par `json_builders` pour exposer l'état MQTT : activé, configuré, connecté, compteurs de publications/erreurs, dernier message, paramètres QoS/retain.
 
+📘 **Guide de validation** : consultez [`docs/readme_mqtt-update.md`](readme_mqtt-update.md) pour les prérequis, la configuration détaillée et le protocole de test TinyBMS ↔ Victron (topics, alarmes, validation hardware).
+
 ## Gestion de la connexion
 - `configure(const BrokerSettings&)` normalise le root topic (`sanitizeRootTopic`), force un QoS ≤ 2 et stocke les credentials.
 - `connect()` construit `esp_mqtt_client_config_t`, enregistre le callback `onMqttEvent` et lance `esp_mqtt_client_start`. Sur build natif (tests), la connexion est simulée et `connected_` passe à true.
