@@ -1,12 +1,27 @@
 /**
  * @file websocket_handlers.cpp
  * @brief WebSocket handlers for TinyBMS-Victron Bridge with FreeRTOS + Logging
+ * @version 1.2 - Phase 3: Dual WebSocket Support (AsyncWebSocket + ESP-IDF)
  */
 
 #include <Arduino.h>
 #include <algorithm>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+
+// Conditional WebSocket includes
+#ifdef USE_ESP_IDF_WEBSERVER
+    #include "esp_http_server_wrapper.h"
+    #include "esp_websocket_wrapper.h"
+    using tinybms::web::HttpServerIDF;
+    using tinybms::web::WebSocketIDF;
+    using WebServerType = HttpServerIDF;
+    using WebSocketType = WebSocketIDF;
+#else
+    #include <AsyncTCP.h>
+    #include <ESPAsyncWebServer.h>
+    using WebServerType = AsyncWebServer;
+    using WebSocketType = AsyncWebSocket;
+#endif
+
 #include <ArduinoJson.h>
 #include "websocket_handlers.h"
 #include "rtos_tasks.h"
@@ -21,8 +36,13 @@
 #include "tiny_read_mapping.h"
 #include "optimization/websocket_throttle.h"
 
-extern AsyncWebServer server;
-extern AsyncWebSocket ws;
+#ifdef USE_ESP_IDF_WEBSERVER
+    extern HttpServerIDF server;
+    extern WebSocketIDF ws;
+#else
+    extern AsyncWebServer server;
+    extern AsyncWebSocket ws;
+#endif
 extern SemaphoreHandle_t feedMutex;
 extern SemaphoreHandle_t configMutex;
 extern ConfigManager config;
@@ -42,8 +62,9 @@ bool ws_throttle_configured = false;
 }
 
 // ====================================================================================
-// WebSocket Event Handler
+// WebSocket Event Handler (AsyncWebSocket only)
 // ====================================================================================
+#ifndef USE_ESP_IDF_WEBSERVER
 void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                       AwsEventType type, void *arg, uint8_t *data, size_t len) {
     switch (type) {
@@ -61,6 +82,7 @@ void onWebSocketEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
             break;
     }
 }
+#endif
 
 // ====================================================================================
 // Build Status JSON

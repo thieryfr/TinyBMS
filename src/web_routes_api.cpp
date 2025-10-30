@@ -1,11 +1,24 @@
 /**
  * @file web_routes_api.cpp
  * @brief API routes for system management (with Logging)
- * @version 1.1 - Logging + Mutex Safety
+ * @version 1.2 - Phase 3: Dual WebServer Support (AsyncWebServer + ESP-IDF)
  */
 
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
+
+// Conditional WebServer includes
+#ifdef USE_ESP_IDF_WEBSERVER
+    #include "esp_http_server_wrapper.h"
+    using tinybms::web::HttpServerIDF;
+    using tinybms::web::HttpRequestIDF;
+    using WebServerType = HttpServerIDF;
+    using WebRequestType = HttpRequestIDF;
+#else
+    #include <ESPAsyncWebServer.h>
+    using WebServerType = AsyncWebServer;
+    using WebRequestType = AsyncWebServerRequest;
+#endif
+
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <WiFi.h>
@@ -37,13 +50,13 @@ extern String getSystemConfigJSON();
 
 namespace {
 
-void sendJsonResponse(AsyncWebServerRequest* request, int statusCode, JsonDocument& doc) {
+void sendJsonResponse(WebRequestType* request, int statusCode, JsonDocument& doc) {
     String payload;
     serializeJson(doc, payload);
     request->send(statusCode, "application/json", payload);
 }
 
-void sendErrorResponse(AsyncWebServerRequest* request, int statusCode, const String& message, const char* code = nullptr) {
+void sendErrorResponse(WebRequestType* request, int statusCode, const String& message, const char* code = nullptr) {
     StaticJsonDocument<256> doc;
     doc["success"] = false;
     doc["message"] = message;
@@ -458,14 +471,14 @@ bool applySettingsPayload(const JsonObjectConst& settings,
 /**
  * @brief Register API routes
  */
-void setupAPIRoutes(AsyncWebServer& server) {
+void setupAPIRoutes(WebServerType& server) {
 
     logger.log(LOG_INFO, "[API] Registering system API routes");
 
     // ===========================================
     // GET /api/status
     // ===========================================
-    server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/status", HTTP_GET, [](WebRequestType *request) {
         logger.log(LOG_DEBUG, "[API] GET /api/status");
         request->send(200, "application/json", getStatusJSON());
     });
@@ -473,12 +486,12 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET|PUT /api/config/system
     // ===========================================
-    server.on("/api/config/system", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/system", HTTP_GET, [](WebRequestType *request) {
         logger.log(LOG_DEBUG, "[API] GET /api/config/system");
         request->send(200, "application/json", getSystemConfigJSON());
     });
 
-    server.on("/api/config/system", HTTP_PUT, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/system", HTTP_PUT, [](WebRequestType *request) {
         logger.log(LOG_INFO, "[API] PUT /api/config/system");
 
         if (!request->hasArg("plain")) {
@@ -516,7 +529,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/memory
     // ===========================================
-    server.on("/api/memory", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/memory", HTTP_GET, [](WebRequestType *request) {
         StaticJsonDocument<256> doc;
         JsonObject memory = doc.createNestedObject("memory");
         memory["free_heap"] = ESP.getFreeHeap();
@@ -538,7 +551,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/system
     // ===========================================
-    server.on("/api/system", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/system", HTTP_GET, [](WebRequestType *request) {
         StaticJsonDocument<512> doc;
         doc["success"] = true;
 
@@ -573,7 +586,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/can/mapping
     // ===========================================
-    server.on("/api/can/mapping", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/can/mapping", HTTP_GET, [](WebRequestType *request) {
         StaticJsonDocument<4096> doc;
         buildVictronCanMappingDocument(doc);
         sendJsonResponse(request, 200, doc);
@@ -582,7 +595,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/config
     // ===========================================
-    server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/config", HTTP_GET, [](WebRequestType *request) {
         StaticJsonDocument<1536> doc;
         JsonObject cfg = doc.createNestedObject("config");
         String errorMessage;
@@ -597,7 +610,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/wifi
     // ===========================================
-    server.on("/api/config/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/wifi", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -624,7 +637,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/wifi/test
     // ===========================================
-    server.on("/api/wifi/test", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/wifi/test", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -649,7 +662,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/hardware/test/uart
     // ===========================================
-    server.on("/api/hardware/test/uart", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/hardware/test/uart", HTTP_GET, [](WebRequestType *request) {
         uint16_t value = 0;
         bool ok = bridge.readTinyRegisters(0x0000, 1, &value);
         StaticJsonDocument<256> resp;
@@ -666,7 +679,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/hardware/test/can
     // ===========================================
-    server.on("/api/hardware/test/can", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/hardware/test/can", HTTP_GET, [](WebRequestType *request) {
         hal::CanStats stats = hal::HalManager::instance().can().getStats();
         bool ok = (stats.tx_success + stats.rx_success) > 0 && stats.bus_off_events == 0;
         StaticJsonDocument<256> resp;
@@ -683,7 +696,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/hardware
     // ===========================================
-    server.on("/api/config/hardware", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/hardware", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -709,7 +722,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/config/cvl
     // ===========================================
-    server.on("/api/config/cvl", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/cvl", HTTP_GET, [](WebRequestType *request) {
         StaticJsonDocument<512> doc;
         String errorMessage;
         JsonObject cfg = doc.createNestedObject("cvl");
@@ -735,7 +748,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/cvl
     // ===========================================
-    server.on("/api/config/cvl", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/cvl", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -761,7 +774,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/victron
     // ===========================================
-    server.on("/api/config/victron", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/victron", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -787,7 +800,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/logs/clear
     // ===========================================
-    server.on("/api/logs/clear", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/logs/clear", HTTP_POST, [](WebRequestType *request) {
         bool ok = logger.clearLogs();
         StaticJsonDocument<128> resp;
         resp["success"] = ok;
@@ -798,7 +811,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/logs/download
     // ===========================================
-    server.on("/api/logs/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/logs/download", HTTP_GET, [](WebRequestType *request) {
         String logs = logger.getLogs();
         StaticJsonDocument<256> resp;
         resp["success"] = logs.length() > 0;
@@ -812,7 +825,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/logging
     // ===========================================
-    server.on("/api/config/logging", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/logging", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -841,7 +854,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/import
     // ===========================================
-    server.on("/api/config/import", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/import", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -870,7 +883,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/reload
     // ===========================================
-    server.on("/api/config/reload", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/reload", HTTP_POST, [](WebRequestType *request) {
         if (config.begin()) {
             StaticJsonDocument<128> resp;
             resp["success"] = true;
@@ -884,7 +897,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/save
     // ===========================================
-    server.on("/api/config/save", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/save", HTTP_POST, [](WebRequestType *request) {
         if (!request->hasArg("plain")) {
             sendErrorResponse(request, 400, "Missing body", "missing_body");
             return;
@@ -914,7 +927,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/system/restart
     // ===========================================
-    server.on("/api/system/restart", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/system/restart", HTTP_POST, [](WebRequestType *request) {
         StaticJsonDocument<128> resp;
         resp["success"] = true;
         resp["message"] = "Restarting";
@@ -930,7 +943,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/config/reset
     // ===========================================
-    server.on("/api/config/reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/config/reset", HTTP_POST, [](WebRequestType *request) {
         bool removed = SPIFFS.remove("/config.json");
         StaticJsonDocument<128> resp;
         resp["success"] = removed;
@@ -941,7 +954,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/system/factory-reset
     // ===========================================
-    server.on("/api/system/factory-reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/system/factory-reset", HTTP_POST, [](WebRequestType *request) {
         bool configRemoved = SPIFFS.remove("/config.json");
         bool logsRemoved = SPIFFS.remove("/logs.txt");
         StaticJsonDocument<128> resp;
@@ -957,7 +970,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/stats/reset
     // ===========================================
-    server.on("/api/stats/reset", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/stats/reset", HTTP_POST, [](WebRequestType *request) {
         eventBus.resetStats();
         StaticJsonDocument<128> resp;
         resp["success"] = true;
@@ -968,7 +981,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET /api/statistics
     // ===========================================
-    server.on("/api/statistics", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/statistics", HTTP_GET, [](WebRequestType *request) {
         tinybms::event::BusStatistics stats = eventBus.statistics();
 
         StaticJsonDocument<768> doc;
@@ -1020,7 +1033,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // GET|PUT /api/watchdog
     // ===========================================
-    server.on("/api/watchdog", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/api/watchdog", HTTP_GET, [](WebRequestType *request) {
         logger.log(LOG_DEBUG, "[API] GET /api/watchdog status");
 
         StaticJsonDocument<512> doc;
@@ -1037,7 +1050,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
         request->send(200, "application/json", output);
     });
 
-    server.on("/api/watchdog", HTTP_PUT, [](AsyncWebServerRequest *request) {
+    server.on("/api/watchdog", HTTP_PUT, [](WebRequestType *request) {
         logger.log(LOG_INFO, "[API] PUT /api/watchdog");
 
         if (!request->hasArg("plain")) {
@@ -1102,7 +1115,7 @@ void setupAPIRoutes(AsyncWebServer& server) {
     // ===========================================
     // POST /api/reboot
     // ===========================================
-    server.on("/api/reboot", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/api/reboot", HTTP_POST, [](WebRequestType *request) {
         logger.log(LOG_WARNING, "[API] Reboot requested via API");
 
         request->send(200, "application/json", "{\"status\":\"Rebooting\"}");
