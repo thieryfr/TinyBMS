@@ -38,7 +38,7 @@ Le projet TinyBMS-Victron Bridge v2.5.0 est un système embarqué mature combina
 | **Architecture** | ✅ Excellent | EventBus source unique, HAL abstraction |
 | **Thread Safety** | ✅ Complet | 4 mutex (uart, feed, config, stats) |
 | **Tests** | ✅ Robustes | Natifs C++ + intégration Python + fixtures |
-| **Documentation** | ✅ Exhaustive | 18+ READMEs, guides diagnostics |
+| **Documentation** | ✅ Actualisée | README racine synchronisé avec la bascule ESP-IDF |
 | **Correctifs** | ✅ Phases 1-3 | Race conditions éliminées |
 
 ---
@@ -67,6 +67,7 @@ Le projet TinyBMS-Victron Bridge v2.5.0 est un système embarqué mature combina
 
 Pont embarqué permettant de convertir les trames TinyBMS (UART/Modbus RTU) vers le protocole CAN-BMS Victron. La pile logicielle combine :
 
+- **ESP-IDF + composant Arduino** : Runtime principal (TWAI, Wi-Fi, watchdog) sur ESP-IDF, API Arduino conservée pour la logique applicative/web
 - **FreeRTOS** : Tâches dédiées UART / CAN / CVL / WebSocket
 - **EventBus V2** : Architecture publish/subscribe centralisée avec cache
 - **AsyncWebServer** : Interface HTTP + WebSocket non-bloquante
@@ -238,11 +239,14 @@ cd TinyBMS
 pio pkg install  # Installe dépendances automatiquement
 ```
 
-**Dépendances :**
+**Dépendances PlatformIO :**
 - `ArduinoJson@^6.21.0` - Parsing/serialization JSON
 - `ESPAsyncWebServer@^1.2.3` - Serveur HTTP/WS async
 - `AsyncTCP@^1.1.1` - Stack TCP async
-- `CAN@^0.3.1` - Driver CAN bus
+
+**Runtime :**
+- `framework = arduino, espidf` - ESP-IDF fournit le driver TWAI, le watchdog matériel et la pile réseau TLS ; l'API Arduino reste disponible pour la logique applicative.
+- Cf. [ESP-IDF_MIGRATION.md](ESP-IDF_MIGRATION.md) pour les fichiers impactés et la checklist de compilation.
 
 ### 3. Configuration
 
@@ -757,6 +761,10 @@ GitHub Actions déclenché automatiquement :
 | [docs/websocket_stress_testing.md](docs/websocket_stress_testing.md) | Procédures tests stress |
 | [docs/alarm_formula_analysis.md](docs/alarm_formula_analysis.md) | Formules calcul alarmes |
 | [docs/mqtt_integration.md](docs/mqtt_integration.md) | Intégration MQTT |
+
+### Archives
+
+- Anciennes notes de phases et descriptions PR déplacées dans `archive/docs/` pour conserver l'historique tout en clarifiant la documentation active.
 
 ### Rapports de Cohérence (2025-10-29)
 
