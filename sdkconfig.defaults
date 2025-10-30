@@ -1,5 +1,5 @@
 # TinyBMS ESP-IDF Default Configuration
-# Phase 1: Fondations ESP-IDF
+# Phase 4: Configuration Optimisée Finale
 
 # ============================================================================
 # PERFORMANCE
@@ -15,6 +15,11 @@ CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
 # Compiler optimization for performance
 CONFIG_COMPILER_OPTIMIZATION_PERF=y
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE=n
+
+# FreeRTOS optimizations
+CONFIG_FREERTOS_SUPPORT_STATIC_ALLOCATION=y
+CONFIG_FREERTOS_ENABLE_STATIC_TASK_CLEAN_UP=y
+CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=n  # Keep in IRAM for performance
 
 # ============================================================================
 # UART CONFIGURATION
@@ -106,20 +111,35 @@ CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
 CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
 
 # ============================================================================
-# HTTP SERVER CONFIGURATION
+# HTTP SERVER CONFIGURATION (Phase 3 & 4 Optimizations)
 # ============================================================================
 
 # HTTP server enable
 CONFIG_ESP_HTTP_SERVER_ENABLE=y
 
-# Max URI handlers
+# Max URI handlers (17 API endpoints + static files)
 CONFIG_HTTPD_MAX_URI_HANDLERS=32
 
 # Max request header length
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 
+# Max response headers (for CORS, JSON responses)
+CONFIG_HTTPD_MAX_RESP_HEADERS=8
+
+# Server stack size (optimized for WebSocket broadcast)
+CONFIG_HTTPD_SERVER_TASK_STACK_SIZE=8192
+
+# Server priority (balance with UART/CAN tasks)
+CONFIG_HTTPD_SERVER_TASK_PRIORITY=5
+
 # WebSocket support
 CONFIG_HTTPD_WS_SUPPORT=y
+
+# WebSocket server timeout (ms)
+CONFIG_HTTPD_WS_TIMEOUT_MS=10000
+
+# Queue length for work dispatch
+CONFIG_HTTPD_QUEUE_WORK_BLOCKING=y
 
 # ============================================================================
 # MEMORY CONFIGURATION

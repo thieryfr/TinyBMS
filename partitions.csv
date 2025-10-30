@@ -1,5 +1,15 @@
-# Name, Type, SubType, Offset, Size, Flags
-nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
-app0,     app,  ota_0,   0x10000, 0x1F0000,
-spiffs,   data, spiffs,  0x200000,0x100000,
+# ESP32 Partition Table - TinyBMS v3.0.0
+# Phase 4: Optimized for ESP-IDF Build
+#
+# Name,     Type, SubType,  Offset,   Size,     Flags
+# -------------------------------------------------------------------------
+# NVS (Non-Volatile Storage) - WiFi credentials, config
+nvs,        data, nvs,      0x9000,   24K,
+# PHY init data (RF calibration)
+phy_init,   data, phy,      0xf000,   4K,
+# Factory app partition (bootable firmware) - 1.25MB for ESP-IDF binary
+factory,    app,  factory,  0x10000,  1280K,
+# SPIFFS (web files, config.json, logs) - 1.5MB for web UI + data
+spiffs,     data, spiffs,   ,         1536K,
+# Coredump partition (post-mortem debug) - 64KB for crash dumps
+coredump,   data, coredump, ,         64K,
