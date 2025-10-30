@@ -25,6 +25,31 @@ const HISTORY_SAVE_INTERVAL_MS = 60000; // Save every 60s
 let lastHistorySave = Date.now();
 let currentPeriod = '30m'; // '30m', '1h', '24h', '7d'
 
+// Dashboard preferences storage
+const DASHBOARD_PREFERENCES_STORAGE_KEY = 'tinybms_dashboard_prefs_v1';
+const DASHBOARD_PREFERENCES_DEFAULT = Object.freeze({
+    cellVoltage: {
+        min_mv: 3000,
+        max_mv: 3700,
+        warning_delta_mv: 30,
+        critical_delta_mv: 100
+    },
+    alerts: {
+        soc_critical: 20,
+        soc_low: 30,
+        temp_warning: 45,
+        temp_critical: 50,
+        imbalance_warning: 150,
+        imbalance_critical: 200,
+        balancing_duration_warning_ms: 30 * 60 * 1000
+    }
+});
+
+let dashboardPreferences = loadDashboardPreferences();
+let lastLiveDataSnapshot = null;
+let lastStatsSnapshot = null;
+let lastCellVoltages = [];
+
 // ============================================
 // Long-term History Management
 // ============================================
@@ -173,6 +198,159 @@ function loadChartFromHistory(period) {
 }
 
 // ============================================
+// Dashboard Preferences Helpers
+// ============================================
+
+function cloneDashboardPreferences(preferences) {
+    return {
+        cellVoltage: { ...preferences.cellVoltage },
+        alerts: { ...preferences.alerts }
+    };
+}
+
+function toNumber(value, fallback) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function mergeDashboardPreferences(base, updates = {}) {
+    const merged = cloneDashboardPreferences(base);
+
+    if (updates.cellVoltage) {
+        const cell = updates.cellVoltage;
+        if (cell.min_mv !== undefined) {
+            merged.cellVoltage.min_mv = toNumber(cell.min_mv, merged.cellVoltage.min_mv);
+        }
+        if (cell.max_mv !== undefined) {
+            merged.cellVoltage.max_mv = toNumber(cell.max_mv, merged.cellVoltage.max_mv);
+        }
+        if (cell.warning_delta_mv !== undefined) {
+            merged.cellVoltage.warning_delta_mv = toNumber(cell.warning_delta_mv, merged.cellVoltage.warning_delta_mv);
+        }
+        if (cell.critical_delta_mv !== undefined) {
+            merged.cellVoltage.critical_delta_mv = toNumber(cell.critical_delta_mv, merged.cellVoltage.critical_delta_mv);
+        }
+    }
+
+    if (updates.alerts) {
+        const alerts = updates.alerts;
+        if (alerts.soc_critical !== undefined) {
+            merged.alerts.soc_critical = toNumber(alerts.soc_critical, merged.alerts.soc_critical);
+        }
+        if (alerts.soc_low !== undefined) {
+            merged.alerts.soc_low = toNumber(alerts.soc_low, merged.alerts.soc_low);
+        }
+        if (alerts.temp_warning !== undefined) {
+            merged.alerts.temp_warning = toNumber(alerts.temp_warning, merged.alerts.temp_warning);
+        }
+        if (alerts.temp_critical !== undefined) {
+            merged.alerts.temp_critical = toNumber(alerts.temp_critical, merged.alerts.temp_critical);
+        }
+        if (alerts.imbalance_warning !== undefined) {
+            merged.alerts.imbalance_warning = toNumber(alerts.imbalance_warning, merged.alerts.imbalance_warning);
+        }
+        if (alerts.imbalance_critical !== undefined) {
+            merged.alerts.imbalance_critical = toNumber(alerts.imbalance_critical, merged.alerts.imbalance_critical);
+        }
+        if (alerts.balancing_duration_warning_ms !== undefined) {
+            merged.alerts.balancing_duration_warning_ms = toNumber(
+                alerts.balancing_duration_warning_ms,
+                merged.alerts.balancing_duration_warning_ms
+            );
+        }
+    }
+
+    merged.cellVoltage.max_mv = Math.max(merged.cellVoltage.max_mv, merged.cellVoltage.min_mv + 1);
+    merged.cellVoltage.min_mv = Math.min(merged.cellVoltage.min_mv, merged.cellVoltage.max_mv - 1);
+    merged.cellVoltage.warning_delta_mv = Math.max(1, merged.cellVoltage.warning_delta_mv);
+    merged.cellVoltage.critical_delta_mv = Math.max(
+        merged.cellVoltage.warning_delta_mv + 1,
+        merged.cellVoltage.critical_delta_mv
+    );
+
+    merged.alerts.soc_low = Math.max(merged.alerts.soc_low, merged.alerts.soc_critical + 1);
+    merged.alerts.temp_critical = Math.max(merged.alerts.temp_critical, merged.alerts.temp_warning);
+    merged.alerts.imbalance_critical = Math.max(
+        merged.alerts.imbalance_warning + 1,
+        merged.alerts.imbalance_critical
+    );
+    merged.alerts.balancing_duration_warning_ms = Math.max(60000, merged.alerts.balancing_duration_warning_ms);
+
+    return merged;
+}
+
+function loadDashboardPreferences() {
+    const defaults = cloneDashboardPreferences(DASHBOARD_PREFERENCES_DEFAULT);
+
+    try {
+        const stored = localStorage.getItem(DASHBOARD_PREFERENCES_STORAGE_KEY);
+        if (!stored) {
+            return defaults;
+        }
+
+        const parsed = JSON.parse(stored);
+        return mergeDashboardPreferences(defaults, parsed);
+    } catch (error) {
+        console.warn('[Dashboard] Failed to load preferences, using defaults:', error);
+        return defaults;
+    }
+}
+
+function persistDashboardPreferences() {
+    try {
+        localStorage.setItem(
+            DASHBOARD_PREFERENCES_STORAGE_KEY,
+            JSON.stringify(dashboardPreferences)
+        );
+    } catch (error) {
+        console.warn('[Dashboard] Failed to persist preferences:', error);
+    }
+}
+
+function updateCellPreferenceLabels() {
+    const rangeLabel = document.getElementById('cellVoltageRangeLabel');
+    if (rangeLabel) {
+        rangeLabel.textContent = `${(dashboardPreferences.cellVoltage.min_mv / 1000).toFixed(3)} - ${(dashboardPreferences.cellVoltage.max_mv / 1000).toFixed(3)} V`;
+    }
+
+    const imbalanceLegend = document.getElementById('cellImbalanceLegend');
+    if (imbalanceLegend) {
+        imbalanceLegend.textContent = `OK < ${dashboardPreferences.cellVoltage.warning_delta_mv} mV | Warning < ${dashboardPreferences.cellVoltage.critical_delta_mv} mV | High ≥ ${dashboardPreferences.cellVoltage.critical_delta_mv} mV`;
+    }
+}
+
+function applyDashboardPreferences() {
+    updateCellPreferenceLabels();
+
+    if (lastCellVoltages.length > 0) {
+        updateCellsDisplay([...lastCellVoltages]);
+    }
+
+    if (lastLiveDataSnapshot) {
+        checkAlerts(lastLiveDataSnapshot, lastStatsSnapshot || {});
+    }
+}
+
+function getDashboardPreferences() {
+    return cloneDashboardPreferences(dashboardPreferences);
+}
+
+function getDashboardPreferenceDefaults() {
+    return cloneDashboardPreferences(DASHBOARD_PREFERENCES_DEFAULT);
+}
+
+function setDashboardPreferences(newPreferences) {
+    dashboardPreferences = mergeDashboardPreferences(dashboardPreferences, newPreferences || {});
+    persistDashboardPreferences();
+    applyDashboardPreferences();
+    return getDashboardPreferences();
+}
+
+window.getDashboardPreferences = getDashboardPreferences;
+window.getDashboardPreferenceDefaults = getDashboardPreferenceDefaults;
+window.setDashboardPreferences = setDashboardPreferences;
+
+// ============================================
 // Initialize Dashboard
 // ============================================
 
@@ -187,6 +365,9 @@ function initDashboard() {
 
     // Initialize cells grid
     initCellsGrid();
+
+    // Apply stored dashboard preferences
+    applyDashboardPreferences();
 
     // Setup WebSocket data handler
     wsHandler.on('onMessage', handleWebSocketData);
@@ -492,7 +673,14 @@ function initCellsGrid() {
 
 function updateCellsDisplay(cellsData) {
     if (!cellsData || cellsData.length === 0) return;
-    
+
+    lastCellVoltages = Array.isArray(cellsData) ? [...cellsData] : [];
+
+    const cellPrefs = dashboardPreferences.cellVoltage;
+    const minScale = Math.min(cellPrefs.min_mv, cellPrefs.max_mv - 1);
+    const maxScale = Math.max(cellPrefs.max_mv, minScale + 1);
+    const scaleRange = Math.max(1, maxScale - minScale);
+
     let minVoltage = Infinity;
     let maxVoltage = -Infinity;
     let minCell = 0;
@@ -510,9 +698,10 @@ function updateCellsDisplay(cellsData) {
             voltageElement.textContent = `${voltage} mV`;
         }
         
-        // Update progress bar (3000-3700mV range)
+        // Update progress bar based on configured range
         if (barElement) {
-            const percentage = Math.max(0, Math.min(100, ((voltage - 3000) / 700) * 100));
+            const clampedVoltage = Math.max(minScale, Math.min(maxScale, voltage));
+            const percentage = Math.max(0, Math.min(100, ((clampedVoltage - minScale) / scaleRange) * 100));
             barElement.style.width = `${percentage}%`;
         }
         
@@ -547,12 +736,12 @@ function updateCellsDisplay(cellsData) {
     
     const imbalance = maxVoltage - minVoltage;
     document.getElementById('imbalanceValue').textContent = `${imbalance} mV`;
-    
+
     const imbalanceStatus = document.getElementById('imbalanceStatus');
-    if (imbalance < 30) {
+    if (imbalance < cellPrefs.warning_delta_mv) {
         imbalanceStatus.textContent = 'OK';
         imbalanceStatus.className = 'badge bg-success';
-    } else if (imbalance < 100) {
+    } else if (imbalance < cellPrefs.critical_delta_mv) {
         imbalanceStatus.textContent = 'Warning';
         imbalanceStatus.className = 'badge bg-warning';
     } else {
@@ -596,16 +785,6 @@ function updateBalancingDisplay(balancingBits) {
 // Alert System
 // ============================================
 
-const ALERT_THRESHOLDS = {
-    soc_critical: 20,
-    soc_low: 30,
-    temp_warning: 45,
-    temp_critical: 50,
-    imbalance_warning: 150,
-    imbalance_critical: 200,
-    balancing_duration_warning: 1800000  // 30 minutes in ms
-};
-
 let balancingStartTime = null;
 let lastAlerts = {
     soc_critical: false,
@@ -619,6 +798,7 @@ let lastAlerts = {
 };
 
 function checkAlerts(liveData, stats) {
+    const thresholds = dashboardPreferences.alerts;
     const currentAlerts = {
         soc_critical: false,
         soc_low: false,
@@ -632,13 +812,13 @@ function checkAlerts(liveData, stats) {
 
     // SOC Alerts
     const soc = liveData.soc_percent || 0;
-    if (soc < ALERT_THRESHOLDS.soc_critical) {
+    if (soc < thresholds.soc_critical) {
         currentAlerts.soc_critical = true;
         if (!lastAlerts.soc_critical) {
             createPersistentAlert('soc_critical', `⚠️ SOC Critique: ${soc.toFixed(1)}%`, 'danger');
             addNotification(`SOC Critical: ${soc.toFixed(1)}% - Charge immediately!`, 'danger');
         }
-    } else if (soc < ALERT_THRESHOLDS.soc_low) {
+    } else if (soc < thresholds.soc_low) {
         currentAlerts.soc_low = true;
         if (!lastAlerts.soc_low) {
             createPersistentAlert('soc_low', `⚡ SOC Faible: ${soc.toFixed(1)}%`, 'warning');
@@ -651,13 +831,13 @@ function checkAlerts(liveData, stats) {
 
     // Temperature Alerts
     const temp = (liveData.temperature || 0) / 10;
-    if (temp > ALERT_THRESHOLDS.temp_critical) {
+    if (temp > thresholds.temp_critical) {
         currentAlerts.temp_critical = true;
         if (!lastAlerts.temp_critical) {
             createPersistentAlert('temp_critical', `🔥 Température Critique: ${temp.toFixed(1)}°C`, 'danger');
             addNotification(`Temperature Critical: ${temp.toFixed(1)}°C - Shutdown recommended!`, 'danger');
         }
-    } else if (temp > ALERT_THRESHOLDS.temp_warning) {
+    } else if (temp > thresholds.temp_warning) {
         currentAlerts.temp_warning = true;
         if (!lastAlerts.temp_warning) {
             createPersistentAlert('temp_warning', `🌡️ Température Élevée: ${temp.toFixed(1)}°C`, 'warning');
@@ -672,13 +852,13 @@ function checkAlerts(liveData, stats) {
     const minCell = liveData.min_cell_mv || 0;
     const maxCell = liveData.max_cell_mv || 0;
     const imbalance = maxCell - minCell;
-    if (imbalance > ALERT_THRESHOLDS.imbalance_critical) {
+    if (imbalance > thresholds.imbalance_critical) {
         currentAlerts.imbalance_critical = true;
         if (!lastAlerts.imbalance_critical) {
             createPersistentAlert('imbalance_critical', `⚡ Déséquilibre Critique: ${imbalance}mV`, 'danger');
             addNotification(`Cell Imbalance Critical: ${imbalance}mV - Check cells!`, 'danger');
         }
-    } else if (imbalance > ALERT_THRESHOLDS.imbalance_warning) {
+    } else if (imbalance > thresholds.imbalance_warning) {
         currentAlerts.imbalance_warning = true;
         if (!lastAlerts.imbalance_warning) {
             createPersistentAlert('imbalance_warning', `⚠️ Déséquilibre Élevé: ${imbalance}mV`, 'warning');
@@ -696,7 +876,7 @@ function checkAlerts(liveData, stats) {
             balancingStartTime = Date.now();
         }
         const balancingDuration = Date.now() - balancingStartTime;
-        if (balancingDuration > ALERT_THRESHOLDS.balancing_duration_warning) {
+        if (balancingDuration > thresholds.balancing_duration_warning_ms) {
             currentAlerts.balancing_duration = true;
             if (!lastAlerts.balancing_duration) {
                 const durationMin = Math.floor(balancingDuration / 60000);
@@ -764,6 +944,9 @@ function handleWebSocketData(data) {
 
     const liveData = data.live_data;
     const stats = data.stats || {};
+
+    lastLiveDataSnapshot = { ...liveData };
+    lastStatsSnapshot = { ...stats };
 
     // Check for alerts FIRST
     checkAlerts(liveData, stats);
