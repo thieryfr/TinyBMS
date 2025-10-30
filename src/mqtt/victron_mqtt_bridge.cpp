@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 
 #include "logger.h"
 #include "tiny_read_mapping.h"
+#include "victron_state_utils.h"
 
 #ifdef ARDUINO
 #include <esp_event.h>
@@ -88,11 +90,18 @@ uint8_t clampQos(uint8_t qos) {
 
 using tinybms::events::MqttRegisterValue;
 using tinybms::events::MqttRegisterEvent;
+using tinybms::events::AlarmRaised;
+using tinybms::events::AlarmCleared;
+using tinybms::events::WarningRaised;
 
 #define MQTT_LOG(level, msg) do { logger.log(level, String("[MQTT] ") + (msg)); } while(0)
 
 VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     : bus_(bus)
+    , bus_subscription_()
+    , alarm_subscription_()
+    , alarm_cleared_subscription_()
+    , warning_subscription_()
     , enabled_(false)
     , configured_(false)
     , connecting_(false)
@@ -103,6 +112,13 @@ VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     , last_publish_timestamp_ms_(0)
     , last_connect_attempt_ms_(0)
     , last_error_code_(0)
+    , last_voltage_(0.0f)
+    , last_current_(0.0f)
+    , last_voltage_timestamp_ms_(0)
+    , last_current_timestamp_ms_(0)
+    , voltage_valid_(false)
+    , current_valid_(false)
+    , announced_derivatives_(false)
 #ifdef ARDUINO
     , client_(nullptr)
 #endif
@@ -112,6 +128,9 @@ VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
 VictronMqttBridge::~VictronMqttBridge() {
     disconnect();
     bus_subscription_.unsubscribe();
+    alarm_subscription_.unsubscribe();
+    alarm_cleared_subscription_.unsubscribe();
+    warning_subscription_.unsubscribe();
 }
 
 void VictronMqttBridge::enable(bool enabled) {
@@ -135,6 +154,26 @@ bool VictronMqttBridge::begin() {
         noteError(1, "Event bus subscription failed");
         MQTT_LOG(LOG_ERROR, "Failed to subscribe to MQTT register events");
         return false;
+    }
+
+    alarm_subscription_ = bus_.subscribe<AlarmRaised>(
+        [this](const AlarmRaised& event) {
+            handleAlarmEvent(event);
+        });
+
+    alarm_cleared_subscription_ = bus_.subscribe<AlarmCleared>(
+        [this](const AlarmCleared& event) {
+            handleAlarmCleared(event);
+        });
+
+    warning_subscription_ = bus_.subscribe<WarningRaised>(
+        [this](const WarningRaised& event) {
+            handleWarningEvent(event);
+        });
+
+    if (!alarm_subscription_.isActive() || !alarm_cleared_subscription_.isActive() || !warning_subscription_.isActive()) {
+        noteError(12, "Alarm subscription failed");
+        MQTT_LOG(LOG_WARN, "Failed to subscribe to Victron alarm events");
     }
 
     MQTT_LOG(LOG_INFO, "Subscribed to MQTT register events");
@@ -263,6 +302,8 @@ void VictronMqttBridge::disconnect() {
 #endif
     connecting_ = false;
     connected_ = false;
+    voltage_valid_ = false;
+    current_valid_ = false;
 }
 
 void VictronMqttBridge::loop() {
@@ -322,6 +363,9 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
     }
     if (!value.comment.isEmpty()) {
         doc["comment"] = value.comment;
+    }
+    if (!value.dbus_path.isEmpty()) {
+        doc["dbus_path"] = value.dbus_path;
     }
 
     String payload;
@@ -410,6 +454,170 @@ String VictronMqttBridge::buildTopic(const String& suffix) const {
     return topic;
 }
 
+void VictronMqttBridge::announceDerivedTopics() {
+    if (!announced_derivatives_) {
+        MQTT_LOG(LOG_DEBUG, "Derived Victron topics active (legacy schema preserved)");
+        announced_derivatives_ = true;
+    }
+}
+
+void VictronMqttBridge::publishDerived(RegisterValue value) {
+    if (value.timestamp_ms == 0) {
+        value.timestamp_ms = currentMillis();
+    }
+    announceDerivedTopics();
+    publishRegister(value);
+}
+
+String VictronMqttBridge::alarmSuffixFromPath(const char* path) const {
+    if (!path || path[0] == '\0') {
+        return String();
+    }
+    if (std::strcmp(path, "/Alarms/LowVoltage") == 0) {
+        return String("alarm_low_voltage");
+    }
+    if (std::strcmp(path, "/Alarms/HighVoltage") == 0) {
+        return String("alarm_high_voltage");
+    }
+    if (std::strcmp(path, "/Alarms/HighTemperature") == 0) {
+        return String("alarm_overtemperature");
+    }
+    if (std::strcmp(path, "/Alarms/CellImbalance") == 0) {
+        return String("alarm_cell_imbalance");
+    }
+    if (std::strcmp(path, "/Alarms/Communication") == 0) {
+        return String("alarm_communication");
+    }
+    if (std::strcmp(path, "/Alarms/SystemShutdown") == 0) {
+        return String("alarm_system_shutdown");
+    }
+    if (std::strcmp(path, "/Alarms/LowTemperatureCharge") == 0) {
+        return String("alarm_low_temperature_charge");
+    }
+    return String();
+}
+
+void VictronMqttBridge::publishSystemState(uint16_t tiny_status, uint32_t timestamp_ms) {
+    victron::SystemStateInfo info = victron::mapOnlineStatus(tiny_status);
+
+    RegisterValue derived;
+    derived.address = 50;
+    derived.key = "system_state";
+    derived.label = "Victron System State";
+    derived.unit = "-";
+    derived.value_class = TinyRegisterValueClass::Enum;
+    derived.wire_type = TinyRegisterValueType::Uint16;
+    derived.has_numeric_value = true;
+    derived.numeric_value = static_cast<float>(info.code);
+    derived.raw_value = static_cast<int32_t>(tiny_status);
+    derived.raw_word_count = 0;
+    derived.precision = 0;
+    derived.scale = 1.0f;
+    derived.offset = 0.0f;
+    derived.default_value = 0.0f;
+    derived.timestamp_ms = timestamp_ms;
+    derived.topic_suffix = "system_state";
+    derived.dbus_path = "/System/0/State";
+    derived.has_text_value = true;
+    derived.text_value = info.label;
+    derived.comment = String("TinyBMS status 0x") + String(tiny_status, HEX) + " mapped to Victron state";
+
+    publishDerived(derived);
+}
+
+void VictronMqttBridge::publishVictronAlarm(const tinybms::events::AlarmEvent& alarm,
+                                            uint32_t timestamp_ms,
+                                            bool active) {
+    if (alarm.victron_bit == 255 || alarm.victron_path[0] == '\0') {
+        return;
+    }
+
+    String suffix = alarmSuffixFromPath(alarm.victron_path);
+    if (suffix.length() == 0) {
+        return;
+    }
+
+    RegisterValue derived;
+    derived.address = alarm.alarm_code;
+    derived.key = suffix;
+    derived.label = String("Victron ") + suffix;
+    derived.unit = "-";
+    derived.value_class = TinyRegisterValueClass::Enum;
+    derived.wire_type = TinyRegisterValueType::Uint16;
+    derived.has_numeric_value = true;
+    const uint8_t level = active ? alarm.victron_level : 0u;
+    derived.numeric_value = static_cast<float>(level);
+    derived.raw_value = static_cast<int32_t>(level);
+    derived.raw_word_count = 0;
+    derived.precision = 0;
+    derived.scale = 1.0f;
+    derived.offset = 0.0f;
+    derived.default_value = 0.0f;
+    derived.timestamp_ms = timestamp_ms;
+    derived.topic_suffix = suffix;
+    derived.dbus_path = alarm.victron_path;
+    derived.has_text_value = true;
+    derived.text_value = active ? String(alarm.message) : String("cleared");
+    derived.comment = String("Victron alarm bit ") + String(alarm.victron_bit) + (active ? " active" : " cleared");
+
+    publishDerived(derived);
+}
+
+void VictronMqttBridge::processDerivedRegister(const RegisterValue& value) {
+    const String& suffix = value.topic_suffix;
+
+    if (suffix.equalsIgnoreCase("battery_pack_voltage") && value.has_numeric_value) {
+        last_voltage_ = value.numeric_value;
+        last_voltage_timestamp_ms_ = value.timestamp_ms;
+        voltage_valid_ = true;
+    } else if (suffix.equalsIgnoreCase("battery_pack_current") && value.has_numeric_value) {
+        last_current_ = value.numeric_value;
+        last_current_timestamp_ms_ = value.timestamp_ms;
+        current_valid_ = true;
+    } else if (suffix.equalsIgnoreCase("system_status") && value.has_numeric_value) {
+        publishSystemState(static_cast<uint16_t>(value.raw_value & 0xFFFF), value.timestamp_ms);
+    }
+
+    if (voltage_valid_ && current_valid_) {
+        const uint32_t latest_ts = (value.timestamp_ms != 0) ? value.timestamp_ms : currentMillis();
+        RegisterValue derived;
+        derived.address = 0;
+        derived.key = "pack_power_w";
+        derived.label = "Pack Power";
+        derived.unit = "W";
+        derived.value_class = TinyRegisterValueClass::Float;
+        derived.wire_type = TinyRegisterValueType::Float;
+        derived.has_numeric_value = true;
+        const float power = last_voltage_ * last_current_;
+        derived.numeric_value = power;
+        derived.raw_value = static_cast<int32_t>(power);
+        derived.raw_word_count = 0;
+        derived.scale = 1.0f;
+        derived.offset = 0.0f;
+        derived.precision = 1;
+        derived.default_value = 0.0f;
+        derived.timestamp_ms = latest_ts;
+        derived.topic_suffix = "pack_power_w";
+        derived.dbus_path = "/Dc/0/Power";
+        derived.has_text_value = false;
+        derived.comment = "Derived from voltage and current";
+
+        publishDerived(derived);
+    }
+}
+
+void VictronMqttBridge::handleAlarmEvent(const AlarmRaised& event) {
+    publishVictronAlarm(event.alarm, event.metadata.timestamp_ms, true);
+}
+
+void VictronMqttBridge::handleAlarmCleared(const AlarmCleared& event) {
+    publishVictronAlarm(event.alarm, event.metadata.timestamp_ms, false);
+}
+
+void VictronMqttBridge::handleWarningEvent(const WarningRaised& event) {
+    publishVictronAlarm(event.alarm, event.metadata.timestamp_ms, true);
+}
+
 void VictronMqttBridge::handleRegisterEvent(const MqttRegisterValue& event) {
     if (!enabled_ || !configured_) {
         return;
@@ -441,6 +649,7 @@ void VictronMqttBridge::handleRegisterEvent(const MqttRegisterValue& event) {
     }
 
     publishRegister(value);
+    processDerivedRegister(value);
 }
 
 #ifdef ARDUINO

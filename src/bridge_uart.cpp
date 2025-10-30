@@ -20,6 +20,7 @@
 #include "event/event_types_v2.h"
 #include "hal/hal_config.h"
 #include "hal/interfaces/ihal_uart.h"
+#include "victron_alarm_utils.h"
 
 using tinybms::events::AlarmCode;
 using tinybms::events::AlarmRaised;
@@ -125,6 +126,7 @@ void publishAlarmEvent(BridgeEventSink& sink,
     }
     event.alarm.value = value;
     event.alarm.is_active = true;
+    victron::annotateAlarm(code, severity, event.alarm);
     sink.publish(event);
 }
 }

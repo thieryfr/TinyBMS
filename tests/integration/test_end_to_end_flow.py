@@ -128,6 +128,15 @@ class EndToEndFlowTest(unittest.TestCase):
         for key in ("ok", "last_tx_ms", "last_rx_ms", "since_last_rx_ms"):
             self.assertIn(key, keepalive)
 
+        live = self.status_snapshot["live_data"]
+        self.assertIn("pack_power_w", live)
+
+        victron = self.status_snapshot.get("victron", {})
+        self.assertIn("system_state_code", victron)
+        self.assertIn("system_state_name", victron)
+        self.assertIn("pack_power_w", victron)
+        self.assertIn("system_state_raw", victron)
+
     def test_alarm_snapshot_includes_metadata(self) -> None:
         """Alarms array must include severity information for UI consumption."""
         alarms = self.status_snapshot.get("alarms", [])
@@ -139,6 +148,9 @@ class EndToEndFlowTest(unittest.TestCase):
             self.assertIn("severity_name", alarm)
             self.assertIn("active", alarm)
             self.assertIn("timestamp_ms", alarm)
+            self.assertIn("victron_bit", alarm)
+            self.assertIn("victron_level", alarm)
+            self.assertIn("victron_path", alarm)
 
         # alarms_active should reflect whether the latest alarm is still active
         active_flags = [alarm["active"] for alarm in alarms if alarm["event"] == "raised"]

@@ -32,6 +32,17 @@ private:
     static void onMqttEvent(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 #endif
     void handleRegisterEvent(const tinybms::events::MqttRegisterValue& event);
+    void handleAlarmEvent(const tinybms::events::AlarmRaised& event);
+    void handleAlarmCleared(const tinybms::events::AlarmCleared& event);
+    void handleWarningEvent(const tinybms::events::WarningRaised& event);
+    void processDerivedRegister(const RegisterValue& value);
+    void publishDerived(RegisterValue value);
+    void publishSystemState(uint16_t tiny_status, uint32_t timestamp_ms);
+    void publishVictronAlarm(const tinybms::events::AlarmEvent& alarm,
+                             uint32_t timestamp_ms,
+                             bool active);
+    String alarmSuffixFromPath(const char* path) const;
+    void announceDerivedTopics();
 
     String buildTopic(const String& suffix) const;
     bool shouldAttemptReconnect(uint32_t now_ms) const;
@@ -40,6 +51,9 @@ private:
 private:
     tinybms::event::EventBusV2& bus_;
     tinybms::event::EventSubscriber bus_subscription_;
+    tinybms::event::EventSubscriber alarm_subscription_;
+    tinybms::event::EventSubscriber alarm_cleared_subscription_;
+    tinybms::event::EventSubscriber warning_subscription_;
     bool enabled_;
     bool configured_;
     bool connecting_;
@@ -52,6 +66,13 @@ private:
     uint32_t last_connect_attempt_ms_;
     uint32_t last_error_code_;
     String last_error_message_;
+    float last_voltage_;
+    float last_current_;
+    uint32_t last_voltage_timestamp_ms_;
+    uint32_t last_current_timestamp_ms_;
+    bool voltage_valid_;
+    bool current_valid_;
+    bool announced_derivatives_;
 #ifdef ARDUINO
     esp_mqtt_client_handle_t client_;
 #endif

@@ -74,6 +74,9 @@ struct AlarmEvent {
     char message[64] = {};
     float value = 0.0f;
     bool is_active = false;
+    uint8_t victron_bit = 255;
+    uint8_t victron_level = 0;
+    char victron_path[32] = {};
 };
 
 struct ConfigChangeEvent {

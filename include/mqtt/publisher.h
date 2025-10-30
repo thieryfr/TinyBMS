@@ -45,6 +45,7 @@ struct RegisterValue {
     float default_value = 0.0f;                 ///< Valeur par défaut issue du mapping RW
     String topic_suffix;                        ///< Segment de topic conseillé (sans racine)
     uint32_t timestamp_ms = 0;                  ///< Timestamp de capture (ms)
+    String dbus_path;                           ///< Chemin DBus Victron associé (optionnel)
 };
 
 class Publisher {
