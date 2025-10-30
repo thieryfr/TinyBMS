@@ -19,6 +19,7 @@
 #include "event/event_types_v2.h"
 #include "tiny_read_mapping.h"
 #include "mqtt/victron_mqtt_bridge.h"
+#include "victron_state_utils.h"
 
 // External globals
 extern TinyBMS_Victron_Bridge bridge;
@@ -57,6 +58,8 @@ String getStatusJSON() {
     live["cell_imbalance_mv"] = data.cell_imbalance_mv;
     live["balancing_bits"] = data.balancing_bits;
     live["online_status"] = data.online_status;
+    const float pack_power_w = data.voltage * data.current;
+    live["pack_power_w"] = round(pack_power_w * 10.0f) / 10.0f;
 
     JsonArray registers = live.createNestedArray("registers");
     for (size_t i = 0; i < data.snapshotCount(); ++i) {
@@ -201,6 +204,13 @@ String getStatusJSON() {
 
     doc["uptime_ms"] = xTaskGetTickCount() * portTICK_PERIOD_MS;
 
+    victron::SystemStateInfo state_info = victron::mapOnlineStatus(data.online_status);
+    JsonObject victron = doc.createNestedObject("victron");
+    victron["system_state_raw"] = data.online_status;
+    victron["system_state_code"] = state_info.code;
+    victron["system_state_name"] = state_info.label;
+    victron["pack_power_w"] = round(pack_power_w * 10.0f) / 10.0f;
+
     StatusMessage status_event{};
     if (eventBus.getLatest(status_event)) {
         JsonObject status = doc.createNestedObject("status_message");
@@ -232,6 +242,13 @@ String getStatusJSON() {
         alarm_obj["message"] = alarm.message;
         alarm_obj["value"] = alarm.value;
         alarm_obj["active"] = alarm.is_active;
+        if (alarm.victron_bit != 255) {
+            alarm_obj["victron_bit"] = alarm.victron_bit;
+            alarm_obj["victron_level"] = alarm.victron_level;
+            if (alarm.victron_path[0] != '\0') {
+                alarm_obj["victron_path"] = alarm.victron_path;
+            }
+        }
     };
 
     JsonArray alarms = doc.createNestedArray("alarms");

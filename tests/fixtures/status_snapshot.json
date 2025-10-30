@@ -9,7 +9,8 @@
     "max_cell_mv": 3358,
     "cell_imbalance_mv": 38,
     "balancing_bits": 3,
-    "online_status": 145
+    "online_status": 145,
+    "pack_power_w": -1224.4
   },
   "stats": {
     "cvl_current_v": 54.2,
@@ -76,6 +77,12 @@
       "use_tls": false
     }
   },
+  "victron": {
+    "system_state_raw": 145,
+    "system_state_code": 3,
+    "system_state_name": "charging",
+    "pack_power_w": -1224.4
+  },
   "status_message": {
     "message": "VE.Can keepalive OK",
     "level": 0,
@@ -94,7 +101,10 @@
       "severity_name": "warning",
       "message": "Imbalance above alarm threshold",
       "value": 38.0,
-      "active": true
+      "active": true,
+      "victron_bit": 4,
+      "victron_level": 1,
+      "victron_path": "/Alarms/CellImbalance"
     },
     {
       "event": "warning",
@@ -106,7 +116,10 @@
       "severity_name": "info",
       "message": "CAN retry",
       "value": 0,
-      "active": false
+      "active": false,
+      "victron_bit": 5,
+      "victron_level": 0,
+      "victron_path": "/Alarms/Communication"
     }
   ],
   "alarms_active": true,

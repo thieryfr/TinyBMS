@@ -37,6 +37,64 @@ String sanitizeTopicComponent(const String& candidate, uint16_t fallback_address
     return sanitized;
 }
 
+const char* mapDbusPath(const String& suffix) {
+    if (suffix.equalsIgnoreCase("battery_pack_voltage")) {
+        return "/Dc/0/Voltage";
+    }
+    if (suffix.equalsIgnoreCase("battery_pack_current")) {
+        return "/Dc/0/Current";
+    }
+    if (suffix.equalsIgnoreCase("internal_temperature")) {
+        return "/Dc/0/Temperature";
+    }
+    if (suffix.equalsIgnoreCase("state_of_charge")) {
+        return "/Soc";
+    }
+    if (suffix.equalsIgnoreCase("state_of_health")) {
+        return "/Soh";
+    }
+    if (suffix.equalsIgnoreCase("max_charge_current")) {
+        return "/Info/MaxChargeCurrent";
+    }
+    if (suffix.equalsIgnoreCase("max_discharge_current")) {
+        return "/Info/MaxDischargeCurrent";
+    }
+    if (suffix.equalsIgnoreCase("overvoltage_cutoff_mv")) {
+        return "/Info/BatteryHighVoltage";
+    }
+    if (suffix.equalsIgnoreCase("undervoltage_cutoff_mv")) {
+        return "/Info/BatteryLowVoltage";
+    }
+    if (suffix.equalsIgnoreCase("pack_power_w")) {
+        return "/Dc/0/Power";
+    }
+    if (suffix.equalsIgnoreCase("system_state")) {
+        return "/System/0/State";
+    }
+    if (suffix.equalsIgnoreCase("alarm_low_voltage")) {
+        return "/Alarms/LowVoltage";
+    }
+    if (suffix.equalsIgnoreCase("alarm_high_voltage")) {
+        return "/Alarms/HighVoltage";
+    }
+    if (suffix.equalsIgnoreCase("alarm_overtemperature")) {
+        return "/Alarms/HighTemperature";
+    }
+    if (suffix.equalsIgnoreCase("alarm_cell_imbalance")) {
+        return "/Alarms/CellImbalance";
+    }
+    if (suffix.equalsIgnoreCase("alarm_communication")) {
+        return "/Alarms/Communication";
+    }
+    if (suffix.equalsIgnoreCase("alarm_system_shutdown")) {
+        return "/Alarms/SystemShutdown";
+    }
+    if (suffix.equalsIgnoreCase("alarm_low_temperature_charge")) {
+        return "/Alarms/LowTemperatureCharge";
+    }
+    return nullptr;
+}
+
 void populateMetadataFromReadMapping(const TinyRegisterRuntimeBinding& binding, RegisterValue& out) {
     if (!binding.metadata) {
         return;
@@ -127,6 +185,10 @@ bool buildRegisterValue(const TinyRegisterRuntimeBinding& binding,
             candidate = String(out.address);
         }
         out.topic_suffix = sanitizeTopicComponent(candidate, out.address);
+    }
+
+    if (const char* dbus = mapDbusPath(out.topic_suffix)) {
+        out.dbus_path = dbus;
     }
 
     return true;
