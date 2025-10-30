@@ -1,40 +1,34 @@
 # Module Acquisition UART TinyBMS
 
 ## Rôle
-Interroger le BMS TinyBMS via Modbus RTU sur UART, parser les réponses, mettre à jour `TinyBMS_LiveData`, publier les nouvelles mesures sur l'Event Bus et alimenter les statistiques de supervision (UART, watchdog, alarmes communication).
+Interroger le TinyBMS via Modbus RTU, mettre à jour `TinyBMS_LiveData`, alimenter les statistiques UART et publier les événements (`LiveDataUpdate`, `MqttRegisterValue`, alarmes) sur l'Event Bus. La tâche `uartTask` pilote aussi l'adaptation de cadence (`AdaptivePolling`) et nourrit le watchdog.
 
-## Principales fonctions
-- `TinyBMS_Victron_Bridge::readTinyRegisters()` : gère les requêtes Modbus, retries configurables (`config.tinybms.*`), validation CRC et copie vers les buffers.
-- `TinyBMS_Victron_Bridge::uartTask()` : boucle FreeRTOS qui lit les registres, applique les délais `uart_poll_interval_ms_`, alimente le watchdog et publie `EVENT_LIVE_DATA_UPDATE`.
-- `TinyBMS_Victron_Bridge::handleUartError()` : incrémente les compteurs d'erreurs/timeouts et déclenche des alarmes Event Bus.
+## Flux principal (`uartTask`)
+1. Pour chaque bloc défini dans `kTinyReadBlocks`, `readTinyRegisters()` exécute une requête Modbus (avec retries configurables) via `hal::IHalUart` protégé par `uartMutex`.
+2. Les mots reçus sont stockés dans `register_values` puis transformés en `TinyBMS_LiveData` via `tinybms::uart::detail::decodeAndApplyBinding`.
+3. Les événements MQTT sont collectés (payload `MqttRegisterEvent`) puis publiés après le `LiveDataUpdate` pour garantir que les consommateurs disposent d'un snapshot cohérent.
+4. Les seuils TinyBMS (OV/UV/OC, températures) actualisent `bridge.config_` afin d'alimenter les PGN et les diagnostics.
+5. Des alarmes `AlarmRaised` sont émises selon les seuils Victron (`config.victron.thresholds`) ou les limites TinyBMS (OV, UV, imbalance, températures, charge à froid, échec lecture).
+6. Le watchdog est nourri en fin de cycle et la tâche dort `uart_poll_interval_ms_` (piloté par `AdaptivePoller`).
+
+## Statistiques & adaptation
+- `readTinyRegisters()` incrémente `stats.uart_errors`, `stats.uart_timeouts`, `stats.uart_crc_errors`, `stats.uart_retry_count` et renseigne la latence (`uart_latency_last_ms`, `uart_latency_max_ms`, `uart_latency_avg_ms`) sous protection `statsMutex`.
+- `AdaptivePoller` ajuste `uart_poll_interval_ms_` à partir des succès/échecs (`poll_failure_threshold`, `poll_success_threshold`) et expose la valeur courante via `stats.uart_poll_interval_current_ms`.
+- Les succès modifient `stats.uart_success_count` tandis que les échecs publient une alarme `AlarmCode::UartError`.
 
 ## Synchronisation
-- `uartMutex` protège l'accès au port série (initialisation et transactions `readTinyRegisters`).
-- `configMutex` est consulté pour récupérer les paramètres de retry/timeouts et ajuster l'intervalle de polling.
-- Le watchdog est alimenté via `feedMutex` après chaque cycle réussi (intégration `Watchdog.feed()`).
-- Les publications Event Bus incluent `EVENT_WARNING_RAISED` en cas de perte de communication prolongée.
+- `uartMutex` protège l'accès au HAL UART (écritures/lectures Modbus).
+- `configMutex` est utilisé pour lire les seuils Victron avant d'évaluer les alarmes.
+- `feedMutex` synchronise l'appel `Watchdog.feed()`.
+- `statsMutex` évite les courses lors de la mise à jour des compteurs partagés (exposés via `/api/status`).
 
-## Statistiques exposées
-- `stats.uart_success_count`, `stats.uart_errors`, `stats.uart_timeouts`, `stats.uart_crc_errors`, `stats.uart_retry_count`.
-- `stats.last_uart_ms` (timestamp), `stats.comm_lost` (flag), ainsi que les alarmes communication dans `json_builders`.
+## Mapping dynamique
+- Les bindings (`tiny_read_mapping`) sont chargés dans `initializeSystem()` et consultés dans `uartTask` pour construire dynamiquement les snapshots `registers[]`.
+- `TinyBMSConfigEditor` et l'API Web réutilisent ces métadonnées pour présenter les registres lisibles/écrits.
 
 ## Tests
-- Vérification via `python -m pytest tests/integration/test_end_to_end_flow.py` (analyse de la trace e2e et snapshot `status`).
-- Prévoir un stub TinyBMS pour tests unitaires (non fourni) afin de valider CRC/retries.
-- Tester manuellement le comportement lors d'une coupure UART (vérifier les alarmes `EVENT_WARNING_RAISED`).
-
-## Tests hors matériel
-- Un stub UART TinyBMS est disponible côté natif (`tests/native/stubs/uart_stub.h`) et implémente l'interface `IUartChannel`.
-- Le module `tinybms::readHoldingRegisters` encapsule les échanges Modbus et peut être exercé avec le stub.
-- Exécuter `scripts/run_native_tests.sh` pour compiler et lancer les tests (`test_uart_stub`) validant les requêtes/réponses sans matériel.
-
-## Points de vigilance
-- Ne pas dépasser 256 octets de réponse (limite fixée dans la fonction).
-- Toujours réinitialiser le timeout UART après tentative (`tiny_uart_.setTimeout`).
-- Ajuster `config.tinybms.poll_interval_ms` pour éviter la surcharge CPU/Watchdog.
-
-## Mapping SPIFFS `tiny_read.json`
-- Le fichier `/data/tiny_read.json` est chargé au démarrage via `initializeTinyReadMapping()` (`src/system_init.cpp`).
-- Le mapping alimente `TinyRegisterRuntimeBinding` et le nouveau tableau `TinyBMS_LiveData::register_snapshots` utilisé par `uartTask` pour peupler dynamiquement les mesures.
-- Les API REST (`getStatusJSON`) et WebSocket renvoient désormais un tableau `registers` contenant adresse, nom, unité et type issus du mapping (fallbacks intégrés si une entrée manque dans le JSON).
-- Un test natif (`tests/native/test_tiny_read_mapping.cpp`) parse un JSON fictif pour vérifier le loader hors matériel; surveiller les logs `[MAPPING]` au boot pour une vérification temps réel.
+- `python -m pytest tests/integration/test_end_to_end_flow.py` couvre le flux complet : lecture UART simulée, publication Event Bus, présence des stats et alarmes dans `/api/status`.
+- Tests manuels recommandés :
+  - Débrancher le TinyBMS pour vérifier la remontée de l'alarme `TinyBMS UART error` et l'incrément `stats.uart_errors`.
+  - Activer `config.logging.log_uart_traffic` pour inspecter le trafic Modbus et valider les timings adaptatifs.
+  - Vérifier que les registres textes (Manufacturer/Family) apparaissent dans l'API après chargement du mapping.

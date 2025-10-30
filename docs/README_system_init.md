@@ -1,34 +1,30 @@
 # Module Initialisation Système
 
 ## Rôle
-Coordonner la mise sous tension de l'ESP32 : création des mutex globaux, chargement de la configuration, initialisation du logger et du watchdog, montage SPIFFS, démarrage de l'Event Bus puis lancement des tâches FreeRTOS (bridge UART/CAN/CVL, serveur web, WebSocket, watchdog). Les fonctions principales résident dans `setup()`/`loop()` et `initializeSystem()`.
+Orchestrer le démarrage de la plateforme ESP32 : configuration du HAL (`HalManager`), création des mutex globaux, chargement de la configuration, initialisation du logger, du watchdog, du WiFi, du stockage (SPIFFS via HAL), du bridge TinyBMS↔Victron, du bridge MQTT et de la pile Web. Toutes les étapes publient des `StatusMessage` sur l'Event Bus pour la supervision UI.
 
-## Flux de données
-1. `setup()` crée les mutex (`uartMutex`, `feedMutex`, `configMutex`) puis charge la configuration via `ConfigManager::begin()`.
-2. Le logger et le watchdog sont initialisés en utilisant les paramètres de configuration (niveau de log, timeout WDT, débit Serial).
-3. `initializeSystem()` enchaîne : montage SPIFFS, démarrage de l'Event Bus (`eventBus.begin()`), initialisation WiFi (client + fallback AP), démarrage du bridge (`bridge.begin()`), création des tâches bridge (`Bridge_CreateTasks`), initialisation de l'éditeur TinyBMS, création des tâches Web (`initWebServerTask`, `websocketTask`) et du watchdog (`WatchdogManager::watchdogTask`).
-4. Chaque étape publie un message `EVENT_STATUS_MESSAGE` sur l'Event Bus pour la supervision WebSocket/JSON.
+## Étapes principales (`initializeSystem`)
+1. **HAL & stockage** : `buildHalConfig()` applique les réglages UART/CAN/watchdog/SPIFFS issus de `config`. `initializeSPIFFS()` ne monte pas directement le FS mais vérifie la disponibilité SPIFFS via HAL et journalise le contenu quand activé (`config.advanced.enable_spiffs`).
+2. **Mappings** : charge `tiny_read_mapping` et `victron_can_mapping` depuis SPIFFS pour alimenter UART/MQTT/CAN (`initializeTinyReadMapping`, `initializeVictronCanMapping`).
+3. **Event Bus** : `eventBus.resetStats()` prépare les compteurs avant diffusion.
+4. **WiFi** : `initializeWiFi()` configure STA/AP selon `config.wifi`, gère le fallback AP, et publie des statuts.
+5. **MQTT** : `initializeMqttBridge()` active `VictronMqttBridge` si `config.mqtt.enabled`, applique `BrokerSettings` et crée la tâche FreeRTOS `mqttLoopTask` (reconnexion périodique).
+6. **Bridge TinyBMS↔Victron** : `Bridge_BuildAndBegin()` prépare UART/CAN/CVL via `bridge.begin()` puis `Bridge_CreateTasks()` démarre `uartTask`, `canTask`, `cvlTask`.
+7. **Config editor + Web** : `initializeConfigEditor()` prépare le catalogue TinyBMS. `initWebServerTask()` crée la tâche AsyncWebServer et `websocketTask` diffuse les snapshots JSON. `WatchdogManager::watchdogTask` surveille l'alimentation du watchdog.
+8. **Statuts finaux** : chaque succès/échec publie un `StatusMessage` (`StatusLevel::Notice/Warning/Error`), permettant à `/api/status` de refléter la progression.
 
-## Dépendances principales
-- ConfigManager pour l'accès aux paramètres WiFi, bridge, web et logging (protégé par `configMutex`).
-- Logger pour tracer les étapes critiques (SPIFFS, WiFi, tâches, erreurs).
-- WatchdogManager pour protéger les boucles d'initialisation (`feedMutex`).
-- EventBus pour publier les messages d'état et alimenter l'interface web.
-- AsyncWebServer / WebSocket via `web_server_setup.cpp` pour l'hébergement HTTP.
+## Ressources partagées
+- Mutex globaux : `configMutex`, `uartMutex`, `feedMutex`, `statsMutex` (créés dans `setup()` avant `initializeSystem`).
+- Tâches FreeRTOS créées via `createTask` avec journalisation `[TASK]` et check `uxTaskGetStackHighWaterMark`.
+- `WatchdogManager` configuré depuis `config.advanced.watchdog_timeout_s` et nourri dans les différentes tâches via `feedMutex`.
 
-## Paramètres clés
-- `config.wifi.*` et `config.hardware.*` pour la connectivité.
-- Intervalles d'interrogation bridge/CAN/CVL (`config.tinybms`, `config.victron`).
-- Paramètres serveur web (`config.web_server` : port, CORS, WebSocket).
-- Timeout watchdog (`config.advanced.watchdog_timeout_s`).
-- Niveau et options de journalisation (`config.logging.*`).
+## Interactions externes
+- `setup()` : instancie le HAL (`hal::createEsp32Factory`), initialise `logger.begin(config)`, `config.begin()`, puis appelle `initializeSystem()`.
+- `loop()` : se contente d'endormir la boucle principale, toutes les actions étant pilotées par les tâches.
 
-## Tests recommandés
-- `python -m pytest tests/integration/test_end_to_end_flow.py` pour vérifier la séquence de démarrage logique et la présence des statuts dans le snapshot.
-- `g++ ... tests/test_cvl_logic.cpp` pour valider que la tâche CVL reste cohérente avec le moteur natif.
-- Vérification manuelle des logs au démarrage (SPIFFS + Serial) et du statut `/api/status` (sections `status_message`, `watchdog`).
-
-## Points de vigilance
-- Vérifier la disponibilité des mutex avant tout accès aux ressources partagées (`configMutex`, `feedMutex`, `uartMutex`).
-- Documenter chaque nouvelle tâche FreeRTOS et l'ajouter dans `initializeSystem()` / `Bridge_CreateTasks()`.
-- Publier un `STATUS_LEVEL_ERROR` sur l'Event Bus en cas d'échec d'initialisation pour visibilité UI.
+## Tests
+- `python -m pytest tests/integration/test_end_to_end_flow.py` vérifie la séquence d'initialisation simulée, la publication des statuts, la création des tâches et la présence des mappings dans `/api/status`.
+- Tests manuels :
+  - Désactiver `config.advanced.enable_spiffs` pour vérifier le mode dégradé (statut « SPIFFS disabled »).
+  - Forcer l'échec WiFi (SSID incorrect) et constater l'activation AP et les messages Warning.
+  - Désactiver `config.mqtt.enabled` pour valider que la tâche MQTT est ignorée.

@@ -1,32 +1,33 @@
 # Module ConfigManager
 
 ## Rôle
-Charger, valider et sauvegarder la configuration JSON stockée sur SPIFFS. Fournir un accès thread-safe aux paramètres (WiFi, TinyBMS, Victron, CVL, web, logging, options avancées) et propager les changements aux autres composants via l'Event Bus.
+Charger, valider et sauvegarder la configuration JSON (`/config.json`) via la couche de stockage du HAL. Les structures typées (`wifi`, `hardware`, `tinybms`, `victron`, `cvl`, `mqtt`, `web_server`, `logging`, `advanced`) sont exposées à l'ensemble du firmware sous protection `configMutex`. Chaque modification est signalée sur l'Event Bus (`ConfigChanged`).
 
-## Fonctions principales
-- `ConfigManager::begin()` : monte SPIFFS (avec formatage en secours), charge `/config.json`, renseigne les structures (`wifi`, `hardware`, `tinybms`, `victron`, `cvl`, `web_server`, `logging`, `advanced`) puis publie `EVENT_CONFIG_CHANGED`.
-- `ConfigManager::save()` : sérialise les structures courantes dans le JSON, réécrit le fichier et republie `EVENT_CONFIG_CHANGED`.
-- `load*` / `save*` : sous-fonctions par domaine (WiFi, matériel, TinyBMS, Victron/thresholds, CVL, Web, logging, avancé).
-- `printConfig()` : trace la configuration active dans les logs pour diagnostic.
+## Fonctionnement
+1. `ConfigManager::begin(path)` ouvre le fichier via `hal::HalManager::storage()`, désérialise le JSON (`DynamicJsonDocument 6144 bytes`), remplit les blocs de configuration (`load*`) puis publie un événement `ConfigChanged` générique (`config_path="*"`). Si le fichier est absent ou invalide, des valeurs par défaut sont conservées et le chargement échoue proprement.
+2. `ConfigManager::save()` sérialise l'état courant (`save*`), réécrit le fichier (mode `Write`) et republie `ConfigChanged`.
+3. Les helpers `loadLoggingConfig`, `loadMqttConfig`, etc. assurent la rétro-compatibilité en acceptant d'anciens noms de champs quand ils existent encore dans le JSON.
+4. `printConfig()` trace un résumé complet via le `Logger` pour diagnostic au boot.
 
-## Verrous et threads
-- Tous les accès aux structures publiques doivent être protégés par `configMutex` (les modules CAN, Web et CVL prennent le mutex avant lecture/écriture).
-- `ConfigManager::begin()` et `save()` encapsulent les accès SPIFFS ; éviter de remonter `SPIFFS.begin()` ailleurs.
-- L'Event Bus peut être indisponible au démarrage : vérifier `eventBus.isInitialized()` avant de publier depuis d'autres modules.
+## Synchronisation
+- Tous les accès à `config.*` sont protégés par `configMutex` (timeouts 100 ms). Les modules bridge, Web, watchdog, MQTT et logger respectent ce verrou.
+- Le stockage HAL est partagé avec le Logger (`/logs.txt`) : pas de montage SPIFFS direct dans `ConfigManager`.
+- L'événement `ConfigChanged` inclut chemin / anciennes / nouvelles valeurs pour consommation côté MQTT ou UI.
 
-## Consommateurs
-- Bridge UART/CAN/CVL (timings, pins, seuils, keepalive),
-- Web/API/JSON (exposition + édition via `/api/settings`),
-- Logger (niveau de log, options `log_can_traffic` / `log_uart_traffic` / `log_cvl_changes`, débit Serial),
-- Watchdog (timeout),
-- TinyBMS Config Editor (catalogue registres TinyBMS),
-- Event Bus (publication `EVENT_CONFIG_CHANGED`).
+## Consommateurs majeurs
+- **Bridge TinyBMS↔Victron** : timings UART/CAN/CVL, seuils Victron, noms fabricant/batterie.
+- **Algorithme CVL** : hystérésis SOC, protections cellules, mode sustain, limites CCL/DCL.
+- **Pile Web** : exposition et modification (`applySettingsPayload`, `/api/config/*`, `/api/watchdog`).
+- **Logger & Watchdog** : niveau de log, timeout watchdog, choix backend stockage.
+- **Victron MQTT Bridge** : URI, identifiants, QoS, root topic, TLS.
 
-## Tests recommandés
-- Charger `data/config.json` et vérifier la bonne propagation via `python -m pytest tests/integration/test_end_to_end_flow.py` (assertions sur `/api/status` et `/api/settings`).
-- Ajouter des tests unitaires simulant un JSON incomplet (à implémenter via mocks ArduinoJson) et vérifier la publication `EVENT_CONFIG_CHANGED`.
+## Tests
+- `python -m pytest tests/integration/test_end_to_end_flow.py` vérifie l'import de `data/config.json`, la restitution `/api/status` et la sauvegarde via `/api/config/system`.
+- Tests manuels :
+  - Supprimer `/config.json` puis redémarrer pour valider les valeurs par défaut et l'événement `ConfigChanged`.
+  - Modifier dynamiquement des champs via l'API (`/api/config/logging`, `/api/config/victron`) et contrôler la persistance (`config.save()`).
 
-## Améliorations suggérées
-- Mutualiser le montage SPIFFS avec le Logger pour éviter les montages répétés.
-- Étendre le schéma JSON de test pour inclure les champs web/logging avancés avant déploiement.
-- Ajouter un endpoint de validation offline pour détecter les oublis de champs obligatoires.
+## Améliorations possibles
+- Ajouter des tests unitaires natifs ciblant `load*/save*` avec des JSON minimaux pour garantir la compatibilité ascendante.
+- Exposer un résumé de validation dans `/api/status` (ex. `config.loaded`, champs manquants) afin d'aider au diagnostic UI.
+- Factoriser le buffer JSON entre `begin()` et `save()` pour réduire l'utilisation mémoire dans les environnements contraints.

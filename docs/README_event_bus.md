@@ -1,33 +1,30 @@
-# Module Event Bus
+# Module Event Bus V2
 
 ## Rôle
-Fournir un bus de messages centralisé (publish/subscribe) pour découpler les tâches FreeRTOS. Gère le cache des derniers événements par type, les statistiques de file, les notifications de statut et la distribution asynchrone via une tâche dédiée (`eventBusDispatch`).
+Fournir un bus de messages thread-safe (publish/subscribe) pour découpler les tâches FreeRTOS et les composants natifs. L'implémentation `EventBusV2` est entièrement basée sur des containers C++ (mutex + `std::optional`) et gère automatiquement les métadonnées (`timestamp_ms`, séquence) avant diffusion des événements.
 
-## API essentielle
-- `EventBus::begin(size_t queue_size)` : crée la queue FreeRTOS, le mutex, la tâche `eventBusDispatch` et initialise les stats.
-- `publish*` : wrappers spécialisés (live data, alarmes, avertissements, statut système, changements de configuration, CVL, keepalive).
-- `subscribe()` / `unsubscribe()` : gestion des abonnés par type d'événement (callbacks exécutés hors section critique).
-- `getLatest()` / `getLatestLiveData()` / `getLatest(EVENT_TYPE, BusEvent&)` : accès cache pour WebSocket/JSON.
-- `getStats()` / `resetStats()` : statistiques (événements publiés/distribués, overruns, profondeur queue, abonnés).
+## API principale
+- `eventBus.publish(event)` : stocke le dernier événement par type, renseigne les métadonnées quand la structure possède un champ `metadata` et livre chaque abonné en dehors des sections critiques.
+- `eventBus.subscribe<T>(callback)` : enregistre un callback et retourne un `EventSubscriber` RAII. La désinscription décrémente le compteur global d'abonnés.
+- `eventBus.getLatest<T>(out)` / `eventBus.hasLatest<T>()` : accès immédiat au dernier événement publié pour un type donné (utilisé par la pile Web et le bridge CVL).
+- `eventBus.getLatestLiveData(out)` : raccourci dédié à `LiveDataUpdate` pour servir les API REST/WebSocket.
+- `eventBus.resetStats()` / `eventBus.statistics()` : réinitialise et expose les compteurs `total_published`, `total_delivered` et `subscriber_count`.
 
 ## Utilisation type
-1. Initialiser le bus tôt dans `initializeSystem()` via `eventBus.begin(EVENT_BUS_QUEUE_SIZE)`.
-2. Publier depuis les tâches (UART, CAN, CVL, Watchdog, Web) en fournissant un `source_id` (voir `event_types.h`).
-3. Consommer dans `websocketTask`, `json_builders` ou l'éditeur TinyBMS via `getLatest*` pour éviter des queues supplémentaires.
+1. Initialiser tôt `eventBus` dans `system_init` (aucun `begin` requis, l'instance globale est prête après la construction statique).
+2. Publier depuis les tâches bridge (`uartTask`, `canTask`, `cvlTask`), le watchdog ou la pile Web via `publish`.
+3. Consommer dans le serveur Web, le bridge MQTT (`VictronMqttBridge::begin`) ou les tests natifs via `subscribe`/`getLatest`.
 
 ## Concurrence
-- Mutex interne (`bus_mutex_`) protège les abonnés, le cache et les statistiques.
-- Les callbacks sont exécutés hors section critique pour éviter les blocages.
-- La queue FreeRTOS est unique (`event_queue_`), dimensionnée via `EVENT_BUS_QUEUE_SIZE` (configurable dans `event_bus_config.h`).
+- Chaque type d'événement possède un canal statique (`Channel<T>`) protégé par un mutex pour la liste d'abonnés et le cache `latest`.
+- Les callbacks sont invoqués sans verrou actif, limitant les risques de blocage et autorisant des traitements lourds côté Web/MQTT.
+- Les statistiques (`BusStatistics`) utilisent des compteurs atomiques (publication, livraison, abonnés) afin de rester lock-free.
 
 ## Tests
-- `python -m pytest tests/integration/test_end_to_end_flow.py` valide la cohérence des publications/consommations et la présence des compteurs dans `status_snapshot.json`.
-- Tests natifs à prévoir : simulation FreeRTOS (ou wrapper) pour valider `publish` + `getLatest` + `getStats`.
+- `python -m pytest tests/integration/test_end_to_end_flow.py` vérifie la présence des publications `LiveDataUpdate`, `StatusMessage`, `AlarmRaised`, `MqttRegisterValue`, etc. dans les snapshots JSON/WS et confirme la cohérence des compteurs Event Bus.
+- Les tests natifs peuvent abonner des lambdas via `eventBus.subscribe` pour simuler la réception d'événements sans dépendance FreeRTOS.
 
 ## Bonnes pratiques
-- Limiter la taille des structures d'événement pour rester sous `sizeof(BusEvent::data)` (voir `event_types.h`).
-- Utiliser `EVENT_BUS_MAX_SUBSCRIBERS_PER_TYPE` pour éviter les saturations.
-- Activer `EVENT_BUS_LOG_PUBLICATIONS` et `EVENT_BUS_STATS_ENABLED` uniquement pour le debug (impact performance).
-- Toujours vérifier `eventBus.isInitialized()` avant publication pendant la phase de boot.
-- Les nouveaux modules d'I/O (MQTT, Modbus RTU, etc.) doivent impérativement publier et consommer via ce bus interne afin de
-  préserver l'architecture découplée existante et éviter les accès directs concurrents aux registres TinyBMS.
+- Systématiser `eventBus.resetStats()` au boot (cf. `initializeSystem`) pour repartir sur des compteurs propres.
+- Toujours conserver le `EventSubscriber` retourné tant que l'abonnement doit rester actif (le détruire pour se désinscrire proprement).
+- Pour les types volumineux, privilégier le passage par référence ou la réduction des champs avant publication afin de limiter les copies.
