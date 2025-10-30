@@ -1,0 +1,206 @@
+# TinyBMS ESP-IDF Default Configuration
+# Phase 1: Fondations ESP-IDF
+
+# ============================================================================
+# PERFORMANCE
+# ============================================================================
+
+# FreeRTOS tick rate (1000 Hz = 1ms resolution)
+CONFIG_FREERTOS_HZ=1000
+
+# CPU frequency 240 MHz (max performance)
+CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
+CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ=240
+
+# Compiler optimization for performance
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_DISABLE=n
+
+# ============================================================================
+# UART CONFIGURATION
+# ============================================================================
+
+# UART ISR in IRAM for low latency
+CONFIG_UART_ISR_IN_IRAM=y
+
+# ============================================================================
+# CAN (TWAI) CONFIGURATION
+# ============================================================================
+
+# TWAI (CAN) ISR in IRAM for low latency
+CONFIG_TWAI_ISR_IN_IRAM=y
+
+# TWAI errata fixes for ESP32 rev 2/3
+CONFIG_TWAI_ERRATA_FIX_RX_FRAME_INVALID=y
+CONFIG_TWAI_ERRATA_FIX_TX_INTR_LOST=y
+CONFIG_TWAI_ERRATA_FIX_RX_FIFO_CORRUPT=y
+
+# ============================================================================
+# WiFi CONFIGURATION
+# ============================================================================
+
+# WiFi static RX buffer number
+CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=10
+
+# WiFi dynamic RX buffer number
+CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+
+# WiFi TX buffer type (dynamic)
+CONFIG_ESP32_WIFI_STATIC_TX_BUFFER=n
+CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER=y
+CONFIG_ESP32_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+
+# WiFi AMPDU (aggregate MPDU)
+CONFIG_ESP32_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP32_WIFI_AMPDU_RX_ENABLED=y
+
+# WiFi NVS
+CONFIG_ESP32_WIFI_NVS_ENABLED=y
+
+# mDNS
+CONFIG_MDNS_MAX_SERVICES=10
+
+# ============================================================================
+# SPIFFS CONFIGURATION
+# ============================================================================
+
+# SPIFFS partitions
+CONFIG_SPIFFS_MAX_PARTITIONS=1
+
+# SPIFFS cache
+CONFIG_SPIFFS_CACHE=y
+CONFIG_SPIFFS_CACHE_WR=y
+
+# SPIFFS page size
+CONFIG_SPIFFS_PAGE_SIZE=256
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+# Default log level: INFO
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+
+# Maximum log level: DEBUG
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+CONFIG_LOG_MAXIMUM_LEVEL=4
+
+# Enable colors in logs
+CONFIG_LOG_COLORS=y
+
+# Log timestamps
+CONFIG_LOG_TIMESTAMP_SOURCE_RTOS=y
+
+# ============================================================================
+# TASK STACK SIZES
+# ============================================================================
+
+# Main task stack size (was 8192 in Arduino config)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# System event task stack size
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+
+# TCP/IP task stack size
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
+
+# ============================================================================
+# HTTP SERVER CONFIGURATION
+# ============================================================================
+
+# HTTP server enable
+CONFIG_ESP_HTTP_SERVER_ENABLE=y
+
+# Max URI handlers
+CONFIG_HTTPD_MAX_URI_HANDLERS=32
+
+# Max request header length
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# WebSocket support
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# ============================================================================
+# MEMORY CONFIGURATION
+# ============================================================================
+
+# Main XTAL frequency
+CONFIG_ESP32_XTAL_FREQ_40=y
+
+# Enable task watchdog
+CONFIG_ESP_TASK_WDT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+
+# Heap memory debugging (disable in production)
+CONFIG_HEAP_POISONING_DISABLED=y
+CONFIG_HEAP_TRACING_OFF=y
+
+# ============================================================================
+# PARTITION TABLE
+# ============================================================================
+
+# Custom partition table (use partitions.csv)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# ============================================================================
+# FLASH CONFIGURATION
+# ============================================================================
+
+# Flash size (4MB for ESP32-WROOM)
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Flash frequency (40MHz)
+CONFIG_ESPTOOLPY_FLASHFREQ_40M=y
+
+# Flash mode (DIO)
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+
+# Monitor baud rate (115200 to match PlatformIO)
+CONFIG_ESPTOOLPY_MONITOR_BAUD_115200B=y
+CONFIG_ESPTOOLPY_MONITOR_BAUD=115200
+
+# ============================================================================
+# NETWORKING
+# ============================================================================
+
+# LWIP configuration
+CONFIG_LWIP_MAX_SOCKETS=10
+CONFIG_LWIP_SO_REUSE=y
+CONFIG_LWIP_SO_RCVBUF=y
+
+# TCP configuration
+CONFIG_LWIP_TCP_MSS=1436
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=5744
+CONFIG_LWIP_TCP_WND_DEFAULT=5744
+
+# ============================================================================
+# SECURITY (optionnel, désactivé pour Phase 1)
+# ============================================================================
+
+# Secure boot (disable for development)
+CONFIG_SECURE_BOOT=n
+
+# Flash encryption (disable for development)
+CONFIG_SECURE_FLASH_ENC_ENABLED=n
+
+# ============================================================================
+# COREDUMP (pour debug post-mortem)
+# ============================================================================
+
+# Enable coredump to flash
+CONFIG_ESP32_ENABLE_COREDUMP=y
+CONFIG_ESP32_ENABLE_COREDUMP_TO_FLASH=y
+CONFIG_ESP32_COREDUMP_DATA_FORMAT_ELF=y
+
+# ============================================================================
+# COMPATIBILITY
+# ============================================================================
+
+# C++ standard (C++17 to match PlatformIO)
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
+CONFIG_COMPILER_CXX_RTTI=y

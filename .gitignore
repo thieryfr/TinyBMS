@@ -1,1 +1,9 @@
 .native_build/
+
+# ESP-IDF build artifacts (Phase 1)
+build/
+sdkconfig
+sdkconfig.old
+*.pyc
+__pycache__/
+dependencies.lock
