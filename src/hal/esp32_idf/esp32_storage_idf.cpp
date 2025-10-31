@@ -85,12 +85,27 @@ public:
     }
 
     Status mount(const StorageConfig& config) override {
-        config_ = config;
-
         if (config.type != StorageType::SPIFFS) {
             ESP_LOGE(TAG, "Only SPIFFS supported");
             return Status::Unsupported;
         }
+
+        // Check if already mounted with same config (idempotent)
+        if (mounted_) {
+            bool config_changed = (config_.format_on_fail != config.format_on_fail);
+
+            if (!config_changed) {
+                ESP_LOGD(TAG, "SPIFFS already mounted, skipping");
+                return Status::Ok;
+            }
+
+            // Config changed, need to remount
+            ESP_LOGI(TAG, "SPIFFS config changed, remounting...");
+            esp_vfs_spiffs_unregister(nullptr);
+            mounted_ = false;
+        }
+
+        config_ = config;
 
         esp_vfs_spiffs_conf_t conf = {
             .base_path = BASE_PATH,
