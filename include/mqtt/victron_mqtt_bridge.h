@@ -2,6 +2,12 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+#include <esp_event.h>
+#include <mqtt_client.h>
+#endif
+
 #include "mqtt/publisher.h"
 #include "event/event_bus_v2.h"
 #include "event/event_types_v2.h"
@@ -28,7 +34,7 @@ public:
     void appendStatus(JsonObject obj) const;
 
 private:
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     static void onMqttEvent(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 #endif
     void handleRegisterEvent(const tinybms::events::MqttRegisterValue& event);
@@ -73,7 +79,7 @@ private:
     bool voltage_valid_;
     bool current_valid_;
     bool announced_derivatives_;
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     esp_mqtt_client_handle_t client_;
 #endif
 };

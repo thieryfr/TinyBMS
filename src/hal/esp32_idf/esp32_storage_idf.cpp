@@ -80,7 +80,10 @@ public:
 
     ~ESP32StorageIDF() override {
         if (mounted_) {
-            esp_vfs_spiffs_unregister(nullptr);
+            esp_err_t err = esp_vfs_spiffs_unregister(nullptr);
+            if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG, "SPIFFS unmount failed on destroy: %s", esp_err_to_name(err));
+            }
         }
     }
 
@@ -101,7 +104,10 @@ public:
 
             // Config changed, need to remount
             ESP_LOGI(TAG, "SPIFFS config changed, remounting...");
-            esp_vfs_spiffs_unregister(nullptr);
+            esp_err_t err = esp_vfs_spiffs_unregister(nullptr);
+            if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG, "SPIFFS unmount failed: %s", esp_err_to_name(err));
+            }
             mounted_ = false;
         }
 

@@ -92,3 +92,13 @@ Exemple : `home/garage/battery/soc_percent`.
 * Appeler périodiquement `loop()` dans une tâche dédiée pour traiter les ré-essais de publication.
 * Filtrer ou compresser la télémétrie (ex. ne publier que lorsque la variation est significative) pour limiter la charge réseau.
 
+## Compatibilité avec l'architecture ESP-IDF
+
+Le correctif prévu pour finaliser le backend MQTT natif s'appuie exclusivement sur l'API `esp_mqtt_client` déjà fournie par l'ESP-IDF et conserve l'architecture actuelle basée sur les wrappers HAL :
+
+* `VictronMqttBridge` continue d'être la seule porte d'entrée métier et choisira simplement, via `#ifdef USE_ESP_IDF_WEBSERVER`, l'implémentation IDF du client MQTT ; aucune dépendance Arduino n'est réintroduite.
+* Le wrapper dédié (`esp_mqtt_client_wrapper`) encapsule la configuration réseau (TLS, credentials, reconnect) et s'intègre aux tâches FreeRTOS existantes sans modifier les interfaces publiques définies dans `include/mqtt`.
+* Les routes Web, le bridge UART/CAN et l'EventBus n'ont pas besoin de changements : ils consomment toujours les évènements MQTT via `BridgeEventSink`, ce qui garantit l'absence d'impact sur le reste de l'infrastructure.
+
+Ainsi, l'extension reste purement ESP-IDF et respecte la séparation actuelle entre couches matérielles, configuration et logique applicative.
+

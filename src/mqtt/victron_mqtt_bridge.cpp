@@ -8,9 +8,10 @@
 #include "tiny_read_mapping.h"
 #include "victron_state_utils.h"
 
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
 #include <esp_event.h>
 #include <mqtt_client.h>
+#include <esp_timer.h>
 #endif
 
 extern Logger logger;
@@ -75,8 +76,10 @@ String sanitizeRootTopic(const String& raw) {
 }
 
 inline uint32_t currentMillis() {
-#ifdef ARDUINO
+#if defined(ARDUINO)
     return millis();
+#elif defined(ESP_PLATFORM)
+    return static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
 #else
     return 0;
 #endif
@@ -119,7 +122,7 @@ VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     , voltage_valid_(false)
     , current_valid_(false)
     , announced_derivatives_(false)
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     , client_(nullptr)
 #endif
 {
@@ -230,12 +233,14 @@ bool VictronMqttBridge::connect() {
 
     last_connect_attempt_ms_ = currentMillis();
 
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     if (client_) {
         esp_mqtt_client_stop(client_);
         esp_mqtt_client_destroy(client_);
         client_ = nullptr;
     }
+
+    connected_ = false;
 
     esp_mqtt_client_config_t cfg = {};
     cfg.broker.address.uri = settings_.uri.c_str();
@@ -287,13 +292,13 @@ bool VictronMqttBridge::connect() {
     connecting_ = false;
     connected_ = true;
     noteError(0, nullptr);
-    MQTT_LOG(LOG_INFO, "MQTT client simulated as connected (non-Arduino build)");
+    MQTT_LOG(LOG_INFO, "MQTT client simulated as connected (unsupported platform)");
     return true;
 #endif
 }
 
 void VictronMqttBridge::disconnect() {
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     if (client_) {
         esp_mqtt_client_stop(client_);
         esp_mqtt_client_destroy(client_);
@@ -304,14 +309,15 @@ void VictronMqttBridge::disconnect() {
     connected_ = false;
     voltage_valid_ = false;
     current_valid_ = false;
+    last_connect_attempt_ms_ = 0;
 }
 
 void VictronMqttBridge::loop() {
     if (!enabled_ || !configured_) {
         return;
     }
-#ifdef ARDUINO
-    const uint32_t now = millis();
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
+    const uint32_t now = currentMillis();
     if (!connected_ && shouldAttemptReconnect(now)) {
         MQTT_LOG(LOG_WARN, "Attempting MQTT reconnect");
         connect();
@@ -376,7 +382,7 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
         : clampQos(settings_.default_qos);
     const bool retain = retain_override || settings_.retain_by_default;
 
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
     if (!client_) {
         failed_publish_count_++;
         noteError(11, "Client not initialised");
@@ -388,7 +394,7 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
         client_,
         topic.c_str(),
         payload.c_str(),
-        payload.length(),
+        static_cast<int>(payload.length()),
         qos,
         retain ? 1 : 0
     );
@@ -411,11 +417,7 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
 }
 
 bool VictronMqttBridge::isConnected() const {
-#ifdef ARDUINO
     return connected_;
-#else
-    return connected_;
-#endif
 }
 
 void VictronMqttBridge::appendStatus(JsonObject obj) const {
@@ -652,7 +654,7 @@ void VictronMqttBridge::handleRegisterEvent(const MqttRegisterValue& event) {
     processDerivedRegister(value);
 }
 
-#ifdef ARDUINO
+#if defined(ARDUINO) || defined(ESP_PLATFORM)
 void VictronMqttBridge::onMqttEvent(void* handler_args,
                                     esp_event_base_t,
                                     int32_t event_id,
@@ -672,6 +674,7 @@ void VictronMqttBridge::onMqttEvent(void* handler_args,
         case MQTT_EVENT_DISCONNECTED:
             self->connected_ = false;
             self->connecting_ = false;
+            self->last_connect_attempt_ms_ = currentMillis();
             self->noteError(static_cast<uint32_t>(event_id), "Disconnected");
             MQTT_LOG(LOG_WARN, "MQTT disconnected");
             break;
@@ -679,6 +682,7 @@ void VictronMqttBridge::onMqttEvent(void* handler_args,
             self->connected_ = false;
             self->connecting_ = false;
             self->failed_publish_count_++;
+            self->last_connect_attempt_ms_ = currentMillis();
             self->noteError(static_cast<uint32_t>(event_id), "MQTT error event");
             MQTT_LOG(LOG_ERROR, "MQTT event error");
             break;
