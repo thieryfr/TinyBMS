@@ -21,17 +21,22 @@ uint16_t modbusCRC16(const uint8_t* data, size_t length) {
     return crc;
 }
 
-std::vector<uint8_t> buildRequest(uint16_t start_addr, uint16_t count) {
-    std::vector<uint8_t> request(8, 0);
-    request[0] = 0x01;
-    request[1] = 0x03;
-    request[2] = static_cast<uint8_t>((start_addr >> 8) & 0xFF);
-    request[3] = static_cast<uint8_t>(start_addr & 0xFF);
-    request[4] = static_cast<uint8_t>((count >> 8) & 0xFF);
-    request[5] = static_cast<uint8_t>(count & 0xFF);
-    const uint16_t crc = modbusCRC16(request.data(), 6);
-    request[6] = static_cast<uint8_t>(crc & 0xFF);
-    request[7] = static_cast<uint8_t>((crc >> 8) & 0xFF);
+std::vector<uint8_t> buildRequest(uint16_t start_addr, uint16_t count, bool include_start_byte = false) {
+    std::vector<uint8_t> request(include_start_byte ? 9 : 8, 0);
+    size_t offset = 0;
+    if (include_start_byte) {
+        request[0] = 0xAA;
+        offset = 1;
+    }
+    request[offset + 0] = 0x01;
+    request[offset + 1] = 0x03;
+    request[offset + 2] = static_cast<uint8_t>((start_addr >> 8) & 0xFF);
+    request[offset + 3] = static_cast<uint8_t>(start_addr & 0xFF);
+    request[offset + 4] = static_cast<uint8_t>((count >> 8) & 0xFF);
+    request[offset + 5] = static_cast<uint8_t>(count & 0xFF);
+    const uint16_t crc = modbusCRC16(request.data() + offset, 6);
+    request[offset + 6] = static_cast<uint8_t>(crc & 0xFF);
+    request[offset + 7] = static_cast<uint8_t>((crc >> 8) & 0xFF);
     return request;
 }
 
@@ -72,6 +77,42 @@ int main() {
         options.attempt_count = 1;
         options.retry_delay_ms = 0;
         options.response_timeout_ms = 50;
+
+        tinybms::TransactionResult result = tinybms::readHoldingRegisters(
+            stub, start, count, output, options);
+
+        assert(result.success);
+        assert(result.retries_performed == 0);
+        assert(result.timeout_count == 0);
+        assert(result.crc_error_count == 0);
+        assert(result.write_error_count == 0);
+        assert(stub.lastRequestMatchesExpected());
+        for (uint16_t i = 0; i < count; ++i) {
+            assert(output[i] == values[i]);
+        }
+    }
+
+    {
+        TinyBmsUartStub stub;
+        const uint16_t start = 0x0110;
+        const uint16_t count = 2;
+        std::vector<uint16_t> values{0xAAAA, 0xBBBB};
+        auto request = buildRequest(start, count, true);
+        auto response = buildResponse(count, values);
+
+        TinyBmsUartStub::Exchange exchange{};
+        exchange.expected_request = request;
+        exchange.response = response;
+        stub.queueExchange(std::move(exchange));
+
+        uint16_t output[2] = {};
+        tinybms::TransactionOptions options{};
+        options.attempt_count = 1;
+        options.retry_delay_ms = 0;
+        options.response_timeout_ms = 50;
+        options.include_start_byte = true;
+        options.send_wakeup_pulse = true;
+        options.wakeup_delay_ms = 0;
 
         tinybms::TransactionResult result = tinybms::readHoldingRegisters(
             stub, start, count, output, options);

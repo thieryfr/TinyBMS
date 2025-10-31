@@ -48,7 +48,9 @@ TransactionResult readHoldingRegisters(hal::IHalUart& uart,
 
     const size_t expected_data_bytes = static_cast<size_t>(count) * 2U;
     const size_t expected_response_len = 3 + expected_data_bytes + 2;
-    if (expected_response_len > 256) {
+    const bool include_start_byte = options.include_start_byte;
+    const bool send_wakeup_pulse = options.send_wakeup_pulse;
+    if (expected_response_len + (include_start_byte ? 1U : 0U) > 256) {
         result.last_status = AttemptStatus::ProtocolError;
         return result;
     }
@@ -59,18 +61,40 @@ TransactionResult readHoldingRegisters(hal::IHalUart& uart,
     const uint32_t previous_timeout = uart.getTimeout();
     uart.setTimeout(options.response_timeout_ms);
 
-    std::array<uint8_t, 8> request{};
-    request[0] = TINYBMS_SLAVE_ADDRESS;
-    request[1] = MODBUS_READ_HOLDING_REGS;
-    request[2] = static_cast<uint8_t>((start_addr >> 8) & 0xFF);
-    request[3] = static_cast<uint8_t>(start_addr & 0xFF);
-    request[4] = static_cast<uint8_t>((count >> 8) & 0xFF);
-    request[5] = static_cast<uint8_t>(count & 0xFF);
-    const uint16_t crc = modbusCRC16(request.data(), 6);
-    request[6] = static_cast<uint8_t>(crc & 0xFF);
-    request[7] = static_cast<uint8_t>((crc >> 8) & 0xFF);
+    std::array<uint8_t, 8> base_request{};
+    base_request[0] = TINYBMS_SLAVE_ADDRESS;
+    base_request[1] = MODBUS_READ_HOLDING_REGS;
+    base_request[2] = static_cast<uint8_t>((start_addr >> 8) & 0xFF);
+    base_request[3] = static_cast<uint8_t>(start_addr & 0xFF);
+    base_request[4] = static_cast<uint8_t>((count >> 8) & 0xFF);
+    base_request[5] = static_cast<uint8_t>(count & 0xFF);
+    const uint16_t crc = modbusCRC16(base_request.data(), 6);
+    base_request[6] = static_cast<uint8_t>(crc & 0xFF);
+    base_request[7] = static_cast<uint8_t>((crc >> 8) & 0xFF);
+
+    std::array<uint8_t, 9> request{};
+    size_t request_len = base_request.size();
+    size_t copy_offset = 0;
+    if (include_start_byte) {
+        request[0] = 0xAA;
+        copy_offset = 1;
+        request_len += 1;
+    }
+    std::copy(base_request.begin(), base_request.end(), request.begin() + copy_offset);
 
     bool success = false;
+
+    if (send_wakeup_pulse) {
+        size_t warmup_written = uart.write(request.data(), request_len);
+        uart.flush();
+        if (warmup_written != request_len) {
+            result.write_error_count++;
+        }
+        performDelay(delay, options.wakeup_delay_ms);
+        while (uart.available() > 0) {
+            uart.read();
+        }
+    }
 
     for (uint8_t attempt = 0; attempt < attempts; ++attempt) {
         if (attempt > 0) {
@@ -82,16 +106,23 @@ TransactionResult readHoldingRegisters(hal::IHalUart& uart,
             uart.read();
         }
 
-        size_t written = uart.write(request.data(), request.size());
+        size_t written = uart.write(request.data(), request_len);
         uart.flush();
-        if (written != request.size()) {
+        if (written != request_len) {
             result.write_error_count++;
             result.last_status = AttemptStatus::WriteError;
             continue;
         }
 
         std::array<uint8_t, 256> response{};
-        size_t received = uart.readBytes(response.data(), expected_response_len);
+        const size_t read_len = expected_response_len + (include_start_byte ? 1U : 0U);
+        size_t received = uart.readBytes(response.data(), read_len);
+        if (include_start_byte && received == read_len && response[0] == 0xAA) {
+            for (size_t i = 0; i + 1 < received; ++i) {
+                response[i] = response[i + 1];
+            }
+            received -= 1;
+        }
         if (received != expected_response_len) {
             result.timeout_count++;
             result.last_status = AttemptStatus::Timeout;
