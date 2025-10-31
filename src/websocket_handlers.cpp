@@ -12,7 +12,9 @@
     #include "esp_http_server_wrapper.h"
     #include "esp_websocket_wrapper.h"
     using tinybms::web::HttpServerIDF;
+    using tinybms::web::WebSocketClientIDF;
     using tinybms::web::WebSocketIDF;
+    using tinybms::web::WsEventType;
     using WebServerType = HttpServerIDF;
     using WebSocketType = WebSocketIDF;
 #else
@@ -60,6 +62,53 @@ optimization::WebsocketThrottle ws_throttle;
 optimization::WebsocketThrottleConfig active_ws_config{};
 bool ws_throttle_configured = false;
 }
+
+#ifdef USE_ESP_IDF_WEBSERVER
+static bool idf_ws_event_registered = false;
+
+static void handleIdfWebSocketEvent(WebSocketIDF*, WebSocketClientIDF* client,
+                                    WsEventType type, uint8_t*, size_t) {
+    if (!client) {
+        return;
+    }
+
+    switch (type) {
+        case WsEventType::Connect: {
+            logger.log(
+                LOG_INFO,
+                String("[WS][IDF] Client fd ") + String(client->id()) +
+                " connected (active=" + String(ws.connectedCount()) + ")"
+            );
+            break;
+        }
+        case WsEventType::Disconnect: {
+            logger.log(
+                LOG_INFO,
+                String("[WS][IDF] Client fd ") + String(client->id()) +
+                " disconnected (active=" + String(ws.connectedCount()) + ")"
+            );
+            break;
+        }
+        case WsEventType::Data:
+            logger.log(LOG_DEBUG, String("[WS][IDF] Data event for fd ") + String(client->id()));
+            break;
+        case WsEventType::Pong:
+            logger.log(LOG_DEBUG, String("[WS][IDF] Pong from fd ") + String(client->id()));
+            break;
+        case WsEventType::Error:
+            logger.log(LOG_WARN, String("[WS][IDF] Error on fd ") + String(client->id()));
+            break;
+    }
+}
+
+void registerIdfWebSocketEvents() {
+    if (!idf_ws_event_registered) {
+        ws.onEvent(handleIdfWebSocketEvent);
+        idf_ws_event_registered = true;
+        logger.log(LOG_DEBUG, "[WS][IDF] Event handler registered");
+    }
+}
+#endif
 
 // ====================================================================================
 // WebSocket Event Handler (AsyncWebSocket only)
@@ -174,6 +223,10 @@ void notifyClients(const String& json) {
 // ====================================================================================
 void websocketTask(void *pvParameters) {
     logger.log(LOG_INFO, "WebSocket task started");
+
+    #ifdef USE_ESP_IDF_WEBSERVER
+        registerIdfWebSocketEvents();
+    #endif
 
     while (true) {
         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
