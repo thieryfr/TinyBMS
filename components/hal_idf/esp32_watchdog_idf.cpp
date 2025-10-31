@@ -13,8 +13,10 @@ namespace hal {
 static const char* TAG = "ESP32WatchdogIDF";
 
 ESP32WatchdogIDF::ESP32WatchdogIDF()
-    : configured_(false)
+    : initialized_(false)
+    , configured_(false)
     , enabled_(false)
+    , config_{}
     , stats_{}
     , last_feed_time_(0) {
 }
@@ -26,8 +28,18 @@ ESP32WatchdogIDF::~ESP32WatchdogIDF() {
 }
 
 Status ESP32WatchdogIDF::configure(const WatchdogConfig& config) {
-    // ESP-IDF Task WDT is typically configured globally
-    // For Phase 1, we'll just track the config and use esp_task_wdt APIs
+    // Check if already configured with same config (idempotent)
+    if (configured_) {
+        bool config_changed = (config_.timeout_ms != config.timeout_ms);
+
+        if (!config_changed) {
+            ESP_LOGD(TAG, "Watchdog already configured with same timeout, skipping");
+            return Status::Ok;
+        }
+
+        // Config changed, need to reconfigure
+        ESP_LOGI(TAG, "Watchdog config changed, reconfiguring...");
+    }
 
     esp_task_wdt_config_t wdt_config = {
         .timeout_ms = config.timeout_ms,
@@ -35,14 +47,29 @@ Status ESP32WatchdogIDF::configure(const WatchdogConfig& config) {
         .trigger_panic = true  // Panic on timeout
     };
 
-    esp_err_t err = esp_task_wdt_reconfigure(&wdt_config);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGE(TAG, "Watchdog configure failed: %s", esp_err_to_name(err));
-        return Status::Error;
+    esp_err_t err;
+
+    if (!initialized_) {
+        // First time: initialize watchdog
+        err = esp_task_wdt_init(&wdt_config);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Watchdog init failed: %s", esp_err_to_name(err));
+            return Status::Error;
+        }
+        initialized_ = true;
+        ESP_LOGI(TAG, "Watchdog initialized: timeout=%lums", config.timeout_ms);
+    } else {
+        // Already initialized: reconfigure
+        err = esp_task_wdt_reconfigure(&wdt_config);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Watchdog reconfigure failed: %s", esp_err_to_name(err));
+            return Status::Error;
+        }
+        ESP_LOGI(TAG, "Watchdog reconfigured: timeout=%lums", config.timeout_ms);
     }
 
+    config_ = config;
     configured_ = true;
-    ESP_LOGI(TAG, "Watchdog configured: timeout=%lums", config.timeout_ms);
 
     return Status::Ok;
 }
@@ -53,17 +80,25 @@ Status ESP32WatchdogIDF::enable() {
         return Status::Error;
     }
 
+    if (enabled_) {
+        ESP_LOGD(TAG, "Watchdog already enabled for this task");
+        return Status::Ok;
+    }
+
     // Add current task to watchdog
     esp_err_t err = esp_task_wdt_add(xTaskGetCurrentTaskHandle());
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "Watchdog add task failed: %s", esp_err_to_name(err));
-        // Don't return error, might already be added
+    if (err == ESP_ERR_INVALID_ARG) {
+        ESP_LOGW(TAG, "Task already subscribed to watchdog, marking as enabled");
+        // Task already added, not an error
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Watchdog add task failed: %s", esp_err_to_name(err));
+        return Status::Error;
     }
 
     enabled_ = true;
     last_feed_time_ = esp_timer_get_time();
 
-    ESP_LOGI(TAG, "Watchdog enabled");
+    ESP_LOGI(TAG, "Watchdog enabled for task '%s'", pcTaskGetName(NULL));
     return Status::Ok;
 }
 

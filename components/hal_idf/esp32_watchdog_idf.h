@@ -22,8 +22,10 @@ public:
     WatchdogStats getStats() const override;
 
 private:
+    bool initialized_;  // esp_task_wdt_init called
     bool configured_;
     bool enabled_;
+    WatchdogConfig config_;  // Last configured settings
     WatchdogStats stats_;
     uint64_t last_feed_time_;
 };
