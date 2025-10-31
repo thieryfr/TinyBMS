@@ -13,6 +13,9 @@ struct TransactionOptions {
     uint8_t attempt_count = 1;
     uint32_t retry_delay_ms = 0;
     uint32_t response_timeout_ms = 100;
+    bool include_start_byte = false;
+    bool send_wakeup_pulse = false;
+    uint32_t wakeup_delay_ms = 5;
 };
 
 struct DelayConfig {

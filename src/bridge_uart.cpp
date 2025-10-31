@@ -154,12 +154,17 @@ bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t cou
     options.attempt_count = 3;
     options.retry_delay_ms = 50;
     options.response_timeout_ms = 100;
+    options.include_start_byte = true;
+    options.send_wakeup_pulse = true;
+    options.wakeup_delay_ms = 10;
 
     // Phase 2: Increase configMutex timeout from 25ms to 100ms (consistency)
     if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         options.attempt_count = std::max<uint8_t>(static_cast<uint8_t>(1), config.tinybms.uart_retry_count);
         options.retry_delay_ms = config.tinybms.uart_retry_delay_ms;
         options.response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
+        options.include_start_byte = true;
+        options.send_wakeup_pulse = true;
         xSemaphoreGive(configMutex);
     } else {
         BRIDGE_LOG(LOG_WARN, "Using default UART retry configuration (config mutex unavailable)");
