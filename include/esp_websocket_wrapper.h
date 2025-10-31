@@ -10,9 +10,10 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_http_server_wrapper.h"
-#include <vector>
-#include <mutex>
+#include <algorithm>
 #include <functional>
+#include <mutex>
+#include <vector>
 
 namespace tinybms {
 namespace web {
@@ -100,9 +101,105 @@ public:
         }
     }
 
+    WebSocketClientIDF* attachClient(int fd) {
+        WebSocketClientIDF* attached_client = nullptr;
+        bool notify_connect = false;
+        size_t active_clients = 0;
+
+        {
+            std::lock_guard<std::mutex> lock(clientsMutex_);
+
+            auto it = std::find_if(
+                clients_.begin(),
+                clients_.end(),
+                [fd](const WebSocketClientIDF& client) { return client.id() == fd; }
+            );
+
+            if (it == clients_.end()) {
+                clients_.emplace_back(fd);
+                attached_client = &clients_.back();
+                notify_connect = true;
+            } else {
+                bool was_connected = it->isConnected();
+                it->setConnected(true);
+                attached_client = &(*it);
+                notify_connect = !was_connected;
+            }
+
+            active_clients = std::count_if(
+                clients_.begin(),
+                clients_.end(),
+                [](const WebSocketClientIDF& client) { return client.isConnected(); }
+            );
+        }
+
+        if (notify_connect) {
+            ESP_LOGI(
+                "WebSocketIDF",
+                "Client fd %d attached (active=%zu)",
+                fd,
+                active_clients
+            );
+        }
+
+        if (notify_connect && eventHandler_) {
+            eventHandler_(this, attached_client, WsEventType::Connect, nullptr, 0);
+        }
+
+        return attached_client;
+    }
+
+    void detachClient(int fd) {
+        WebSocketClientIDF* detached_client = nullptr;
+        bool notify_disconnect = false;
+        size_t active_clients = 0;
+
+        {
+            std::lock_guard<std::mutex> lock(clientsMutex_);
+            for (auto& client : clients_) {
+                if (client.id() == fd) {
+                    if (client.isConnected()) {
+                        client.setConnected(false);
+                        notify_disconnect = true;
+                        detached_client = &client;
+                    }
+                    break;
+                }
+            }
+
+            active_clients = std::count_if(
+                clients_.begin(),
+                clients_.end(),
+                [](const WebSocketClientIDF& client) { return client.isConnected(); }
+            );
+        }
+
+        if (notify_disconnect) {
+            ESP_LOGI(
+                "WebSocketIDF",
+                "Client fd %d detached (active=%zu)",
+                fd,
+                active_clients
+            );
+        }
+
+        if (notify_disconnect && eventHandler_) {
+            eventHandler_(this, detached_client, WsEventType::Disconnect, nullptr, 0);
+        }
+    }
+
     size_t count() const {
         std::lock_guard<std::mutex> lock(clientsMutex_);
         return clients_.size();
+    }
+
+    size_t connectedCount() const {
+        std::lock_guard<std::mutex> lock(clientsMutex_);
+        return static_cast<size_t>(std::count_if(
+            clients_.begin(),
+            clients_.end(),
+            [](const WebSocketClientIDF& client) { return client.isConnected(); }
+        ));
     }
 
     void cleanupClients() {
@@ -128,13 +225,19 @@ private:
             return ESP_FAIL;
         }
 
-        if (req->method == HTTP_GET) {
-            ESP_LOGI("WebSocketIDF", "WebSocket handshake from fd %d", httpd_req_to_sockfd(req));
-            return ESP_OK;
+        WebSocketIDF* self = (WebSocketIDF*)req->user_ctx;
+        if (!self) {
+            ESP_LOGE("WebSocketIDF", "Missing WebSocket context during handshake");
+            return ESP_ERR_INVALID_STATE;
         }
 
-        WebSocketIDF* self = (WebSocketIDF*)req->user_ctx;
         int fd = httpd_req_to_sockfd(req);
+
+        if (req->method == HTTP_GET) {
+            ESP_LOGI("WebSocketIDF", "WebSocket handshake from fd %d", fd);
+            self->attachClient(fd);
+            return ESP_OK;
+        }
 
         httpd_ws_frame_t ws_pkt;
         memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -169,29 +272,7 @@ private:
                     buf[ws_pkt.len] = '\0';
                     ESP_LOGD("WebSocketIDF", "Received: %s", buf);
 
-                    // Check for new connection
-                    bool isNew = true;
-                    {
-                        std::lock_guard<std::mutex> lock(self->clientsMutex_);
-                        for (auto& client : self->clients_) {
-                            if (client.id() == fd) {
-                                isNew = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isNew) {
-                        std::lock_guard<std::mutex> lock(self->clientsMutex_);
-                        self->clients_.emplace_back(fd);
-                        ESP_LOGI("WebSocketIDF", "New client connected: fd=%d, total=%zu",
-                                 fd, self->clients_.size());
-
-                        if (self->eventHandler_) {
-                            WebSocketClientIDF* client = &self->clients_.back();
-                            self->eventHandler_(self, client, WsEventType::Connect, nullptr, 0);
-                        }
-                    }
+                    self->attachClient(fd);
 
                     // Handle ping/pong
                     if (ws_pkt.len == 4 && memcmp(buf, "ping", 4) == 0) {
@@ -210,16 +291,7 @@ private:
         } else if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
             ESP_LOGI("WebSocketIDF", "Client disconnected: fd=%d", fd);
 
-            std::lock_guard<std::mutex> lock(self->clientsMutex_);
-            for (auto& client : self->clients_) {
-                if (client.id() == fd) {
-                    client.setConnected(false);
-                    if (self->eventHandler_) {
-                        self->eventHandler_(self, &client, WsEventType::Disconnect, nullptr, 0);
-                    }
-                    break;
-                }
-            }
+            self->detachClient(fd);
         }
 
         return ESP_OK;

@@ -24,6 +24,10 @@
     using tinybms::web::WsEventType;
     using WebServerType = HttpServerIDF;
     using WebSocketType = WebSocketIDF;
+#endif
+
+#ifdef USE_ESP_IDF_WEBSERVER
+    extern void registerIdfWebSocketEvents();
 #else
     #include <ESPAsyncWebServer.h>
     using WebServerType = AsyncWebServer;
@@ -161,6 +165,7 @@ void setupWebServer() {
 
         // Register WebSocket after server starts
         ws.setHandler(&server);
+        registerIdfWebSocketEvents();
     } else {
         logger.log(LOG_ERROR, "[WEB] Failed to start server");
     }
