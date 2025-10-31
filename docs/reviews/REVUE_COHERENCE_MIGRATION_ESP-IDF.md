@@ -1,0 +1,9 @@
+# Revue de Cohérence du Projet TinyBMS – Migration ESP-IDF
+
+## Module – HAL ESP-IDF (UART, CAN, Storage, Watchdog)
+- **Objectif du module** : Fournir des implémentations ESP-IDF natives des périphériques matériels (UART, CAN, SPIFFS, watchdog) pour alimenter la couche d’abstraction TinyBMS.
+- **Statut actuel** : À corriger – les pilotes démarrent mais les réinitialisations successives provoquent des erreurs ESP-IDF.
+- **Vérification de la cohérence des flux** : Les classes ne sont pas encore idempotentes : `HalManager::initialize()` puis `TinyBMS_Victron_Bridge::begin()` réappellent `initialize()` sur UART et CAN sans démontage préalable, ce qui entraîne `ESP_ERR_INVALID_STATE` après le premier démarrage. Une séquence de désinstallation conditionnelle doit être ajoutée pour garantir un flux de démarrage propre lors des redémarrages partiels.
+- **Interopérabilité** : Les gestionnaires HAL sont exposés via `HalManager`, ce qui permet aux autres modules (bridge UART/CAN, watchdog, stockage) d’accéder à une instance unique, mais l’absence d’idempotence empêche aujourd’hui les modules applicatifs de redémarrer proprement.
+- **Points à finaliser/améliorer** : Rendre `ESP32UartIDF::initialize()` et `ESP32CanIDF::initialize()` capables d’ignorer une configuration identique ou de désinstaller proprement les drivers avant réinitialisation ; ajouter la même logique pour `ESP32StorageIDF::mount()` et `ESP32WatchdogIDF::configure()` afin de supporter les rechargements de configuration.
+- **Problèmes identifiés et actions correctives** : Les appels répétés retournent “driver already installed” (`ESP_ERR_INVALID_STATE`). Implémenter un chemin `stop → uninstall → reinstall` sécurisé pour UART/CAN et protéger le montage SPIFFS/WDT par un drapeau `initialized_` ou un démontage automatique avant nouvelle configuration.
