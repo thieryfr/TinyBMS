@@ -523,26 +523,22 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
         uint32_t now = millis();
 
         if (now - last_poll_ms >= tinybms_cfg.poll_interval_ms) {
-            // 1. Read 6 register blocks (uartMutex protected)
+            // 1. Read TinyBMS register list (uartMutex protected)
             std::map<uint16_t, uint16_t> register_values;
             bool read_success = true;
 
-            for (size_t i = 0; i < kTinyReadBlockCount; ++i) {
-                const auto& block = kTinyReadBlocks[i];
-
-                if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                    if (!bridge->readTinyRegisters(block.start, block.count, buffer.data())) {
-                        read_success = false;
-                        xSemaphoreGive(uartMutex);
-                        break;
+            if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+                std::array<uint16_t, kTinyReadAddressCount> buffer{};
+                if (!bridge->readTinyRegisters(kTinyReadAddresses.data(),
+                                               kTinyReadAddressCount,
+                                               buffer.data())) {
+                    read_success = false;
+                } else {
+                    for (size_t idx = 0; idx < kTinyReadAddressCount; ++idx) {
+                        register_values[kTinyReadAddresses[idx]] = buffer[idx];
                     }
-                    xSemaphoreGive(uartMutex);
                 }
-
-                // Store register values
-                for (uint16_t word = 0; word < block.count; ++word) {
-                    register_values[block.start + word] = buffer[word];
-                }
+                xSemaphoreGive(uartMutex);
             }
 
             if (read_success) {

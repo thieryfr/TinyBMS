@@ -82,6 +82,8 @@ public:
     static void cvlTask(void *pvParameters);
 
     bool readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output);
+    bool readTinyRegisters(const uint16_t* addresses, size_t count, uint16_t* output);
+    bool writeTinyRegisters(const uint16_t* addresses, const uint16_t* values, size_t count);
 
     bool sendVictronPGN(uint16_t pgn_id, const uint8_t* data, uint8_t dlc);
 

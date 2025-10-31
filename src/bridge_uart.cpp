@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <map>
 #include <vector>
 #include <cstring>
@@ -93,22 +94,119 @@ private:
     optimization::ByteRingBuffer& buffer_;
 };
 
-struct TinyRegisterReadBlock {
-    uint16_t start;
-    uint16_t count;
+constexpr std::array<uint16_t, 39> kTinyReadAddresses = {
+    0x0020, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x0027, 0x0028, 0x0029,
+    0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F, 0x0030, 0x0031, 0x0032, 0x0033,
+    0x0034, 0x0066, 0x0067, 0x0071, 0x0072, 0x0131, 0x0132, 0x0133, 0x013B, 0x013C,
+    0x013D, 0x013E, 0x013F, 0x01F4, 0x01F5, 0x01F6, 0x01F7, 0x01F8, 0x01F9
 };
 
-constexpr TinyRegisterReadBlock kTinyReadBlocks[] = {
-    {32, 21},   // Lifetime counter + primary live data window
-    {102, 2},   // Charge/discharge limits
-    {113, 2},   // Pack temperature min/max
-    {305, 3},   // Victron keep-alive and handshake window
-    {315, 5},   // Protection thresholds (voltage/current/temp)
-    {500, 6}    // Manufacturer / firmware / family strings
-};
+constexpr size_t kTinyReadAddressCount = kTinyReadAddresses.size();
 
-constexpr size_t kTinyReadBlockCount = sizeof(kTinyReadBlocks) / sizeof(kTinyReadBlocks[0]);
-constexpr uint16_t kTinyMaxReadWords = 32;
+template <typename Callable>
+bool executeTinyTransaction(TinyBMS_Victron_Bridge& bridge,
+                            size_t register_words,
+                            bool update_poller,
+                            Callable&& callable,
+                            const char* context_label) {
+    if (bridge.tiny_uart_ == nullptr) {
+        BRIDGE_LOG(LOG_ERROR, "UART HAL not available");
+        return false;
+    }
+
+    const TickType_t mutex_timeout = pdMS_TO_TICKS(100);
+    if (xSemaphoreTake(uartMutex, mutex_timeout) != pdTRUE) {
+        BRIDGE_LOG(LOG_ERROR, String("UART mutex unavailable for ") + context_label);
+        bridge.stats.uart_errors++;
+        bridge.stats.uart_timeouts++;
+        return false;
+    }
+
+    tinybms::TransactionOptions options{};
+    options.attempt_count = 3;
+    options.retry_delay_ms = 50;
+    options.response_timeout_ms = 100;
+    options.include_start_byte = true;
+    options.send_wakeup_pulse = true;
+    options.wakeup_delay_ms = 10;
+
+    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        options.attempt_count = std::max<uint8_t>(static_cast<uint8_t>(1), config.tinybms.uart_retry_count);
+        options.retry_delay_ms = config.tinybms.uart_retry_delay_ms;
+        options.response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
+        options.include_start_byte = true;
+        options.send_wakeup_pulse = true;
+        xSemaphoreGive(configMutex);
+    } else {
+        BRIDGE_LOG(LOG_WARN, "Using default UART retry configuration (config mutex unavailable)");
+    }
+
+    auto delay_adapter = [](uint32_t delay_ms, void*) {
+        if (delay_ms > 0) {
+            vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        }
+    };
+
+    tinybms::DelayConfig delay_config{delay_adapter, nullptr};
+    const uint32_t start_ms = millis();
+    bridge.uart_rx_buffer_.clear();
+    RingBufferedHalUart buffered_uart(*bridge.tiny_uart_, bridge.uart_rx_buffer_);
+    tinybms::TransactionResult result = callable(buffered_uart, options, delay_config);
+
+    const uint32_t elapsed_ms = millis() - start_ms;
+
+    if (update_poller) {
+        if (result.success) {
+            bridge.uart_poller_.recordSuccess(elapsed_ms, static_cast<uint32_t>(register_words) * 2U);
+        } else {
+            if (result.last_status == tinybms::AttemptStatus::Timeout) {
+                bridge.uart_poller_.recordTimeout();
+            } else {
+                bridge.uart_poller_.recordFailure(elapsed_ms);
+            }
+        }
+        bridge.uart_poll_interval_ms_ = bridge.uart_poller_.currentInterval();
+    }
+
+    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        bridge.stats.uart_retry_count += result.retries_performed;
+        bridge.stats.uart_timeouts += result.timeout_count;
+        bridge.stats.uart_crc_errors += result.crc_error_count;
+        bridge.stats.uart_success_count += result.success ? 1U : 0U;
+        if (!result.success) {
+            bridge.stats.uart_errors++;
+        }
+        bridge.stats.uart_latency_last_ms = elapsed_ms;
+        bridge.stats.uart_latency_max_ms = bridge.uart_poller_.maxLatencyMs();
+        bridge.stats.uart_latency_avg_ms = bridge.uart_poller_.averageLatencyMs();
+        if (update_poller) {
+            bridge.stats.uart_poll_interval_current_ms = bridge.uart_poll_interval_ms_;
+        }
+        xSemaphoreGive(statsMutex);
+    }
+
+    switch (result.last_status) {
+        case tinybms::AttemptStatus::Timeout:
+            BRIDGE_LOG(LOG_WARN, String("UART timeout during ") + context_label + " after " + options.attempt_count + " attempt(s)");
+            break;
+        case tinybms::AttemptStatus::CrcMismatch:
+            BRIDGE_LOG(LOG_WARN, String("CRC mismatch on TinyBMS response for ") + context_label);
+            break;
+        case tinybms::AttemptStatus::WriteError:
+            BRIDGE_LOG(LOG_ERROR, String("Failed to send TinyBMS frame for ") + context_label);
+            break;
+        case tinybms::AttemptStatus::ProtocolError:
+            if (!result.success) {
+                BRIDGE_LOG(LOG_ERROR, String("TinyBMS protocol error during ") + context_label);
+            }
+            break;
+        case tinybms::AttemptStatus::Success:
+            break;
+    }
+
+    xSemaphoreGive(uartMutex);
+    return result.success;
+}
 
 void publishAlarmEvent(BridgeEventSink& sink,
                        EventSource source,
@@ -132,111 +230,48 @@ void publishAlarmEvent(BridgeEventSink& sink,
 }
 
 bool TinyBMS_Victron_Bridge::readTinyRegisters(uint16_t start_addr, uint16_t count, uint16_t* output) {
-    if (output == nullptr || count == 0) {
+    if (output == nullptr || count == 0 || count > 127) {
         BRIDGE_LOG(LOG_ERROR, "Invalid readTinyRegisters arguments");
         return false;
     }
 
-    if (tiny_uart_ == nullptr) {
-        BRIDGE_LOG(LOG_ERROR, "UART HAL not available");
-        return false;
-    }
-
-    const TickType_t mutex_timeout = pdMS_TO_TICKS(100);
-    if (xSemaphoreTake(uartMutex, mutex_timeout) != pdTRUE) {
-        BRIDGE_LOG(LOG_ERROR, "UART mutex unavailable for read");
-        stats.uart_errors++;
-        stats.uart_timeouts++;
-        return false;
-    }
-
-    tinybms::TransactionOptions options{};
-    options.attempt_count = 3;
-    options.retry_delay_ms = 50;
-    options.response_timeout_ms = 100;
-    options.include_start_byte = true;
-    options.send_wakeup_pulse = true;
-    options.wakeup_delay_ms = 10;
-
-    // Phase 2: Increase configMutex timeout from 25ms to 100ms (consistency)
-    if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        options.attempt_count = std::max<uint8_t>(static_cast<uint8_t>(1), config.tinybms.uart_retry_count);
-        options.retry_delay_ms = config.tinybms.uart_retry_delay_ms;
-        options.response_timeout_ms = std::max<uint32_t>(20, static_cast<uint32_t>(config.hardware.uart.timeout_ms));
-        options.include_start_byte = true;
-        options.send_wakeup_pulse = true;
-        xSemaphoreGive(configMutex);
-    } else {
-        BRIDGE_LOG(LOG_WARN, "Using default UART retry configuration (config mutex unavailable)");
-    }
-
-    auto delay_adapter = [](uint32_t delay_ms, void*) {
-        if (delay_ms > 0) {
-            vTaskDelay(pdMS_TO_TICKS(delay_ms));
-        }
+    auto callable = [start_addr, count, output](hal::IHalUart& uart,
+                                               const tinybms::TransactionOptions& options,
+                                               const tinybms::DelayConfig& delay) {
+        return tinybms::readRegisterBlock(uart, start_addr, static_cast<uint8_t>(count), output, options, delay);
     };
 
-    tinybms::DelayConfig delay_config{delay_adapter, nullptr};
-    const uint32_t start_ms = millis();
-    uart_rx_buffer_.clear();
-    RingBufferedHalUart buffered_uart(*tiny_uart_, uart_rx_buffer_);
-    tinybms::TransactionResult result = tinybms::readHoldingRegisters(
-        buffered_uart, start_addr, count, output, options, delay_config);
+    return executeTinyTransaction(*this, count, true, callable, "register read");
+}
 
-    const uint32_t elapsed_ms = millis() - start_ms;
-
-    if (result.success) {
-        uart_poller_.recordSuccess(elapsed_ms, static_cast<uint32_t>(count) * 2U);
-    } else {
-        if (result.last_status == tinybms::AttemptStatus::Timeout) {
-            uart_poller_.recordTimeout();
-        } else {
-            uart_poller_.recordFailure(elapsed_ms);
-        }
+bool TinyBMS_Victron_Bridge::readTinyRegisters(const uint16_t* addresses, size_t count, uint16_t* output) {
+    if (addresses == nullptr || output == nullptr || count == 0 || count > 127) {
+        BRIDGE_LOG(LOG_ERROR, "Invalid register list for TinyBMS read");
+        return false;
     }
 
-    uart_poll_interval_ms_ = uart_poller_.currentInterval();
+    auto callable = [addresses, count, output](hal::IHalUart& uart,
+                                               const tinybms::TransactionOptions& options,
+                                               const tinybms::DelayConfig& delay) {
+        return tinybms::readIndividualRegisters(uart, addresses, count, output, options, delay);
+    };
 
-    if (xSemaphoreTake(statsMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        stats.uart_retry_count += result.retries_performed;
-        stats.uart_timeouts += result.timeout_count;
-        stats.uart_crc_errors += result.crc_error_count;
-        stats.uart_success_count += result.success ? 1U : 0U;
-        if (!result.success) {
-            stats.uart_errors++;
-        }
-        stats.uart_latency_last_ms = elapsed_ms;
-        stats.uart_latency_max_ms = uart_poller_.maxLatencyMs();
-        stats.uart_latency_avg_ms = uart_poller_.averageLatencyMs();
-        stats.uart_poll_interval_current_ms = uart_poll_interval_ms_;
-        xSemaphoreGive(statsMutex);
-    } else {
-        // If the stats mutex cannot be obtained, skip updating UART statistics to avoid
-        // inconsistent shared state. The next successful acquisition will refresh the
-        // counters and latency tracking.
+    return executeTinyTransaction(*this, count, true, callable, "register list read");
+}
+
+bool TinyBMS_Victron_Bridge::writeTinyRegisters(const uint16_t* addresses, const uint16_t* values, size_t count) {
+    if (addresses == nullptr || values == nullptr || count == 0 || count > 63) {
+        BRIDGE_LOG(LOG_ERROR, "Invalid TinyBMS write request");
+        return false;
     }
 
-    switch (result.last_status) {
-        case tinybms::AttemptStatus::Timeout:
-            BRIDGE_LOG(LOG_WARN, String("UART timeout after ") + options.attempt_count + " attempt(s)");
-            break;
-        case tinybms::AttemptStatus::CrcMismatch:
-            BRIDGE_LOG(LOG_WARN, "CRC mismatch on TinyBMS response");
-            break;
-        case tinybms::AttemptStatus::WriteError:
-            BRIDGE_LOG(LOG_ERROR, "Failed to write full Modbus request");
-            break;
-        case tinybms::AttemptStatus::ProtocolError:
-            if (!result.success) {
-                BRIDGE_LOG(LOG_ERROR, "TinyBMS protocol error during Modbus read");
-            }
-            break;
-        case tinybms::AttemptStatus::Success:
-            break;
-    }
+    auto callable = [addresses, values, count](hal::IHalUart& uart,
+                                               const tinybms::TransactionOptions& options,
+                                               const tinybms::DelayConfig& delay) {
+        return tinybms::writeIndividualRegisters(uart, addresses, values, count, options, delay);
+    };
 
-    xSemaphoreGive(uartMutex);
-    return result.success;
+    return executeTinyTransaction(*this, count, false, callable, "register write");
 }
 
 void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
@@ -251,19 +286,14 @@ void TinyBMS_Victron_Bridge::uartTask(void *pvParameters) {
             d.resetSnapshots();
 
             std::map<uint16_t, uint16_t> register_values;
-            std::array<uint16_t, kTinyMaxReadWords> buffer{};
-            bool read_success = true;
+            std::array<uint16_t, kTinyReadAddressCount> buffer{};
+            bool read_success = bridge->readTinyRegisters(kTinyReadAddresses.data(),
+                                                          kTinyReadAddressCount,
+                                                          buffer.data());
 
-            for (size_t i = 0; i < kTinyReadBlockCount; ++i) {
-                const auto& block = kTinyReadBlocks[i];
-                std::fill(buffer.begin(), buffer.end(), 0);
-                if (!bridge->readTinyRegisters(block.start, block.count, buffer.data())) {
-                    read_success = false;
-                    break;
-                }
-
-                for (uint16_t word = 0; word < block.count; ++word) {
-                    register_values[block.start + word] = buffer[word];
+            if (read_success) {
+                for (size_t i = 0; i < kTinyReadAddressCount; ++i) {
+                    register_values[kTinyReadAddresses[i]] = buffer[i];
                 }
             }
 
