@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include "hal/interfaces/ihal_uart.h"
 
@@ -40,11 +41,32 @@ struct TransactionResult {
     uint32_t write_error_count = 0;
 };
 
-TransactionResult readHoldingRegisters(hal::IHalUart& uart,
-                                       uint16_t start_addr,
-                                       uint16_t count,
-                                       uint16_t* output,
-                                       const TransactionOptions& options,
-                                       const DelayConfig& delay = {});
+TransactionResult readRegisterBlock(hal::IHalUart& uart,
+                                    uint16_t start_addr,
+                                    uint8_t register_count,
+                                    uint16_t* output,
+                                    const TransactionOptions& options,
+                                    const DelayConfig& delay = {});
+
+TransactionResult readIndividualRegisters(hal::IHalUart& uart,
+                                         const uint16_t* addresses,
+                                         size_t address_count,
+                                         uint16_t* output,
+                                         const TransactionOptions& options,
+                                         const DelayConfig& delay = {});
+
+TransactionResult writeRegisterBlock(hal::IHalUart& uart,
+                                     uint16_t start_addr,
+                                     const uint16_t* values,
+                                     size_t value_count,
+                                     const TransactionOptions& options,
+                                     const DelayConfig& delay = {});
+
+TransactionResult writeIndividualRegisters(hal::IHalUart& uart,
+                                          const uint16_t* addresses,
+                                          const uint16_t* values,
+                                          size_t pair_count,
+                                          const TransactionOptions& options,
+                                          const DelayConfig& delay = {});
 
 } // namespace tinybms

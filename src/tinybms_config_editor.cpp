@@ -5,7 +5,6 @@
 
 #include "tinybms_config_editor.h"
 
-#include <HardwareSerial.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -15,7 +14,6 @@
 // -----------------------------------------------------------------------------
 // External resources
 // -----------------------------------------------------------------------------
-extern SemaphoreHandle_t uartMutex;
 extern TinyBMS_Victron_Bridge bridge;
 
 namespace {
@@ -135,62 +133,33 @@ bool TinyBMSConfigEditor::readRegister(uint16_t address, float &value) {
 }
 
 bool TinyBMSConfigEditor::readRegisterRaw(uint16_t address, uint16_t &value) {
-    if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        CONFIG_LOG(LOG_ERROR, "UART mutex unavailable for read");
-        return false;
-    }
-
     int8_t idx = findRegisterIndex(address);
     if (idx < 0) {
         CONFIG_LOG(LOG_WARN, "Register " + String(address) + " not found");
-        xSemaphoreGive(uartMutex);
         return false;
     }
 
     TinyBMSConfigRegister &reg = registers_[idx];
 
-    char cmd[16];
-    snprintf(cmd, sizeof(cmd), ":0001%02X\r\n", address % 256);
-    if (bridge.tiny_uart_ == nullptr) {
-        CONFIG_LOG(LOG_ERROR, "UART HAL not available");
-        xSemaphoreGive(uartMutex);
+    uint16_t result_value = 0;
+    if (!bridge.readTinyRegisters(address, 1, &result_value)) {
+        CONFIG_LOG(LOG_WARN, "TinyBMS read failed for register " + String(address));
         return false;
     }
 
-    bridge.tiny_uart_->write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
-    CONFIG_LOG(LOG_DEBUG, "Read request sent for register " + String(address));
+    value = result_value;
+    float user_value = convertRawToUser(reg, value);
+    reg.current_raw_value = value;
+    reg.current_user_value = user_value;
 
-    uint32_t start = millis();
-    String response;
-    while (millis() - start < 1000) {
-        if (bridge.tiny_uart_->available()) {
-            char c = static_cast<char>(bridge.tiny_uart_->read());
-            response += c;
-
-            if (c == '\n' && response.startsWith(":") && response.length() >= 8) {
-                String hex_value = response.substring(3, 7);
-                value = static_cast<uint16_t>(strtol(hex_value.c_str(), nullptr, 16));
-                float user_value = convertRawToUser(reg, value);
-                reg.current_raw_value = value;
-                reg.current_user_value = user_value;
-
-                String user_str = String(user_value, reg.precision);
-                String log_message = "Reg " + String(address) + " → " + user_str;
-                if (!reg.unit.isEmpty()) {
-                    log_message += " " + reg.unit;
-                }
-                log_message += " (raw=0x" + String(value, HEX) + ")";
-                CONFIG_LOG(LOG_INFO, log_message);
-                xSemaphoreGive(uartMutex);
-                return true;
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
+    String user_str = String(user_value, reg.precision);
+    String log_message = "Reg " + String(address) + " → " + user_str;
+    if (!reg.unit.isEmpty()) {
+        log_message += " " + reg.unit;
     }
-
-    CONFIG_LOG(LOG_WARN, "Timeout reading register " + String(address));
-    xSemaphoreGive(uartMutex);
-    return false;
+    log_message += " (raw=0x" + String(value, HEX) + ")";
+    CONFIG_LOG(LOG_INFO, log_message);
+    return true;
 }
 
 TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, float user_value) {
@@ -214,68 +183,33 @@ TinyBMSConfigError TinyBMSConfigEditor::writeRegister(uint16_t address, float us
 }
 
 TinyBMSConfigError TinyBMSConfigEditor::writeRegisterRaw(uint16_t address, uint16_t value) {
-    if (xSemaphoreTake(uartMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
-        CONFIG_LOG(LOG_ERROR, "UART mutex unavailable for write");
-        return TinyBMSConfigError::MutexUnavailable;
-    }
-
     int8_t idx = findRegisterIndex(address);
     if (idx < 0) {
         CONFIG_LOG(LOG_WARN, "Register " + String(address) + " not found");
-        xSemaphoreGive(uartMutex);
         return TinyBMSConfigError::RegisterNotFound;
     }
 
     TinyBMSConfigRegister &reg = registers_[idx];
 
-    char cmd[20];
-    snprintf(cmd, sizeof(cmd), ":0101%02X%04X\r\n", address % 256, value);
-    if (bridge.tiny_uart_ == nullptr) {
-        CONFIG_LOG(LOG_ERROR, "UART HAL not available");
-        xSemaphoreGive(uartMutex);
-        return TinyBMSConfigError::HardwareError;
+    uint16_t addr = address;
+    uint16_t val = value;
+    if (!bridge.writeTinyRegisters(&addr, &val, 1)) {
+        CONFIG_LOG(LOG_ERROR, "TinyBMS write failed for register " + String(address));
+        return TinyBMSConfigError::WriteFailed;
     }
 
-    bridge.tiny_uart_->write(reinterpret_cast<const uint8_t*>(cmd), strlen(cmd));
-    CONFIG_LOG(LOG_DEBUG, "Write request " + String(address) + " = " + String(value));
+    float user_value = convertRawToUser(reg, value);
+    reg.current_raw_value = value;
+    reg.current_user_value = user_value;
 
-    uint32_t start = millis();
-    String response;
-
-    while (millis() - start < 1000) {
-        if (bridge.tiny_uart_->available()) {
-            char c = static_cast<char>(bridge.tiny_uart_->read());
-            response += c;
-
-            if (c == '\n') {
-                if (response.indexOf(":OK") >= 0 || response.indexOf("ACK") >= 0) {
-                    float user_value = convertRawToUser(reg, value);
-                    reg.current_raw_value = value;
-                    reg.current_user_value = user_value;
-
-                    String log_message = "Write OK → Reg " + String(address) + " = " +
-                                         String(user_value, reg.precision);
-                    if (!reg.unit.isEmpty()) {
-                        log_message += " " + reg.unit;
-                    }
-                    log_message += " (raw=" + String(value) + ")";
-                    CONFIG_LOG(LOG_INFO, log_message);
-                    xSemaphoreGive(uartMutex);
-                    return TinyBMSConfigError::None;
-                }
-
-                CONFIG_LOG(LOG_ERROR, "Write failed for " + String(address) +
-                                          " → " + response);
-                xSemaphoreGive(uartMutex);
-                return TinyBMSConfigError::WriteFailed;
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
+    String log_message = "Write OK → Reg " + String(address) + " = " +
+                         String(user_value, reg.precision);
+    if (!reg.unit.isEmpty()) {
+        log_message += " " + reg.unit;
     }
-
-    CONFIG_LOG(LOG_WARN, "Write timeout for register " + String(address));
-    xSemaphoreGive(uartMutex);
-    return TinyBMSConfigError::Timeout;
+    log_message += " (raw=" + String(value) + ")";
+    CONFIG_LOG(LOG_INFO, log_message);
+    return TinyBMSConfigError::None;
 }
 
 uint8_t TinyBMSConfigEditor::readAllRegisters() {

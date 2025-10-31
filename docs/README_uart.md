@@ -1,10 +1,10 @@
 # Module Acquisition UART TinyBMS
 
 ## Rôle
-Interroger le TinyBMS via Modbus RTU, mettre à jour `TinyBMS_LiveData`, alimenter les statistiques UART et publier les événements (`LiveDataUpdate`, `MqttRegisterValue`, alarmes) sur l'Event Bus. La tâche `uartTask` pilote aussi l'adaptation de cadence (`AdaptivePolling`) et nourrit le watchdog.
+Interroger le TinyBMS via le protocole binaire Rev D (`0x07/0x09/0x0D`), mettre à jour `TinyBMS_LiveData`, alimenter les statistiques UART et publier les événements (`LiveDataUpdate`, `MqttRegisterValue`, alarmes) sur l'Event Bus. La tâche `uartTask` pilote aussi l'adaptation de cadence (`AdaptivePolling`) et nourrit le watchdog.
 
 ## Flux principal (`uartTask`)
-1. Pour chaque bloc défini dans `kTinyReadBlocks`, `readTinyRegisters()` exécute une requête Modbus (avec retries configurables) via `hal::IHalUart` protégé par `uartMutex`.
+1. `readTinyRegisters(kTinyReadAddresses)` agrège les 39 registres nécessaires (0x20→0x1F9) dans **une seule** trame `0xAA 0x09` (lecture multi-adresses) avec retries configurables via `hal::IHalUart` protégé par `uartMutex`.
 2. Les mots reçus sont stockés dans `register_values` puis transformés en `TinyBMS_LiveData` via `tinybms::uart::detail::decodeAndApplyBinding`.
 3. Les événements MQTT sont collectés (payload `MqttRegisterEvent`) puis publiés après le `LiveDataUpdate` pour garantir que les consommateurs disposent d'un snapshot cohérent.
 4. Les seuils TinyBMS (OV/UV/OC, températures) actualisent `bridge.config_` afin d'alimenter les PGN et les diagnostics.
@@ -12,12 +12,12 @@ Interroger le TinyBMS via Modbus RTU, mettre à jour `TinyBMS_LiveData`, aliment
 6. Le watchdog est nourri en fin de cycle et la tâche dort `uart_poll_interval_ms_` (piloté par `AdaptivePoller`).
 
 ## Statistiques & adaptation
-- `readTinyRegisters()` incrémente `stats.uart_errors`, `stats.uart_timeouts`, `stats.uart_crc_errors`, `stats.uart_retry_count` et renseigne la latence (`uart_latency_last_ms`, `uart_latency_max_ms`, `uart_latency_avg_ms`) sous protection `statsMutex`.
+- Les surcharges `readTinyRegisters()` et `writeTinyRegisters()` incrémentent `stats.uart_errors`, `stats.uart_timeouts`, `stats.uart_crc_errors`, `stats.uart_retry_count` et renseignent la latence (`uart_latency_last_ms`, `uart_latency_max_ms`, `uart_latency_avg_ms`) sous protection `statsMutex`.
 - `AdaptivePoller` ajuste `uart_poll_interval_ms_` à partir des succès/échecs (`poll_failure_threshold`, `poll_success_threshold`) et expose la valeur courante via `stats.uart_poll_interval_current_ms`.
 - Les succès modifient `stats.uart_success_count` tandis que les échecs publient une alarme `AlarmCode::UartError`.
 
 ## Synchronisation
-- `uartMutex` protège l'accès au HAL UART (écritures/lectures Modbus).
+- `uartMutex` protège l'accès au HAL UART (trames TinyBMS binaires).
 - `configMutex` est utilisé pour lire les seuils Victron avant d'évaluer les alarmes.
 - `feedMutex` synchronise l'appel `Watchdog.feed()`.
 - `statsMutex` évite les courses lors de la mise à jour des compteurs partagés (exposés via `/api/status`).
