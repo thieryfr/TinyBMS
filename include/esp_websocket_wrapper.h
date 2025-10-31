@@ -9,6 +9,7 @@
 
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_http_server_wrapper.h"
 #include <vector>
 #include <mutex>
 #include <functional>
@@ -121,6 +122,12 @@ private:
     mutable std::mutex clientsMutex_;
 
     static esp_err_t wsHandler(httpd_req_t* req) {
+        HttpServerIDF* server = HttpServerIDF::fromRequest(req);
+        if (server && !server->checkAuthorization(req)) {
+            server->rejectUnauthorized(req);
+            return ESP_FAIL;
+        }
+
         if (req->method == HTTP_GET) {
             ESP_LOGI("WebSocketIDF", "WebSocket handshake from fd %d", httpd_req_to_sockfd(req));
             return ESP_OK;
