@@ -73,6 +73,17 @@ void setupWebServer() {
         logger.log(LOG_WARN, "[WEB] Using default web server settings (config mutex unavailable)");
     }
 
+    // Configure authentication (ESP-IDF only)
+#ifdef USE_ESP_IDF_WEBSERVER
+    if (web_config.enable_auth) {
+        server.enableBasicAuth(web_config.username.c_str(), web_config.password.c_str());
+        logger.log(LOG_INFO, "[WEB] HTTP basic authentication enabled");
+    } else {
+        server.disableAuth();
+        logger.log(LOG_DEBUG, "[WEB] HTTP authentication disabled");
+    }
+#endif
+
     // Configure WebSocket
 #ifdef USE_ESP_IDF_WEBSERVER
     // ESP-IDF WebSocket setup happens in setHandler (see below)
@@ -86,9 +97,8 @@ void setupWebServer() {
     // Serve static files from SPIFFS when enabled
     if (spiffs_enabled) {
 #ifdef USE_ESP_IDF_WEBSERVER
-        // ESP-IDF static file serving
-        // Note: Simplified version - full implementation would use httpd_uri_t wildcards
-        logger.log(LOG_INFO, "[WEB] Static file serving enabled (ESP-IDF)");
+        server.serveStatic("/", "/spiffs", "index.html");
+        logger.log(LOG_INFO, "[WEB] Static files served from SPIFFS via ESP-IDF HTTP server");
 #else
         server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
         logger.log(LOG_INFO, "[WEB] Static files served from SPIFFS root");
@@ -118,13 +128,16 @@ void setupWebServer() {
     // CORS if enabled
     if (web_config.enable_cors) {
 #ifdef USE_ESP_IDF_WEBSERVER
-        // CORS is handled in HttpRequestIDF::send() via Access-Control-Allow-Origin header
-        logger.log(LOG_INFO, "[WEB] CORS enabled (handled in response headers)");
+        server.enableCors(true);
+        logger.log(LOG_INFO, "[WEB] CORS enabled (ESP-IDF)");
 #else
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
         logger.log(LOG_INFO, "[WEB] CORS enabled for all origins");
 #endif
     } else {
+#ifdef USE_ESP_IDF_WEBSERVER
+        server.disableCors();
+#endif
         logger.log(LOG_DEBUG, "[WEB] CORS disabled");
     }
 
