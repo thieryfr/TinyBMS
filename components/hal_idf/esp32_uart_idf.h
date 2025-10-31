@@ -31,6 +31,7 @@ private:
     uart_port_t uart_num_;
     uint32_t timeout_ms_;
     bool initialized_;
+    UartConfig last_config_;  // Store last config for idempotent reinit
 };
 
 } // namespace hal

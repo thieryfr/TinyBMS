@@ -22,6 +22,7 @@ public:
         : uart_num_(UART_NUM_MAX)
         , timeout_ms_(1000)
         , initialized_(false) {
+        memset(&last_config_, 0, sizeof(last_config_));
     }
 
     ~ESP32UartIDF() override {
@@ -36,8 +37,27 @@ public:
             return Status::Error;
         }
 
+        // Check if already initialized with same config (idempotent)
+        if (initialized_) {
+            bool config_changed = (last_config_.rx_pin != config.rx_pin ||
+                                  last_config_.tx_pin != config.tx_pin ||
+                                  last_config_.baudrate != config.baudrate ||
+                                  last_config_.timeout_ms != config.timeout_ms);
+
+            if (!config_changed) {
+                ESP_LOGD(TAG, "UART already initialized with same config, skipping");
+                return Status::Ok;
+            }
+
+            // Config changed, need to reinitialize
+            ESP_LOGI(TAG, "UART config changed, reinitializing...");
+            uart_driver_delete(uart_num_);
+            initialized_ = false;
+        }
+
         uart_num_ = UART_NUM_2;  // Use UART2 for TinyBMS
         timeout_ms_ = config.timeout_ms;
+        last_config_ = config;  // Store config for comparison
 
         uart_config_t uart_config = {
             .baud_rate = static_cast<int>(config.baudrate),
@@ -148,6 +168,7 @@ private:
     uart_port_t uart_num_;
     uint32_t timeout_ms_;
     bool initialized_;
+    UartConfig last_config_;  // Store last config for idempotent reinit
 };
 
 std::unique_ptr<IHalUart> createEsp32IdfUart() {
