@@ -117,8 +117,13 @@ void setupWebServer() {
 
     // CORS if enabled
     if (web_config.enable_cors) {
+#ifdef USE_ESP_IDF_WEBSERVER
+        // CORS is handled in HttpRequestIDF::send() via Access-Control-Allow-Origin header
+        logger.log(LOG_INFO, "[WEB] CORS enabled (handled in response headers)");
+#else
         DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
         logger.log(LOG_INFO, "[WEB] CORS enabled for all origins");
+#endif
     } else {
         logger.log(LOG_DEBUG, "[WEB] CORS disabled");
     }

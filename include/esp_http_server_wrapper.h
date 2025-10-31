@@ -158,6 +158,12 @@ public:
         return true;
     }
 
+    // Overload to allow runtime port configuration (AsyncWebServer compatibility)
+    bool begin(uint16_t port) {
+        port_ = port;
+        return begin();
+    }
+
     void on(const char* uri, httpd_method_t method, RequestHandlerIDF handler) {
         auto* ctx = new RouteContext{this, handler};
 
