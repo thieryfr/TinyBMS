@@ -32,6 +32,24 @@ public:
             return Status::InvalidArgument;
         }
 
+        // Check if already initialized with same config (idempotent)
+        if (initialized_) {
+            bool config_changed = (config_.tx_pin != config.tx_pin ||
+                                  config_.rx_pin != config.rx_pin ||
+                                  config_.bitrate != config.bitrate);
+
+            if (!config_changed) {
+                ESP_LOGD(TAG, "CAN already initialized with same config, skipping");
+                return Status::Ok;
+            }
+
+            // Config changed, need to reinitialize
+            ESP_LOGI(TAG, "CAN config changed, reinitializing...");
+            twai_stop();
+            twai_driver_uninstall();
+            initialized_ = false;
+        }
+
         config_ = config;
 
         twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
