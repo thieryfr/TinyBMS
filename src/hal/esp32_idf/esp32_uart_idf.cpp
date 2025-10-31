@@ -37,27 +37,25 @@ public:
             return Status::Error;
         }
 
-        // Check if already initialized with same config (idempotent)
         if (initialized_) {
             bool config_changed = (last_config_.rx_pin != config.rx_pin ||
                                   last_config_.tx_pin != config.tx_pin ||
                                   last_config_.baudrate != config.baudrate ||
-                                  last_config_.timeout_ms != config.timeout_ms);
+                                  last_config_.timeout_ms != config.timeout_ms ||
+                                  last_config_.use_dma != config.use_dma);
 
             if (!config_changed) {
                 ESP_LOGD(TAG, "UART already initialized with same config, skipping");
+                timeout_ms_ = config.timeout_ms;
                 return Status::Ok;
             }
 
-            // Config changed, need to reinitialize
             ESP_LOGI(TAG, "UART config changed, reinitializing...");
-            uart_driver_delete(uart_num_);
-            initialized_ = false;
+            deinitialize();
         }
 
         uart_num_ = UART_NUM_2;  // Use UART2 for TinyBMS
         timeout_ms_ = config.timeout_ms;
-        last_config_ = config;  // Store config for comparison
 
         uart_config_t uart_config = {
             .baud_rate = static_cast<int>(config.baudrate),
@@ -92,14 +90,16 @@ public:
                                   rx_buffer_size,
                                   tx_buffer_size,
                                   0,
-                                  NULL,
+                                  nullptr,
                                   0);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "UART driver install failed: %s", esp_err_to_name(err));
+            deinitialize();
             return Status::Error;
         }
 
         initialized_ = true;
+        last_config_ = config;
         ESP_LOGI(TAG, "UART%d initialized: RX=%d, TX=%d, baud=%lu",
                  uart_num_, config.rx_pin, config.tx_pin, config.baudrate);
 
@@ -165,6 +165,19 @@ public:
     }
 
 private:
+    void deinitialize() {
+        if (!initialized_) {
+            return;
+        }
+
+        esp_err_t err = uart_driver_delete(uart_num_);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "UART driver delete failed: %s", esp_err_to_name(err));
+        }
+
+        initialized_ = false;
+    }
+
     uart_port_t uart_num_;
     uint32_t timeout_ms_;
     bool initialized_;

@@ -12,6 +12,8 @@
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <memory>
 
 namespace hal {
@@ -180,7 +182,11 @@ static const char* WDT_TAG = "ESP32WatchdogIDF";
 
 class ESP32WatchdogIDF : public IHalWatchdog {
 public:
-    ESP32WatchdogIDF() : configured_(false), enabled_(false), stats_{}, last_feed_time_(0) {}
+    ESP32WatchdogIDF()
+        : configured_(false)
+        , enabled_(false)
+        , stats_{}
+        , last_feed_time_(0) {}
 
     ~ESP32WatchdogIDF() override {
         if (enabled_) {
@@ -195,7 +201,13 @@ public:
             .trigger_panic = true
         };
 
-        esp_err_t err = esp_task_wdt_reconfigure(&wdt_config);
+        esp_err_t err;
+        if (!configured_) {
+            err = esp_task_wdt_init(&wdt_config);
+        } else {
+            err = esp_task_wdt_reconfigure(&wdt_config);
+        }
+
         if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
             return Status::Error;
         }
@@ -205,31 +217,47 @@ public:
     }
 
     Status enable() override {
-        if (!configured_) return Status::Error;
+        if (!configured_) {
+            return Status::Error;
+        }
 
-        esp_task_wdt_add(xTaskGetCurrentTaskHandle());
+        TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+        esp_err_t err = esp_task_wdt_add(handle);
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            return Status::Error;
+        }
+
         enabled_ = true;
         last_feed_time_ = esp_timer_get_time();
-
         return Status::Ok;
     }
 
     Status disable() override {
-        if (!enabled_) return Status::Ok;
-        esp_task_wdt_delete(xTaskGetCurrentTaskHandle());
+        if (!configured_) {
+            return Status::Ok;
+        }
+
+        TaskHandle_t handle = xTaskGetCurrentTaskHandle();
+        esp_err_t err = esp_task_wdt_delete(handle);
+        if (err != ESP_OK && err != ESP_ERR_NOT_FOUND && err != ESP_ERR_INVALID_STATE) {
+            return Status::Error;
+        }
+
         enabled_ = false;
         return Status::Ok;
     }
 
     Status feed() override {
-        if (!enabled_) return Status::Error;
+        if (!enabled_) {
+            return Status::Error;
+        }
 
         if (esp_task_wdt_reset() != ESP_OK) {
             return Status::Error;
         }
 
         uint64_t now = esp_timer_get_time();
-        uint32_t interval_ms = (now - last_feed_time_) / 1000;
+        uint32_t interval_ms = static_cast<uint32_t>((now - last_feed_time_) / 1000);
 
         if (stats_.feed_count == 0) {
             stats_.min_interval_ms = interval_ms;

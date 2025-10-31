@@ -2,9 +2,12 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <memory>
+
 #include "mqtt/publisher.h"
 #include "event/event_bus_v2.h"
 #include "event/event_types_v2.h"
+#include "mqtt/mqtt_backend.h"
 
 namespace mqtt {
 
@@ -28,9 +31,6 @@ public:
     void appendStatus(JsonObject obj) const;
 
 private:
-#ifdef ARDUINO
-    static void onMqttEvent(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
-#endif
     void handleRegisterEvent(const tinybms::events::MqttRegisterValue& event);
     void handleAlarmEvent(const tinybms::events::AlarmRaised& event);
     void handleAlarmCleared(const tinybms::events::AlarmCleared& event);
@@ -47,6 +47,7 @@ private:
     String buildTopic(const String& suffix) const;
     bool shouldAttemptReconnect(uint32_t now_ms) const;
     void noteError(uint32_t code, const char* message);
+    void handleBackendEvent(MqttBackend::Event event, int32_t data);
 
 private:
     tinybms::event::EventBusV2& bus_;
@@ -73,9 +74,7 @@ private:
     bool voltage_valid_;
     bool current_valid_;
     bool announced_derivatives_;
-#ifdef ARDUINO
-    esp_mqtt_client_handle_t client_;
-#endif
+    std::unique_ptr<MqttBackend> backend_;
 };
 
 } // namespace mqtt

@@ -8,9 +8,9 @@
 #include "tiny_read_mapping.h"
 #include "victron_state_utils.h"
 
-#ifdef ARDUINO
-#include <esp_event.h>
-#include <mqtt_client.h>
+#if defined(ESP_PLATFORM)
+#include "mqtt/esp_idf_mqtt_backend.h"
+#include <esp_timer.h>
 #endif
 
 extern Logger logger;
@@ -75,8 +75,10 @@ String sanitizeRootTopic(const String& raw) {
 }
 
 inline uint32_t currentMillis() {
-#ifdef ARDUINO
+#if defined(ARDUINO)
     return millis();
+#elif defined(ESP_PLATFORM)
+    return static_cast<uint32_t>(esp_timer_get_time() / 1000ULL);
 #else
     return 0;
 #endif
@@ -95,6 +97,19 @@ using tinybms::events::AlarmCleared;
 using tinybms::events::WarningRaised;
 
 #define MQTT_LOG(level, msg) do { logger.log(level, String("[MQTT] ") + (msg)); } while(0)
+
+namespace {
+
+class NullMqttBackend : public MqttBackend {
+public:
+    bool start(const BrokerSettings&, EventCallback) override { return false; }
+    void stop() override {}
+    bool publish(const char*, const char*, size_t, uint8_t, bool) override { return false; }
+    bool isConnected() const override { return false; }
+    void loop() override {}
+};
+
+} // namespace
 
 VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     : bus_(bus)
@@ -119,10 +134,13 @@ VictronMqttBridge::VictronMqttBridge(tinybms::event::EventBusV2& bus)
     , voltage_valid_(false)
     , current_valid_(false)
     , announced_derivatives_(false)
-#ifdef ARDUINO
-    , client_(nullptr)
-#endif
+    , backend_(nullptr)
 {
+#if defined(ESP_PLATFORM)
+    backend_ = std::make_unique<EspIdfMqttBackend>();
+#else
+    backend_ = std::make_unique<NullMqttBackend>();
+#endif
 }
 
 VictronMqttBridge::~VictronMqttBridge() {
@@ -230,88 +248,51 @@ bool VictronMqttBridge::connect() {
 
     last_connect_attempt_ms_ = currentMillis();
 
-#ifdef ARDUINO
-    if (client_) {
-        esp_mqtt_client_stop(client_);
-        esp_mqtt_client_destroy(client_);
-        client_ = nullptr;
-    }
-
-    esp_mqtt_client_config_t cfg = {};
-    cfg.broker.address.uri = settings_.uri.c_str();
-    cfg.broker.address.port = settings_.port;
-    cfg.session.keepalive = settings_.keepalive_seconds;
-    cfg.session.disable_clean_session = settings_.clean_session ? 0 : 1;
-    cfg.credentials.client_id = settings_.client_id.c_str();
-    if (settings_.username.length() > 0) {
-        cfg.credentials.username = settings_.username.c_str();
-    }
-    if (settings_.password.length() > 0) {
-        cfg.credentials.authentication.password = settings_.password.c_str();
-    }
-    cfg.network.disable_auto_reconnect = false;
-    if (settings_.use_tls) {
-        cfg.broker.verification.certificate = settings_.server_certificate.c_str();
-    }
-
-    client_ = esp_mqtt_client_init(&cfg);
-    if (!client_) {
-        noteError(3, "esp_mqtt_client_init failed");
-        MQTT_LOG(LOG_ERROR, "Failed to init MQTT client");
-        return false;
-    }
-
-    esp_err_t err = esp_mqtt_client_register_event(client_, MQTT_EVENT_ANY, &VictronMqttBridge::onMqttEvent, this);
-    if (err != ESP_OK) {
-        noteError(static_cast<uint32_t>(err), "register_event failed");
-        MQTT_LOG(LOG_ERROR, String("Failed to register MQTT events: ") + static_cast<int>(err));
-        esp_mqtt_client_destroy(client_);
-        client_ = nullptr;
+    if (!backend_) {
+        noteError(3, "MQTT backend missing");
+        MQTT_LOG(LOG_ERROR, "No MQTT backend available");
         return false;
     }
 
     connecting_ = true;
-    err = esp_mqtt_client_start(client_);
-    if (err != ESP_OK) {
-        noteError(static_cast<uint32_t>(err), "client_start failed");
+    const bool started = backend_->start(
+        settings_,
+        [this](MqttBackend::Event event, int32_t data) {
+            handleBackendEvent(event, data);
+        });
+
+    if (!started) {
         connecting_ = false;
-        MQTT_LOG(LOG_ERROR, String("Failed to start MQTT client: ") + static_cast<int>(err));
-        esp_mqtt_client_destroy(client_);
-        client_ = nullptr;
+        noteError(3, "MQTT backend start failed");
+        MQTT_LOG(LOG_ERROR, "Failed to start MQTT backend");
         return false;
     }
 
     MQTT_LOG(LOG_INFO, "MQTT client start requested");
     return true;
-#else
-    connecting_ = false;
-    connected_ = true;
-    noteError(0, nullptr);
-    MQTT_LOG(LOG_INFO, "MQTT client simulated as connected (non-Arduino build)");
-    return true;
-#endif
 }
 
 void VictronMqttBridge::disconnect() {
-#ifdef ARDUINO
-    if (client_) {
-        esp_mqtt_client_stop(client_);
-        esp_mqtt_client_destroy(client_);
-        client_ = nullptr;
+    if (backend_) {
+        backend_->stop();
     }
-#endif
     connecting_ = false;
     connected_ = false;
     voltage_valid_ = false;
     current_valid_ = false;
+    last_connect_attempt_ms_ = 0;
 }
 
 void VictronMqttBridge::loop() {
     if (!enabled_ || !configured_) {
         return;
     }
-#ifdef ARDUINO
-    const uint32_t now = millis();
+#if defined(ESP_PLATFORM)
+    if (backend_) {
+        backend_->loop();
+    }
+
+    const uint32_t now = currentMillis();
     if (!connected_ && shouldAttemptReconnect(now)) {
         MQTT_LOG(LOG_WARN, "Attempting MQTT reconnect");
         connect();
@@ -376,26 +357,24 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
         : clampQos(settings_.default_qos);
     const bool retain = retain_override || settings_.retain_by_default;
 
-#ifdef ARDUINO
-    if (!client_) {
+#if defined(ESP_PLATFORM)
+    if (!backend_) {
         failed_publish_count_++;
-        noteError(11, "Client not initialised");
-        MQTT_LOG(LOG_ERROR, "MQTT client not ready for publish");
+        noteError(11, "Backend not initialised");
+        MQTT_LOG(LOG_ERROR, "MQTT backend not ready for publish");
         return false;
     }
 
-    const int msg_id = esp_mqtt_client_publish(
-        client_,
+    const bool ok = backend_->publish(
         topic.c_str(),
         payload.c_str(),
         payload.length(),
         qos,
-        retain ? 1 : 0
-    );
+        retain);
 
-    if (msg_id < 0) {
+    if (!ok) {
         failed_publish_count_++;
-        noteError(static_cast<uint32_t>(msg_id), "publish failed");
+        noteError(12, "publish failed");
         MQTT_LOG(LOG_WARN, String("MQTT publish failed on topic ") + topic);
         return false;
     }
@@ -411,11 +390,10 @@ bool VictronMqttBridge::publishRegister(const RegisterValue& value,
 }
 
 bool VictronMqttBridge::isConnected() const {
-#ifdef ARDUINO
-    return connected_;
-#else
-    return connected_;
-#endif
+    if (backend_) {
+        return backend_->isConnected();
+    }
+    return false;
 }
 
 void VictronMqttBridge::appendStatus(JsonObject obj) const {
@@ -652,42 +630,31 @@ void VictronMqttBridge::handleRegisterEvent(const MqttRegisterValue& event) {
     processDerivedRegister(value);
 }
 
-#ifdef ARDUINO
-void VictronMqttBridge::onMqttEvent(void* handler_args,
-                                    esp_event_base_t,
-                                    int32_t event_id,
-                                    void* event_data) {
-    auto* self = static_cast<VictronMqttBridge*>(handler_args);
-    if (!self) {
-        return;
-    }
-
-    switch (event_id) {
-        case MQTT_EVENT_CONNECTED:
-            self->connecting_ = false;
-            self->connected_ = true;
-            self->noteError(0, nullptr);
+void VictronMqttBridge::handleBackendEvent(MqttBackend::Event event, int32_t data) {
+    switch (event) {
+        case MqttBackend::Event::Connected:
+            connecting_ = false;
+            connected_ = true;
+            noteError(0, nullptr);
             MQTT_LOG(LOG_INFO, "MQTT connected");
             break;
-        case MQTT_EVENT_DISCONNECTED:
-            self->connected_ = false;
-            self->connecting_ = false;
-            self->noteError(static_cast<uint32_t>(event_id), "Disconnected");
+        case MqttBackend::Event::Disconnected:
+            connected_ = false;
+            connecting_ = false;
+            last_connect_attempt_ms_ = currentMillis();
+            noteError(static_cast<uint32_t>(data), "Disconnected");
             MQTT_LOG(LOG_WARN, "MQTT disconnected");
             break;
-        case MQTT_EVENT_ERROR:
-            self->connected_ = false;
-            self->connecting_ = false;
-            self->failed_publish_count_++;
-            self->noteError(static_cast<uint32_t>(event_id), "MQTT error event");
-            MQTT_LOG(LOG_ERROR, "MQTT event error");
-            break;
-        default:
-            (void)event_data;
+        case MqttBackend::Event::Error:
+            connected_ = false;
+            connecting_ = false;
+            failed_publish_count_++;
+            last_connect_attempt_ms_ = currentMillis();
+            noteError(static_cast<uint32_t>(data), "MQTT backend error");
+            MQTT_LOG(LOG_ERROR, "MQTT backend error");
             break;
     }
 }
-#endif
 
 } // namespace mqtt
 
