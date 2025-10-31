@@ -10,6 +10,33 @@ Ce document propose des correctifs pour aligner les requêtes UART envoyées par
 
 ## Requêtes de lecture
 
+### Requête de polling unique (39 registres dispersés)
+
+Les données utilisées par `TinyBMS_Victron_Bridge` couvrent 39 registres répartis
+entre `0x0020` et `0x01F9`. Pour supprimer les six transactions Modbus
+actuelles, nous pouvons regrouper toutes les lectures dans **une seule** trame
+`Read Tiny BMS individual registers` (`0x09`).
+
+* Liste des registres (ordre d'émission LSB/MSB) :
+  `0x0020–0x0034`, `0x0066–0x0067`, `0x0071–0x0072`, `0x0131–0x0133`,
+  `0x013B–0x013F`, `0x01F4–0x01F9`.
+* Payload length `PL` = `39 * 2 = 0x4E` octets.
+* CRC16 (polynôme Modbus `0xA001`) calculé sur `AA 09 …` = `0x55BB`.
+
+**Trame complète prête à l'emploi :**
+
+```
+AA 09 4E
+ 20 00 21 00 22 00 23 00 24 00 25 00 26 00 27 00 28 00 29 00
+ 2A 00 2B 00 2C 00 2D 00 2E 00 2F 00 30 00 31 00 32 00 33 00
+ 34 00 66 00 67 00 71 00 72 00 31 01 32 01 33 01 3B 01 3C 01
+ 3D 01 3E 01 3F 01 F4 01 F5 01 F6 01 F7 01 F8 01 F9 01
+ BB 55
+```
+
+La réponse TinyBMS doit renvoyer `0xAA 0x09 <PL>` suivi de `78` octets de
+données (ordre LSB/MSB par registre) puis le CRC `0xBB 0x55`.
+
 ### Lecture d'un bloc contigu (`0x07`)
 
 | Champ | Valeur | Commentaire |
@@ -40,6 +67,46 @@ Ce document propose des correctifs pour aligner les requêtes UART envoyées par
 **Début de trame (hex) :** `AA 09 <PL> <ADDR1_L> <ADDR1_H> …`
 
 ## Requêtes d'écriture
+
+### Lecture/écriture des registres de configuration
+
+L'éditeur de configuration s'appuyait sur des commandes ASCII (`:0001` /
+`:0101`). Pour se conformer au protocole binaire TinyBMS, il faut utiliser les
+commandes suivantes :
+
+* **Lecture d'un registre de configuration** – trame `0x07` avec `RL = 0x01`.
+  Exemple pour le registre `0x012C` (300 décimal, « Fully Charged Voltage ») :
+
+  ```
+  AA 07 01 2C 01 B1 AC
+  ```
+
+  (CRC = `0xACB1`). La réponse contiendra `0xAA 0x07 0x02` suivi de deux octets
+  little endian et du CRC.
+
+* **Écriture d'un registre de configuration** – trame `0x0D` (liste
+  adresse/valeur). Exemple pour écrire `0x0E42` (3650 mV) dans `0x012C` :
+
+  ```
+  AA 0D 04 2C 01 42 0E 09 E3
+  ```
+
+  (payload de 4 octets, CRC = `0xE309`). TinyBMS doit répondre `0xAA 0x01 0x00`
+  en cas de succès.
+
+* **Écriture simultanée de plusieurs registres contigus** – trame `0x0B`.
+  Exemple pour mettre à jour `0x012C` et `0x012D` en une opération :
+
+  ```
+  AA 0B 04 2C 01 42 0E A2 0C BE 96
+  ```
+
+  Ici `PL = 0x04` (deux registres), données little endian (`0x0E42`, `0x0CA2`),
+  CRC = `0x96BE`.
+
+Ces trames remplacent intégralement les commandes ASCII historiques et
+garantissent l'utilisation des opcodes UART TinyBMS documentés (`0x07`, `0x0B`,
+`0x0D`).
 
 ### Écriture d'un bloc contigu (`0x0B`)
 
