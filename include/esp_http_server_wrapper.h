@@ -1,28 +1,28 @@
 /**
  * @file esp_http_server_wrapper.h
  * @brief ESP-IDF HTTP Server wrapper for Phase 3
- *
- * Provides compatibility layer between AsyncWebServer and esp_http_server
  */
 
 #pragma once
 
 #ifdef USE_ESP_IDF_WEBSERVER
 
+#include <Arduino.h>
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace tinybms {
 namespace web {
 
-// Forward declarations
 class HttpServerIDF;
 class HttpRequestIDF;
 
-// Request handler type
+// Request handler type compatible with AsyncWebServer lambdas
 using RequestHandlerIDF = std::function<void(HttpRequestIDF*)>;
 
 /**
@@ -30,175 +30,117 @@ using RequestHandlerIDF = std::function<void(HttpRequestIDF*)>;
  */
 class HttpRequestIDF {
 public:
-    HttpRequestIDF(httpd_req_t* req) : req_(req), status_sent_(false) {}
+    HttpRequestIDF(HttpServerIDF* server, httpd_req_t* req);
 
-    // Send JSON response
-    void send(int status, const char* contentType, const String& content) {
-        httpd_resp_set_status(req_, getStatusString(status));
-        httpd_resp_set_type(req_, contentType);
-        httpd_resp_set_hdr(req_, "Access-Control-Allow-Origin", "*");
-        httpd_resp_send(req_, content.c_str(), content.length());
-        status_sent_ = true;
-    }
+    void send(int status, const char* contentType, const String& content);
 
-    // Get query parameter
-    bool hasParam(const char* name) const {
-        size_t buf_len = httpd_req_get_url_query_len(req_) + 1;
-        if (buf_len <= 1) return false;
+    bool hasArg(const char* name) const;
+    bool hasParam(const char* name) const;
+    String arg(const char* name) const;
+    String getParam(const char* name) const;
 
-        char* buf = (char*)malloc(buf_len);
-        if (!buf) return false;
+    String getBody();
+    String header(const char* name) const;
 
-        if (httpd_req_get_url_query_str(req_, buf, buf_len) == ESP_OK) {
-            char param[64];
-            esp_err_t err = httpd_query_key_value(buf, name, param, sizeof(param));
-            free(buf);
-            return (err == ESP_OK);
-        }
+    httpd_method_t method() const;
+    const char* uri() const;
 
-        free(buf);
-        return false;
-    }
-
-    String getParam(const char* name) const {
-        size_t buf_len = httpd_req_get_url_query_len(req_) + 1;
-        if (buf_len <= 1) return String();
-
-        char* buf = (char*)malloc(buf_len);
-        if (!buf) return String();
-
-        String result;
-        if (httpd_req_get_url_query_str(req_, buf, buf_len) == ESP_OK) {
-            char param[256];
-            if (httpd_query_key_value(buf, name, param, sizeof(param)) == ESP_OK) {
-                result = String(param);
-            }
-        }
-
-        free(buf);
-        return result;
-    }
-
-    // Get POST body
-    String getBody() {
-        int total_len = req_->content_len;
-        int cur_len = 0;
-        char* buf = (char*)malloc(total_len + 1);
-        if (!buf) return String();
-
-        int received = 0;
-        while (cur_len < total_len) {
-            received = httpd_req_recv(req_, buf + cur_len, total_len - cur_len);
-            if (received <= 0) {
-                free(buf);
-                return String();
-            }
-            cur_len += received;
-        }
-        buf[total_len] = '\0';
-
-        String result(buf);
-        free(buf);
-        return result;
-    }
-
-    // Compatibility aliases for AsyncWebServer API
-    bool hasArg(const char* name) const { return hasParam(name); }
-    String arg(const char* name) const { return getParam(name); }
-    const char* uri() const { return req_ ? req_->uri : ""; }
-
-    httpd_req_t* getNative() { return req_; }
+    httpd_req_t* getNative();
 
 private:
+    HttpServerIDF* server_;
     httpd_req_t* req_;
-    bool status_sent_;
+    bool body_read_;
+    httpd_method_t method_;
+    String uri_;
+    String body_;
+    std::map<String, String> params_;
 
-    const char* getStatusString(int status) {
-        switch (status) {
-            case 200: return "200 OK";
-            case 400: return "400 Bad Request";
-            case 404: return "404 Not Found";
-            case 500: return "500 Internal Server Error";
-            default: return "200 OK";
-        }
-    }
+    void parseQueryString(const char* query);
+    const char* statusToString(int code);
 };
 
 /**
- * @brief HTTP Server wrapper for ESP-IDF
+ * @brief HTTP Server wrapper for ESP-IDF providing AsyncWebServer compatible API
  */
 class HttpServerIDF {
 public:
-    HttpServerIDF(uint16_t port = 80) : server_(nullptr), port_(port) {}
+    HttpServerIDF();
+    explicit HttpServerIDF(uint16_t port);
+    ~HttpServerIDF();
 
-    ~HttpServerIDF() {
-        if (server_) {
-            httpd_stop(server_);
-        }
-    }
+    bool begin();
+    bool begin(uint16_t port);
+    void stop();
 
-    bool begin() {
-        httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-        config.server_port = port_;
-        config.max_uri_handlers = 32;
-        config.max_resp_headers = 16;
-        config.stack_size = 8192;
-        config.task_priority = 5;
-        config.core_id = 0;
-        config.max_open_sockets = 7;
-        config.lru_purge_enable = true;
+    void on(const char* uri, httpd_method_t method, RequestHandlerIDF handler);
+    void onNotFound(RequestHandlerIDF handler);
+    void serveStatic(const char* uri, const char* path, const char* defaultFile = nullptr);
 
-        esp_err_t err = httpd_start(&server_, &config);
-        if (err != ESP_OK) {
-            ESP_LOGE("HttpServerIDF", "Failed to start server: %s", esp_err_to_name(err));
-            return false;
-        }
+    void enableCors(bool enable,
+                    const char* allow_origin = "*",
+                    const char* allow_headers = "Content-Type, Authorization",
+                    const char* allow_methods = "GET,POST,PUT,DELETE,OPTIONS",
+                    bool allow_credentials = true);
+    void disableCors();
 
-        ESP_LOGI("HttpServerIDF", "HTTP server started on port %d", port_);
-        return true;
-    }
+    void enableBasicAuth(const char* username, const char* password);
+    void disableAuth();
 
-    // Overload to allow runtime port configuration (AsyncWebServer compatibility)
-    bool begin(uint16_t port) {
-        port_ = port;
-        return begin();
-    }
+    httpd_handle_t getNative() const;
 
-    void on(const char* uri, httpd_method_t method, RequestHandlerIDF handler) {
-        auto* ctx = new RouteContext{this, handler};
+    static HttpServerIDF* fromRequest(httpd_req_t* req);
 
-        httpd_uri_t uri_handler = {
-            .uri = uri,
-            .method = method,
-            .handler = routeDispatch,
-            .user_ctx = ctx
-        };
-
-        httpd_register_uri_handler(server_, &uri_handler);
-    }
-
-    void onNotFound(RequestHandlerIDF handler) {
-        notFoundHandler_ = handler;
-    }
-
-    httpd_handle_t getNative() { return server_; }
+    bool checkAuthorization(httpd_req_t* req) const;
+    void rejectUnauthorized(httpd_req_t* req) const;
 
 private:
-    httpd_handle_t server_;
-    uint16_t port_;
-    RequestHandlerIDF notFoundHandler_;
+    friend class HttpRequestIDF;
 
-    struct RouteContext {
+    struct RouteHandler {
         HttpServerIDF* server;
+        std::string uri;
+        httpd_method_t method;
         RequestHandlerIDF handler;
     };
 
-    static esp_err_t routeDispatch(httpd_req_t* req) {
-        RouteContext* ctx = (RouteContext*)req->user_ctx;
-        HttpRequestIDF request(req);
-        ctx->handler(&request);
-        return ESP_OK;
-    }
+    struct StaticRoute {
+        HttpServerIDF* server;
+        std::string mount_uri;
+        std::string uri_pattern;
+        std::string fs_base;
+        std::string default_file;
+    };
+
+    httpd_handle_t server_;
+    uint16_t port_;
+    RequestHandlerIDF notFoundHandler_;
+    std::vector<std::unique_ptr<RouteHandler>> route_handlers_;
+    std::vector<std::unique_ptr<StaticRoute>> static_routes_;
+    bool cors_enabled_;
+    std::string cors_allow_origin_;
+    std::string cors_allow_headers_;
+    std::string cors_allow_methods_;
+    bool cors_allow_credentials_;
+    bool options_registered_;
+    bool auth_enabled_;
+    std::string auth_header_;
+
+    void registerAllHandlers();
+    void registerRouteHandler(RouteHandler* route);
+    void registerStaticHandler(StaticRoute* route);
+    void registerOptionsHandler();
+
+    void applyCors(httpd_req_t* req) const;
+
+    esp_err_t serveStaticFile(StaticRoute* route, httpd_req_t* req);
+    std::string buildFilePath(const StaticRoute* route, const char* request_uri, bool* used_default) const;
+    const char* mimeTypeForPath(const std::string& path) const;
+
+    static esp_err_t routeDispatcher(httpd_req_t* req);
+    static esp_err_t staticFileDispatcher(httpd_req_t* req);
+    static esp_err_t optionsDispatcher(httpd_req_t* req);
+    static esp_err_t notFoundDispatcher(httpd_req_t* req, httpd_err_code_t err);
 };
 
 } // namespace web
